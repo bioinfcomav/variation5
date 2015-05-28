@@ -1,0 +1,6 @@
+doc/*
+.project
+.pydevproject
+*.pyc
+*seed.txt
+*~

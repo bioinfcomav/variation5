@@ -406,8 +406,9 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                     break
                 gt_data = dict(gt_data)
                 snp_n = snp_i + chunk_i * vars_in_chunk
-                call_sample_data = gt_data[field]
-                dset[snp_n] = call_sample_data    
+                call_sample_data = gt_data.get(field, None)
+                if call_sample_data is not None:
+                    dset[snp_n] = call_sample_data    
 
     # we have to remove the empty snps from the last chunk
     for field_i, field in enumerate(fmt_fields):

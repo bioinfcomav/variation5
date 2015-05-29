@@ -1,0 +1,28 @@
+Could we create pipelines with map and filter functions?
+We would had an stream of chunks. A chunk is just a numpy.array.
+We would need a read_chunks(input_dataset) function that would yield chunks
+We would need a write_chunks(output_dataset, chunks)
+
+implement mapping function
+map(chunk, function)
+The function should take an element of the first axis and return an element to be stored in a hdf5
+The mapping function will iterate over the first axis of the hdf5 dataset to avoid having it all in memory
+The size of the output dataset will be deduced from the shape of the result of applying the function to the first row of the input matrix.
+Take a look at numpy.apply_along_axis, but its a python for, so it is pretty slow.
+A slice of a numpy.array is a numpy.array. A native numpy function will be always much faster than a python function.
+Take a look at numpy.einsum
+
+implement filter function
+filter(chunk, function)
+The function will be applied for every slice of the matrix in the first axes. The function will avoide reading the complete matrix in memory. It will read chunk by chunk.
+The shape of the output dataset will be the same as the input, but it will have fewer lines.
+To filter several datasets at the same time we would filter (chunk, other_chunks) instead of just chunk and the filter function would have to take into account the chunk to calculate the filtering and then apply it to the chunk and the list of other_chunks.
+
+implement select regions function
+select_region(index, calldata_or_variants, output_call_data_or_variants)
+The index can be a dict[chrom, pos] = index_in_calldata_matrix.
+For each region the function will look for the start and the stop in the dict and with that index will load the calldata_input_matrix and write the calldata_output_matrix)
+It would yield the chunk for every region
+
+
+

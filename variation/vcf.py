@@ -82,12 +82,29 @@ class VCF():
 
         self._empty_gt = [MISSING_GT] * self.ploidy
         self._parse_header()
+
+        self.max_field_lens = {'ALT': 0, 'FILTER': 0, 'INFO': {}, 'FORMAT': {}}
+        self.max_field_str_lens = {'FILTER': 0, 'INFO': {}}
+        self._init_max_field_lens()
+
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
 
         self.pre_read_max_size = pre_read_max_size
         self._variations_cache = CCache()
         self._read_snps_in_compressed_cache()
+
+
+    def _init_max_field_lens(self):
+        meta = self.metadata
+        for section in ('INFO', 'FORMAT'):
+            for field, meta_field in meta[section].items():
+                if isinstance(meta_field['Number'], int):
+                    continue
+                self.max_field_lens[section][field] = 0
+                if 'str' in meta_field['dtype']:
+                    self.max_field_str_lens[section][field] = 0
+
 
     def _read_snps_in_compressed_cache(self):
         if not self.pre_read_max_size:
@@ -175,13 +192,7 @@ class VCF():
                     elif meta['dtype'] == 'float16':
                         meta['dtype'] = 'hdf5_var_float'
                     else:
-			            # It could be solved with a matrix of strings with
-			            # the len as the max_len of the field. i.e. The max
-			            # number of alleles for an A field
-                        msg = 'String ragged field ignored: '
-                        msg += id_
-                        warnings.warn(msg, UserWarning)
-                        self.ignored_fields.append(id_)
+                        meta['dtype'] = 'hdf5_var_str'
                 else:
                     meta['Number'] = int(meta['Number'])
             else:
@@ -216,6 +227,14 @@ class VCF():
                 val = type_(val)
                 if meta['Number'] != '1':
                     val = [val]
+                    if not isinstance(meta['Number'], int):
+                        if self.max_field_lens['INFO'][key] < len(val):
+                            self.max_field_lens['INFO'][key] = len(val)
+                        if 'str' in meta['dtype']:
+                            max_str = max([len(val) for val_ in val])
+                            if self.max_field_str_lens['INFO'][key] < max_str:
+                                self.max_field_str_lens['INFO'][key] = max_str
+
             parsed_infos[key] = val
         return parsed_infos
 
@@ -282,6 +301,23 @@ class VCF():
                     gt_data = [_gt_data_to_list(fmt[1], sample_gt, fmt[4]) for sample_gt in gt_data]
                 else:
                     gt_data = [fmt[1](sample_gt) for sample_gt in gt_data]
+
+            meta = fmt[3]
+            if not isinstance(meta['Number'], int):
+                max_len = max([len(data) for data in gt_data])
+                if self.max_field_lens['FORMAT'][fmt[0]] < max_len:
+                    self.max_field_lens['FORMAT'][fmt[0]] = max_len
+                if 'str' in meta['dtype'] and fmt[0] != b'GT':
+                    # if your file has variable length str fields you
+                    # should check and fix the following part of the code
+                    raise NotImplementedError('Fixme')
+                    print(gt_data)
+                    print( [val for smpl_data in gt_data for val in smpl_data])
+                    max_len = max([len(val) for smpl_data in gt_data for val in smpl_data])
+                    max_str = max([len(val) for val_ in val])
+                    if self.max_field_str_lens['FORMAT'][key] < max_str:
+                        self.max_field_str_lens['FORMAT'][key] = max_str
+
             parsed_gts.append((fmt[0], gt_data))
             
         return parsed_gts
@@ -301,14 +337,23 @@ class VCF():
             if id_ == b'.':
                 id_ = None
             alt = alt.split(b',')
+            if self.max_field_lens['ALT'] < len(alt):
+                self.max_field_lens['ALT'] = len(alt)
             qual = float(qual) if qual != b'.' else None
 
             if flt == b'PASS':
                 flt = []
+                flt_len = 0
             elif flt == b'.':
                 flt = None
+                flt_len = 0
             else:
                 flt = flt.split(b';')
+                flt_len = len(flt)
+            if self.max_field_lens['FILTER'] < flt_len:
+                self.max_field_lens['FILTER'] = flt_len
+            qual = float(qual) if qual != b'.' else None
+
             info = self._parse_info(info)
             gts = self._parse_gts(fmt, gts)
             yield chrom, pos, id_, ref, alt, qual, flt, info, gts
@@ -427,16 +472,17 @@ def test():
     max_size_cache = 10000000
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = ['QA', 'QR', 'GL']
-    ignored_fields = ['AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
+    ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = []
     vcf = VCF(fhand, ignored_fields=ignored_fields)
 
     out_fhand = 'snps.hdf5'
-    #vcf_to_hdf5(vcf, out_fhand)
-
-    hdf5 = h5py.File(out_fhand, 'r')
+    vcf_to_hdf5(vcf, out_fhand)
+    print (vcf.max_field_lens)
+    print (vcf.max_field_str_lens)
+    #hdf5 = h5py.File(out_fhand, 'r')
     
-    read_chunks(open('snps.hdf5'), ['caldata/GT'])
+    #read_chunks(open('snps.hdf5'), ['caldata/GT'])
 
 if __name__ == '__main__':
     test()

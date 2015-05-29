@@ -258,7 +258,7 @@ class VCF():
             is_phased = False
             gt = gt.split(b'/')
         if gt is not None:
-            gt = [None if allele == b'.' else int(allele) for allele in gt]
+            gt = [MISSING_GT if allele == b'.' else int(allele) for allele in gt]
         self._parsed_gt[gt_str] = gt
         return gt
 

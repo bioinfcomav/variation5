@@ -1,3 +1,7 @@
+What happens when the estimate of the max_size is wrong and we have to fit some data that is longer. We could choose to set to missing this weird values, that would be the easiest thing to do. Otherwise we would have to resize the matrix
+
+Store the is_phased in the vcf reader
+
 Could we create pipelines with map and filter functions?
 We would had an stream of chunks. A chunk is just a numpy.array.
 We would need a read_chunks(input_dataset) function that would yield chunks

@@ -26,6 +26,9 @@ MISSING_INT = -1
 MISSING_GT = MISSING_INT
 MISSING_FLOAT = float('nan')
 MISSING_STR = None
+FILLING_INT = -2
+FILLING_FLOAT = float('-inf')
+FILLING_STR = None
 
 def _do_nothing(value):
     return value
@@ -45,7 +48,9 @@ def _to_float(string):
 
 def _gt_data_to_list(mapper_function, sample_gt, missing_data):
     if sample_gt is None:
-        return [missing_data]
+        # we cannot now at this point how many items compose a gt for a sample
+        # so we cannot return [missing_data]
+        return None
 
     sample_gt = sample_gt.split(b',')
     sample_gt = [mapper_function(item) for item in sample_gt]
@@ -53,16 +58,22 @@ def _gt_data_to_list(mapper_function, sample_gt, missing_data):
 
 
 def _missing_val(dtype_str):
-    if 'var_int' in dtype_str:
-        missing_val = MISSING_INT
-    elif 'var_float' in dtype_str:
-        missing_val = MISSING_FLOAT
-    elif 'int' in dtype_str:
+    if 'int' in dtype_str:
         missing_val = MISSING_INT
     elif 'float' in dtype_str:
         missing_val = MISSING_FLOAT
     elif 'str' in dtype_str:
         missing_val = MISSING_STR
+    return missing_val
+
+
+def _filling_val(dtype_str):
+    if 'int' in dtype_str:
+        missing_val = FILLING_INT
+    elif 'float' in dtype_str:
+        missing_val = FILLING_FLOAT
+    elif 'str' in dtype_str:
+        missing_val = FILLING_STR
     return missing_val
 
 
@@ -186,14 +197,7 @@ class VCF():
                 if id_ is None:
                     raise RuntimeError('Header line has no ID: ' + line)
                 # The fields with a variable number of items
-                if not meta['Number'].isdigit():
-                    if meta['dtype'] == 'int16':
-                        meta['dtype'] = 'hdf5_var_int'
-                    elif meta['dtype'] == 'float16':
-                        meta['dtype'] = 'hdf5_var_float'
-                    else:
-                        meta['dtype'] = 'hdf5_var_str'
-                else:
+                if meta['Number'].isdigit():
                     meta['Number'] = int(meta['Number'])
             else:
                 id_, meta = line[2:].decode('utf-8').split('=', 1)
@@ -304,7 +308,7 @@ class VCF():
 
             meta = fmt[3]
             if not isinstance(meta['Number'], int):
-                max_len = max([len(data) for data in gt_data])
+                max_len = max([0 if data is None else len(data) for data in gt_data])
                 if self.max_field_lens['FORMAT'][fmt[0]] < max_len:
                     self.max_field_lens['FORMAT'][fmt[0]] = max_len
                 if 'str' in meta['dtype'] and fmt[0] != b'GT':
@@ -365,10 +369,7 @@ def _grouper(iterable, n, fillvalue=None):
 
 
 TYPES = {'int16': numpy.int16,
-         'float16': numpy.float16,
-         'hdf5_str': h5py.special_dtype(vlen=bytes),
-         'hdf5_var_int': h5py.special_dtype(vlen=numpy.int16),
-         'hdf5_var_float': h5py.special_dtype(vlen=numpy.float16)}
+         'float16': numpy.float16}
 
 
 def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
@@ -393,31 +394,30 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             dtype = numpy.int8
         else:
             dtype = TYPES[fmt['dtype']]
-            z_axes_size = fmt['Number']
+            if isinstance(fmt['Number'], int):
+                z_axes_size = fmt['Number']
+            else:
+                if field == b'GT':
+                    z_axes_size = vcf.ploidy
+                else:
+                    z_axes_size = vcf.max_field_lens['FORMAT'][field]
 
-        size = (vars_in_chunk, n_samples, z_axes_size)
+        size = [vars_in_chunk, n_samples, z_axes_size]
         maxshape=(None, n_samples, z_axes_size)  # is resizable, we can add SNPs
         chunks=(vars_in_chunk, n_samples, z_axes_size)
 
         if field == b'GT':
             missing_val = MISSING_GT
-        elif 'hdf5_var_' in fmt['dtype']:
-            missing_val = None
         else:
-            missing_val = _missing_val(fmt['dtype'])
+            missing_val = _filling_val(fmt['dtype'])
+    
+        # If the last dimension only has one of len we can work with only
+        # two dimensions (variations x samples)
+        if size[-1] == 1:
+            size = size[:-1]
+            maxshape = maxshape[:-1]
+            chunks = chunks[:-1]
 
-        if isinstance(fmt['Number'], int):
-            if size[-1] == 1:
-                size = size[:-1]
-                maxshape = maxshape[:-1]
-                chunks = chunks[:-1]
-        else:
-            # A or G (number of alleles or number of genotypes)
-            # This is a ragged matrix with a special_dtype
-                size = size[:-1]
-                maxshape = maxshape[:-1]
-                chunks = chunks[:-1]
-        print(field, maxshape)
         calldata.create_dataset(field, size, dtype=dtype,
                                 maxshape=maxshape, chunks=chunks,
                                 fillvalue=missing_val,
@@ -441,6 +441,13 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             new_size[0] = vars_in_chunk * (chunk_i + 1)
             dset.resize(new_size)
 
+            missing = _missing_val(vcf.metadata['FORMAT'][field]['dtype'])
+            filling = _filling_val(vcf.metadata['FORMAT'][field]['dtype'])
+
+            if len(size) == 3 and field != b'GT':
+                missing = [missing] * size[2]
+                filling = [filling] * size[2]
+
             # We store the information
             for snp_i, snp in enumerate(chunk):
                 try:
@@ -449,9 +456,34 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                     # SNP is None
                     no_more_snps = True
                     break
+
                 gt_data = dict(gt_data)
-                snp_n = snp_i + chunk_i * vars_in_chunk
                 call_sample_data = gt_data.get(field, None)
+                if call_sample_data is None:
+                    continue
+
+                #call_sample_data = [missing if item is None else item for item in call_sample_data]
+                if len(size) == 2:
+                    # we're expecting a single item or a list with one item
+                    if isinstance(call_sample_data[0], (list, tuple)):
+                        # We have a list in each item
+                        # we're assuming that all items have length 1
+                        assert max(map(len, call_sample_data)) == 1
+                        call_sample_data =  [item[0] for item in call_sample_data]
+                elif field == b'GT':
+                    pass
+                else:
+                    expected_item_len = size[2]
+                    expanded_call_sample_data = []
+                    for item in call_sample_data:
+                        if item is None:
+                            item = filling
+                        else:
+                            item += [filling[0]] * (expected_item_len - len(item))
+                        expanded_call_sample_data.append(item)
+                    call_sample_data = expanded_call_sample_data
+
+                snp_n = snp_i + chunk_i * vars_in_chunk
                 if call_sample_data is not None:
                     dset[snp_n] = call_sample_data    
 
@@ -461,7 +493,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
         size = dset.shape
         new_size = list(size)
         snp_n = snp_i + chunk_i * vars_in_chunk
-        new_size[0] = snp_n + 1
+        new_size[0] = snp_n
         dset.resize(new_size)
 
 
@@ -469,17 +501,20 @@ def test():
 
     fhand = gzip.open(TEST_VCF, 'rb')
     max_size_cache = 2*1024**3
-    max_size_cache = 10000000
+    #max_size_cache = 1000
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = ['QA', 'QR', 'GL']
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = []
-    vcf = VCF(fhand, ignored_fields=ignored_fields)
+    vcf = VCF(fhand, ignored_fields=ignored_fields,
+	      pre_read_max_size=max_size_cache)
 
     out_fhand = 'snps.hdf5'
-    vcf_to_hdf5(vcf, out_fhand)
+
     print (vcf.max_field_lens)
     print (vcf.max_field_str_lens)
+
+    vcf_to_hdf5(vcf, out_fhand)
     #hdf5 = h5py.File(out_fhand, 'r')
     
     #read_chunks(open('snps.hdf5'), ['caldata/GT'])

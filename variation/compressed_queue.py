@@ -6,9 +6,10 @@ import sys
 
 
 class CCache():
-    def __init__(self):
+    def __init__(self, compresslevel=4):
         self._fhand = BytesIO()
-        self._cache_to_write = gzip.GzipFile(fileobj=self._fhand, mode='wb')
+        self._cache_to_write = gzip.GzipFile(fileobj=self._fhand, mode='wb',
+        compresslevel=compresslevel)
         self.items_read = 0
 
     def put(self, item):

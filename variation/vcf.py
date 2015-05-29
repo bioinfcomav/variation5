@@ -23,9 +23,9 @@ TEST_VCF = join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz')
 SNPS_PER_CHUNK = 200
 
 MISSING_INT = -1
-MIGGIN_GT = MISSING_INT
+MISSING_GT = MISSING_INT
 MISSING_FLOAT = float('nan')
-MIGGING_STR = None
+MISSING_STR = None
 
 def _do_nothing(value):
     return value
@@ -62,7 +62,7 @@ def _missing_val(dtype_str):
     elif 'float' in dtype_str:
         missing_val = MISSING_FLOAT
     elif 'str' in dtype_str:
-        missing_val = MIGGING_STR
+        missing_val = MISSING_STR
     return missing_val
 
 
@@ -80,7 +80,7 @@ class VCF():
 
         self._determine_ploidy()
 
-        self._empty_gt = [MIGGIN_GT] * self.ploidy
+        self._empty_gt = [MISSING_GT] * self.ploidy
         self._parse_header()
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
@@ -355,7 +355,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
         chunks=(vars_in_chunk, n_samples, z_axes_size)
 
         if field == b'GT':
-            missing_val = MIGGIN_GT
+            missing_val = MISSING_GT
         elif 'hdf5_var_' in fmt['dtype']:
             missing_val = None
         else:
@@ -431,8 +431,11 @@ def test():
     vcf = VCF(fhand, ignored_fields=ignored_fields)
 
     out_fhand = 'snps.hdf5'
-    vcf_to_hdf5(vcf, out_fhand)
+    #vcf_to_hdf5(vcf, out_fhand)
 
+    hdf5 = h5py.File(out_fhand, 'r')
+    
+    read_chunks(open('snps.hdf5'), ['caldata/GT'])
 
 if __name__ == '__main__':
     test()

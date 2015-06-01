@@ -507,15 +507,17 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     var_grp = hdf5.create_group('variations')
     calldata = hdf5.create_group('calls')
 
-    _prepare_variation_datasets(vcf, hdf5, vars_in_chunk)
     fmt_fields = _prepate_call_datasets(vcf, hdf5, vars_in_chunk)
+    _prepare_variation_datasets(vcf, hdf5, vars_in_chunk)
+    var_fields = ['chrom', 'pos', 'id', 'ref', 'qual', 'alt']
 
     snp_chunks = _grouper(snps, vars_in_chunk)
     for chunk_i, chunk in enumerate(snp_chunks):
         chunk = list(chunk)
-        var_fields = ['chrom', 'pos', 'id', 'ref', 'qual', 'alt']
+
         fields = var_fields[:]
         fields.extend(fmt_fields)
+        first_field = True
         for field in fields:
             if field in var_fields:
                 dset = var_grp[field]
@@ -547,8 +549,8 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                 except TypeError:
                     # SNP is None
                     break
-
-                log['variations_processed'] += 1
+                if first_field:
+                    log['variations_processed'] += 1
 
                 snp_n = snp_i + chunk_i * vars_in_chunk
 
@@ -612,10 +614,15 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                                     if field not in log['data_no_fit']:
                                         log['data_no_fit'][field] = 0
                                     log['data_no_fit'][field] += 1
+            first_field = False
 
     # we have to remove the empty snps from the last chunk
-    for field in fmt_fields:
-        dset = calldata[field]
+    for field in fields:
+        if field in var_fields:
+            dset = var_grp[field]
+        else:
+            dset = calldata[field]
+
         size = dset.shape
         new_size = list(size)
         snp_n = snp_i + chunk_i * vars_in_chunk

@@ -375,6 +375,9 @@ TYPES = {'int16': numpy.int16,
 def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     snps = vcf.variations
 
+    log = {'data_no_fit': {},
+           'variations_processed': 0}
+
     n_samples = len(vcf.samples)
     ploidy = vcf.ploidy
 
@@ -457,6 +460,8 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                     no_more_snps = True
                     break
 
+                log['variations_processed'] += 1
+
                 gt_data = dict(gt_data)
                 call_sample_data = gt_data.get(field, None)
                 if call_sample_data is None:
@@ -485,7 +490,13 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
                 snp_n = snp_i + chunk_i * vars_in_chunk
                 if call_sample_data is not None:
-                    dset[snp_n] = call_sample_data    
+                    try:
+                        dset[snp_n] = call_sample_data
+                    except TypeError as error:
+                        if 'broadcast' in str(error):
+                            if field not in log['data_no_fit']:
+                                log['data_no_fit'][field] = 0
+                            log['data_no_fit'][field] += 1
 
     # we have to remove the empty snps from the last chunk
     for field_i, field in enumerate(fmt_fields):
@@ -496,11 +507,12 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
         new_size[0] = snp_n
         dset.resize(new_size)
 
+    return log
 
 def test():
 
     fhand = gzip.open(TEST_VCF, 'rb')
-    max_size_cache = 2*1024**3
+    max_size_cache = 1024**3
     #max_size_cache = 1000
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = ['QA', 'QR', 'GL']
@@ -514,7 +526,8 @@ def test():
     print (vcf.max_field_lens)
     print (vcf.max_field_str_lens)
 
-    vcf_to_hdf5(vcf, out_fhand)
+    log = vcf_to_hdf5(vcf, out_fhand)
+    print(log)
     #hdf5 = h5py.File(out_fhand, 'r')
     
     #read_chunks(open('snps.hdf5'), ['caldata/GT'])

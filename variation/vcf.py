@@ -27,7 +27,7 @@ MISSING_FLOAT = float('nan')
 MISSING_STR = ''
 FILLING_INT = -2
 FILLING_FLOAT = float('-inf')
-FILLING_STR = None
+FILLING_STR = MISSING_STR
 
 def _do_nothing(value):
     return value
@@ -78,7 +78,7 @@ def _filling_val(dtype_str):
 
 class VCF():
     def __init__(self, fhand, pre_read_max_size=None,
-                 ignored_fields=None):
+                 ignored_fields=None, max_field_lens=None):
         self._fhand = fhand
         self.metadata = None
         self.vcf_format = None
@@ -93,8 +93,16 @@ class VCF():
         self._empty_gt = [MISSING_GT] * self.ploidy
         self._parse_header()
 
-        self.max_field_lens = {'ALT': 0, 'FILTER': 0, 'INFO': {}, 'FORMAT': {}}
-        self.max_field_str_lens = {'FILTER': 0, 'INFO': {}, 'chrom': 0}
+        if max_field_lens is None:
+            user_max_field_lens = {}
+        else:
+            user_max_field_lens = max_field_lens
+        max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'FORMAT': {}}
+        max_field_lens.update(user_max_field_lens)
+        self.max_field_lens = max_field_lens
+
+        self.max_field_str_lens = {'FILTER': 0, 'INFO': {}, 'chrom': 0,
+                                   'alt': 0}
         self._init_max_field_lens()
 
         self._parsed_gt_fmts = {}
@@ -162,7 +170,9 @@ class VCF():
                                   'ref': {'dtype': 'str',
                                           'type': _do_nothing},
                                   'qual': {'dtype': 'float16',
-                                          'type': _to_float}}
+                                          'type': _to_float},
+                                  'alt': {'dtype': 'str',
+                                         'type': _do_nothing},}
         for line in header_lines:
             if line[2:7] in (b'FORMA', b'INFO=', b'FILTE'):
                 line = line[2:]
@@ -350,9 +360,14 @@ class VCF():
             pos = int(pos)
             if id_ == b'.':
                 id_ = None
+
             alt = alt.split(b',')
-            if self.max_field_lens['ALT'] < len(alt):
-                self.max_field_lens['ALT'] = len(alt)
+            if self.max_field_lens['alt'] < len(alt):
+                self.max_field_lens['alt'] = len(alt)
+            max_alt_str_len = max(len(allele) for allele in alt)
+            if self.max_field_str_lens['alt'] < max_alt_str_len:
+                self.max_field_str_lens['alt'] = max_alt_str_len
+
             qual = float(qual) if qual != b'.' else None
 
             if flt == b'PASS':
@@ -444,12 +459,19 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
     meta = vcf.metadata['VARIATIONS']
     var_grp = hdf5['variations']
 
-    fields = ['chrom', 'pos', 'id', 'ref', 'qual']
+    one_item_fields = ['chrom', 'pos', 'id', 'ref', 'qual']
+    multi_item_fields = ['alt']
+    fields = one_item_fields + multi_item_fields
     for field in fields:
-        y_axes_size = 1
-        size = [vars_in_chunk, y_axes_size]
-        maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
-        chunks=(vars_in_chunk,  y_axes_size)
+        if field in one_item_fields:
+            size = [vars_in_chunk]
+            maxshape = (None,)  # is resizable, we can add SNPs
+            chunks=(vars_in_chunk,)
+        else:
+            y_axes_size = vcf.max_field_lens[field]
+            size = [vars_in_chunk, y_axes_size]
+            maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
+            chunks=(vars_in_chunk,  y_axes_size)
 
         dtype = meta[field]['dtype']
         if 'str' in meta[field]['dtype']:
@@ -470,14 +492,8 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
 
 
 def _expand_list_to_size(items, desired_size, filling):
-    expanded_list = []
-    for item in items:
-        if item is None:
-            item = filling
-        else:
-            item += [filling[0]] * (desired_size - len(item))
-        expanded_list.append(item)
-    return expanded_list
+    extra_empty_items = [filling[0]] * (desired_size - len(items))
+    items.extend(extra_empty_items)
 
 
 def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
@@ -485,7 +501,6 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
     log = {'data_no_fit': {},
            'variations_processed': 0}
-
 
     hdf5 = h5py.File(out_fpath)
 
@@ -498,7 +513,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     snp_chunks = _grouper(snps, vars_in_chunk)
     for chunk_i, chunk in enumerate(snp_chunks):
         chunk = list(chunk)
-        var_fields = ['chrom', 'pos', 'id', 'ref', 'qual']
+        var_fields = ['chrom', 'pos', 'id', 'ref', 'qual', 'alt']
         fields = var_fields[:]
         fields.extend(fmt_fields)
         for field in fields:
@@ -521,6 +536,9 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             if len(size) == 3 and field != b'GT':
                 missing = [missing] * size[2]
                 filling = [filling] * size[2]
+            elif len(size) == 2:
+                missing = [missing] * size[1]
+                filling = [filling] * size[1]
 
             # We store the information
             for snp_i, snp in enumerate(chunk):
@@ -545,10 +563,26 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                         item = snp[2]
                     elif field == 'ref':
                         item = snp[3]
+                    elif field == 'alt':
+                        item = snp[4]
+                        _expand_list_to_size(item, size[1], [b''])
                     elif field == 'qual':
                         item = snp[5]
                     if item is not None:
-                        dset[snp_n] = item
+                        try:
+                            dset[snp_n] = item
+                        except TypeError as error:
+                            if 'broadcast' in str(error) and field == 'alt':
+                                msg = 'More alt alleles than expected.'
+                                msg2 = 'Expected, present: {}, {}'
+                                msg2 = msg2.format(size[1], len(item))
+                                msg += msg2
+                                msg = '\nYou might fix it prereading more'
+                                msg += ' SNPs, or passing: '
+                                msg += 'max_field_lens={'
+                                msg += 'alt:{}'.format(len(item))
+                                msg += '}\nto VCF reader'
+                                raise TypeError(msg)
 
                 if grp == 'FORMAT':
                     # store the calldata
@@ -605,7 +639,7 @@ def test():
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = []
     vcf = VCF(fhand, ignored_fields=ignored_fields,
-	      pre_read_max_size=max_size_cache)
+	      pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
 
 
 

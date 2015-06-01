@@ -1,7 +1,7 @@
-doc/*
 .project
 .pydevproject
 *.pyc
 *seed.txt
 *~
-variation/*.hdf5
+variation/*hdf5
+snps.hdf5

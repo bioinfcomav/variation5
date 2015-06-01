@@ -4,4 +4,4 @@ doc/*
 *.pyc
 *seed.txt
 *~
-variation/snps.hdf5
+variation/*.hdf5

@@ -1,14 +1,13 @@
 
 import gzip
 import re
-import io
 from itertools import zip_longest, chain
-import warnings
+import os
 
 import numpy
 import h5py
 
-from compressed_queue import CCache
+from variation.compressed_queue import CCache
 
 # Test imports
 import inspect
@@ -25,7 +24,7 @@ SNPS_PER_CHUNK = 200
 MISSING_INT = -1
 MISSING_GT = MISSING_INT
 MISSING_FLOAT = float('nan')
-MISSING_STR = None
+MISSING_STR = ''
 FILLING_INT = -2
 FILLING_FLOAT = float('-inf')
 FILLING_STR = None
@@ -95,7 +94,7 @@ class VCF():
         self._parse_header()
 
         self.max_field_lens = {'ALT': 0, 'FILTER': 0, 'INFO': {}, 'FORMAT': {}}
-        self.max_field_str_lens = {'FILTER': 0, 'INFO': {}}
+        self.max_field_str_lens = {'FILTER': 0, 'INFO': {}, 'chrom': 0}
         self._init_max_field_lens()
 
         self._parsed_gt_fmts = {}
@@ -130,8 +129,6 @@ class VCF():
             read_lines.append(line)
             if line.startswith(b'#'):
                 continue
-            items = line.split(b'\t')
-            #gt_fmt = line.split(b'\t')[8]
             gts = line.split(b'\t')[9:]
             for gt in gts:
                 if gt is b'.':
@@ -156,6 +153,16 @@ class VCF():
             header_lines.append(line)
 
         metadata = {'FORMAT': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
+        metadata['VARIATIONS'] = {'chrom': {'dtype': 'str',
+                                            'type': _do_nothing},
+                                  'pos': {'dtype': 'int32',
+                                          'type': _to_int},
+                                  'id': {'dtype': 'str',
+                                         'type': _do_nothing},
+                                  'ref': {'dtype': 'str',
+                                          'type': _do_nothing},
+                                  'qual': {'dtype': 'float16',
+                                          'type': _to_float}}
         for line in header_lines:
             if line[2:7] in (b'FORMA', b'INFO=', b'FILTE'):
                 line = line[2:]
@@ -218,7 +225,7 @@ class VCF():
             if key in ignored_fields:
                 continue
             try:
-                meta = self.metadata['INFO'][key]   
+                meta = self.metadata['INFO'][key]
             except KeyError:
                 msg = 'INFO metadata was not defined in header: '
                 msg += key.decode('utf-8')
@@ -235,7 +242,7 @@ class VCF():
                         if self.max_field_lens['INFO'][key] < len(val):
                             self.max_field_lens['INFO'][key] = len(val)
                         if 'str' in meta['dtype']:
-                            max_str = max([len(val) for val_ in val])
+                            max_str = max([len(val_) for val_ in val])
                             if self.max_field_str_lens['INFO'][key] < max_str:
                                 self.max_field_str_lens['INFO'][key] = max_str
 
@@ -323,18 +330,21 @@ class VCF():
                         self.max_field_str_lens['FORMAT'][key] = max_str
 
             parsed_gts.append((fmt[0], gt_data))
-            
+
         return parsed_gts
-            
+
     @property
     def variations(self):
         return chain(self._variations_cache.items, self._variations())
-        
+
     def _variations(self):
         for line in self._fhand:
             line = line[:-1]
             items = line.split(b'\t')
             chrom, pos, id_, ref, alt, qual, flt, info, fmt = items[:9]
+
+            if self.max_field_str_lens['chrom'] < len(chrom):
+                self.max_field_str_lens['chrom'] = len(chrom)
 
             gts = items[9:]
             pos = int(pos)
@@ -361,7 +371,7 @@ class VCF():
             info = self._parse_info(info)
             gts = self._parse_gts(fmt, gts)
             yield chrom, pos, id_, ref, alt, qual, flt, info, gts
-    
+
 
 def _grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
@@ -369,27 +379,26 @@ def _grouper(iterable, n, fillvalue=None):
 
 
 TYPES = {'int16': numpy.int16,
+         'int32': numpy.int32,
          'float16': numpy.float16}
 
+DEF_DSET_PARAMS = {
+    'compression': 'gzip',  # Not much slower than lzf, but compresses much
+                            # more
+    'shuffle': True,
+    'fletcher32': True  # checksum, slower but safer
+}
 
-def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
-    snps = vcf.variations
 
-    log = {'data_no_fit': {},
-           'variations_processed': 0}
-
+def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
     n_samples = len(vcf.samples)
+
+    calldata = hdf5['calls']
     ploidy = vcf.ploidy
 
-    hdf5 = h5py.File(out_fpath)
-
-    variations = hdf5.create_group('variations')
-    calldata = hdf5.create_group('calldata')
-
-    # prepare the datasets
     fmt_fields = set(vcf.metadata['FORMAT'].keys()).difference(vcf.ignored_fields)
     fmt_fields = list(fmt_fields)
-    calldata_dsets = {}
+
     for field in fmt_fields:
         fmt = vcf.metadata['FORMAT'][field]
         if field == b'GT':
@@ -413,7 +422,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             missing_val = MISSING_GT
         else:
             missing_val = _filling_val(fmt['dtype'])
-    
+
         # If the last dimension only has one of len we can work with only
         # two dimensions (variations x samples)
         if size[-1] == 1:
@@ -421,22 +430,84 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             maxshape = maxshape[:-1]
             chunks = chunks[:-1]
 
-        calldata.create_dataset(field, size, dtype=dtype,
-                                maxshape=maxshape, chunks=chunks,
-                                fillvalue=missing_val,
-                                compression='gzip', # Not much slower than
-                                                    # lzf, but compresses much
-                                                    # more
-                                shuffle=True,
-                                fletcher32=True  # checksum, slower but safer
-                                )
+        kwargs = DEF_DSET_PARAMS.copy()
+        kwargs['dtype'] = dtype
+        kwargs['maxshape'] = maxshape
+        kwargs['chunks'] = chunks
+        kwargs['fillvalue'] = missing_val
+        calldata.create_dataset(field, size, **kwargs)
+    return fmt_fields
 
-    no_more_snps = False
+
+def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
+
+    meta = vcf.metadata['VARIATIONS']
+    var_grp = hdf5['variations']
+
+    fields = ['chrom', 'pos', 'id', 'ref', 'qual']
+    for field in fields:
+        y_axes_size = 1
+        size = [vars_in_chunk, y_axes_size]
+        maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
+        chunks=(vars_in_chunk,  y_axes_size)
+
+        dtype = meta[field]['dtype']
+        if 'str' in meta[field]['dtype']:
+            if field in vcf.max_field_str_lens:
+                dtype = 'S{}'.format(vcf.max_field_str_lens[field] + 5)
+            else:
+                # the field is empty
+                dtype = 'S1'
+
+        missing_val = None
+
+        kwargs = DEF_DSET_PARAMS.copy()
+        kwargs['dtype'] = dtype
+        kwargs['maxshape'] = maxshape
+        kwargs['chunks'] = chunks
+        kwargs['fillvalue'] = missing_val
+        var_grp.create_dataset(field, size, **kwargs)
+
+
+def _expand_list_to_size(items, desired_size, filling):
+    expanded_list = []
+    for item in items:
+        if item is None:
+            item = filling
+        else:
+            item += [filling[0]] * (desired_size - len(item))
+        expanded_list.append(item)
+    return expanded_list
+
+
+def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
+    snps = vcf.variations
+
+    log = {'data_no_fit': {},
+           'variations_processed': 0}
+
+
+    hdf5 = h5py.File(out_fpath)
+
+    var_grp = hdf5.create_group('variations')
+    calldata = hdf5.create_group('calls')
+
+    _prepare_variation_datasets(vcf, hdf5, vars_in_chunk)
+    fmt_fields = _prepate_call_datasets(vcf, hdf5, vars_in_chunk)
+
     snp_chunks = _grouper(snps, vars_in_chunk)
     for chunk_i, chunk in enumerate(snp_chunks):
         chunk = list(chunk)
-        for field in fmt_fields:
-            dset = calldata[field]
+        var_fields = ['chrom', 'pos', 'id', 'ref', 'qual']
+        fields = var_fields[:]
+        fields.extend(fmt_fields)
+        for field in fields:
+            if field in var_fields:
+                dset = var_grp[field]
+                grp = 'VARIATIONS'
+            else:
+                dset = calldata[field]
+                grp = 'FORMAT'
 
             # resize the dataset to fit the new chunk
             size = dset.shape
@@ -444,8 +515,8 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             new_size[0] = vars_in_chunk * (chunk_i + 1)
             dset.resize(new_size)
 
-            missing = _missing_val(vcf.metadata['FORMAT'][field]['dtype'])
-            filling = _filling_val(vcf.metadata['FORMAT'][field]['dtype'])
+            missing = _missing_val(vcf.metadata[grp][field]['dtype'])
+            filling = _filling_val(vcf.metadata[grp][field]['dtype'])
 
             if len(size) == 3 and field != b'GT':
                 missing = [missing] * size[2]
@@ -457,49 +528,59 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                     gt_data = snp[-1]
                 except TypeError:
                     # SNP is None
-                    no_more_snps = True
                     break
 
                 log['variations_processed'] += 1
 
-                gt_data = dict(gt_data)
-                call_sample_data = gt_data.get(field, None)
-                if call_sample_data is None:
-                    continue
-
-                #call_sample_data = [missing if item is None else item for item in call_sample_data]
-                if len(size) == 2:
-                    # we're expecting a single item or a list with one item
-                    if isinstance(call_sample_data[0], (list, tuple)):
-                        # We have a list in each item
-                        # we're assuming that all items have length 1
-                        assert max(map(len, call_sample_data)) == 1
-                        call_sample_data =  [item[0] for item in call_sample_data]
-                elif field == b'GT':
-                    pass
-                else:
-                    expected_item_len = size[2]
-                    expanded_call_sample_data = []
-                    for item in call_sample_data:
-                        if item is None:
-                            item = filling
-                        else:
-                            item += [filling[0]] * (expected_item_len - len(item))
-                        expanded_call_sample_data.append(item)
-                    call_sample_data = expanded_call_sample_data
-
                 snp_n = snp_i + chunk_i * vars_in_chunk
-                if call_sample_data is not None:
-                    try:
-                        dset[snp_n] = call_sample_data
-                    except TypeError as error:
-                        if 'broadcast' in str(error):
-                            if field not in log['data_no_fit']:
-                                log['data_no_fit'][field] = 0
-                            log['data_no_fit'][field] += 1
+
+                # store variation data
+                #print(grp, field, snp)
+                if grp == 'VARIATIONS':
+                    if field == 'chrom':
+                        item = snp[0]
+                    elif field == 'pos':
+                        item = snp[1]
+                    elif field == 'id':
+                        item = snp[2]
+                    elif field == 'ref':
+                        item = snp[3]
+                    elif field == 'qual':
+                        item = snp[5]
+                    if item is not None:
+                        dset[snp_n] = item
+
+                if grp == 'FORMAT':
+                    # store the calldata
+                    gt_data = dict(gt_data)
+                    call_sample_data = gt_data.get(field, None)
+
+                    if call_sample_data is not None:
+                        if len(size) == 2:
+                            # we're expecting a single item or a list with one item
+                            if isinstance(call_sample_data[0], (list, tuple)):
+                                # We have a list in each item
+                                # we're assuming that all items have length 1
+                                assert max(map(len, call_sample_data)) == 1
+                                call_sample_data =  [item[0] for item in call_sample_data]
+                        elif field == b'GT':
+                            pass
+                        else:
+                            call_sample_data = _expand_list_to_size(call_sample_data,
+                                                                    size[2],
+                                                                    filling)
+
+                        if call_sample_data is not None:
+                            try:
+                                dset[snp_n] = call_sample_data
+                            except TypeError as error:
+                                if 'broadcast' in str(error):
+                                    if field not in log['data_no_fit']:
+                                        log['data_no_fit'][field] = 0
+                                    log['data_no_fit'][field] += 1
 
     # we have to remove the empty snps from the last chunk
-    for field_i, field in enumerate(fmt_fields):
+    for field in fmt_fields:
         dset = calldata[field]
         size = dset.shape
         new_size = list(size)
@@ -511,9 +592,14 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
 def test():
 
+    out_fhand = 'snps.hdf5'
+
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
+
     fhand = gzip.open(TEST_VCF, 'rb')
     max_size_cache = 1024**3
-    #max_size_cache = 1000
+    max_size_cache = 1000
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = ['QA', 'QR', 'GL']
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
@@ -521,7 +607,7 @@ def test():
     vcf = VCF(fhand, ignored_fields=ignored_fields,
 	      pre_read_max_size=max_size_cache)
 
-    out_fhand = 'snps.hdf5'
+
 
     print (vcf.max_field_lens)
     print (vcf.max_field_str_lens)
@@ -529,7 +615,7 @@ def test():
     log = vcf_to_hdf5(vcf, out_fhand)
     print(log)
     #hdf5 = h5py.File(out_fhand, 'r')
-    
+
     #read_chunks(open('snps.hdf5'), ['caldata/GT'])
 
 if __name__ == '__main__':

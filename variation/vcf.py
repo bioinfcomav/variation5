@@ -209,7 +209,7 @@ class VCF():
                                 val2 = 'float16'
                             else:
                                 val = _do_nothing
-                                val2 = 'hdf5_str'
+                                val2 = 'str'
                             meta['dtype'] = val2
                         meta[key] = val
                 if id_ is None:
@@ -245,17 +245,17 @@ class VCF():
             type_ = meta['Type']
             if b',' in val:
                 val = [type_(val) for val in val.split(b',')]
+                val_to_check_len = val
             else:
                 val = type_(val)
-                if meta['Number'] != '1':
-                    val = [val]
-                    if not isinstance(meta['Number'], int):
-                        if self.max_field_lens['INFO'][key] < len(val):
-                            self.max_field_lens['INFO'][key] = len(val)
-                        if 'str' in meta['dtype']:
-                            max_str = max([len(val_) for val_ in val])
-                            if self.max_field_str_lens['INFO'][key] < max_str:
-                                self.max_field_str_lens['INFO'][key] = max_str
+                val_to_check_len = [val]
+            if not isinstance(meta['Number'], int):
+                if self.max_field_lens['INFO'][key] < len(val_to_check_len):
+                    self.max_field_lens['INFO'][key] = len(val_to_check_len)
+                if 'str' in meta['dtype']:
+                    max_str = max([len(val_) for val_ in val_to_check_len])
+                    if self.max_field_str_lens['INFO'][key] < max_str:
+                        self.max_field_str_lens['INFO'][key] = max_str
 
             parsed_infos[key] = val
         return parsed_infos
@@ -406,6 +406,59 @@ DEF_DSET_PARAMS = {
 }
 
 
+def _numpy_dtype(dtype, field, max_field_str_lens):
+    if 'str' in dtype:
+        if field in max_field_str_lens:
+            dtype = 'S{}'.format(max_field_str_lens[field] + 5)
+        else:
+            # the field is empty
+            dtype = 'S1'
+    else:
+        dtype = TYPES[dtype]
+    return dtype
+
+
+def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
+    meta = vcf.metadata['INFO']
+    var_grp = hdf5['variations']
+    info_grp = var_grp.create_group('info')
+
+    info_fields = set(meta.keys()).difference(vcf.ignored_fields)
+    info_fields = list(info_fields)
+
+    ok_fields = []
+    for field in info_fields:
+        meta_fld = meta[field]
+        dtype = _numpy_dtype(meta_fld['dtype'], field,
+                             vcf.max_field_str_lens)
+
+        if field not in vcf.max_field_lens['INFO']:
+            # We assume that it is not used by any SNP
+            continue
+
+        y_axes_size = vcf.max_field_lens['INFO'][field]
+
+        if y_axes_size == 1:
+            size = (vars_in_chunk,)
+            maxshape = (None,)
+            chunks = (vars_in_chunk,)
+        else:
+            size = [vars_in_chunk, y_axes_size]
+            maxshape = (None, y_axes_size)
+            chunks = (vars_in_chunk, y_axes_size)
+
+        missing_val = None
+
+        kwargs = DEF_DSET_PARAMS.copy()
+        kwargs['dtype'] = dtype
+        kwargs['maxshape'] = maxshape
+        kwargs['chunks'] = chunks
+        kwargs['fillvalue'] = missing_val
+        info_grp.create_dataset(field, size, **kwargs)
+        ok_fields.append(field)
+    return ok_fields
+
+
 def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
     n_samples = len(vcf.samples)
 
@@ -421,7 +474,8 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
             z_axes_size = ploidy
             dtype = numpy.int8
         else:
-            dtype = TYPES[fmt['dtype']]
+            dtype = _numpy_dtype(fmt['dtype'], field,
+                             vcf.max_field_str_lens)
             if isinstance(fmt['Number'], int):
                 z_axes_size = fmt['Number']
             else:
@@ -431,8 +485,8 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
                     z_axes_size = vcf.max_field_lens['FORMAT'][field]
 
         size = [vars_in_chunk, n_samples, z_axes_size]
-        maxshape=(None, n_samples, z_axes_size)  # is resizable, we can add SNPs
-        chunks=(vars_in_chunk, n_samples, z_axes_size)
+        maxshape = (None, n_samples, z_axes_size)
+        chunks = (vars_in_chunk, n_samples, z_axes_size)
 
         if field == b'GT':
             missing_val = MISSING_GT
@@ -475,12 +529,8 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
             chunks=(vars_in_chunk,  y_axes_size)
 
         dtype = meta[field]['dtype']
-        if 'str' in meta[field]['dtype']:
-            if field in vcf.max_field_str_lens:
-                dtype = 'S{}'.format(vcf.max_field_str_lens[field] + 5)
-            else:
-                # the field is empty
-                dtype = 'S1'
+        dtype = _numpy_dtype(meta[field]['dtype'], field,
+                             vcf.max_field_str_lens)
 
         missing_val = None
 
@@ -509,20 +559,29 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     calldata = hdf5.create_group('calls')
 
     fmt_fields = _prepate_call_datasets(vcf, hdf5, vars_in_chunk)
+    info_fields = _prepare_info_datasets(vcf, hdf5, vars_in_chunk)
     _prepare_variation_datasets(vcf, hdf5, vars_in_chunk)
     var_fields = ['chrom', 'pos', 'id', 'ref', 'qual', 'alt']
+
+    info_grp = var_grp['info']
+
+    fields = var_fields[:]
+    fields.extend(fmt_fields)
+    fields.extend(info_fields)
 
     snp_chunks = _grouper(snps, vars_in_chunk)
     for chunk_i, chunk in enumerate(snp_chunks):
         chunk = list(chunk)
 
-        fields = var_fields[:]
-        fields.extend(fmt_fields)
+
         first_field = True
         for field in fields:
             if field in var_fields:
                 dset = var_grp[field]
                 grp = 'VARIATIONS'
+            elif field in info_fields:
+                dset = info_grp[field]
+                grp = 'INFO'
             else:
                 dset = calldata[field]
                 grp = 'FORMAT'
@@ -555,8 +614,24 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
                 snp_n = snp_i + chunk_i * vars_in_chunk
 
-                # store variation data
-                #print(grp, field, snp)
+                if grp == 'INFO':
+                    info_data = (snp[7])
+                    info_data = info_data[field]
+                    if info_data is not None:
+                        if len(size) == 1:
+                            # we're expecting one item or a list with one item
+                            print (field, info_data)
+                            if isinstance(info_data, (list, tuple)):
+                                assert len(info_data) == 1
+                                info_data = info_data[0]
+                        try:
+                            dset[snp_n] = info_data
+                        except TypeError as error:
+                            if 'broadcast' in str(error):
+                                if field not in log['data_no_fit']:
+                                    log['data_no_fit'][field] = 0
+                                log['data_no_fit'][field] += 1
+
                 if grp == 'VARIATIONS':
                     if field == 'chrom':
                         item = snp[0]
@@ -621,6 +696,8 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     for field in fields:
         if field in var_fields:
             dset = var_grp[field]
+        elif field in info_fields:
+            dset = info_grp[field]
         else:
             dset = calldata[field]
 

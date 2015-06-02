@@ -1,4 +1,3 @@
-What happens when the estimate of the max_size is wrong and we have to fit some data that is longer. We could choose to set to missing this weird values, that would be the easiest thing to do. Otherwise we would have to resize the matrix
 
 Store the is_phased in the vcf reader
 

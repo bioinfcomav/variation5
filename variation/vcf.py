@@ -3,6 +3,7 @@ import gzip
 import re
 from itertools import zip_longest, chain
 import os
+import subprocess
 
 import numpy
 import h5py
@@ -631,6 +632,17 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
     return log
 
+
+def read_gzip_file(fpath):
+    zcat = ['zcat']
+    pigz = ['pigz', '-dc']
+    cmd = zcat
+    cmd.append(fpath)
+    gz_process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    for line in gz_process.stdout:
+        yield line
+
+
 def test():
 
     out_fhand = 'snps.hdf5'
@@ -638,13 +650,18 @@ def test():
     if os.path.exists(out_fhand):
         os.remove(out_fhand)
 
-    fhand = gzip.open(TEST_VCF, 'rb')
+    if False:
+        fhand = gzip.open(TEST_VCF, 'rb')
+    else:
+        lines = read_gzip_file(TEST_VCF)
+        fhand = lines
+
     max_size_cache = 1024**3
     max_size_cache = 1000
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     ignored_fields = ['QA', 'QR', 'GL']
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
-    ignored_fields = []
+    #ignored_fields = []
     vcf = VCF(fhand, ignored_fields=ignored_fields,
 	      pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
 

@@ -55,7 +55,6 @@ def _gt_data_to_list(mapper_function, sample_gt, missing_data):
         return None
 
     sample_gt = sample_gt.split(b',')
-    print(sample_gt)
     sample_gt = [mapper_function(item) for item in sample_gt]
     return sample_gt
 
@@ -550,6 +549,37 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
         var_grp.create_dataset(field, size, **kwargs)
 
 
+def _prepare_filter_datasets(vcf, hdf5, vars_in_chunk):
+
+    var_grp = hdf5['variations']
+    filter_grp = var_grp.create_group('filter')
+
+    meta = vcf.metadata['FILTER']
+    filter_fields = set(meta.keys()).difference(vcf.ignored_fields)
+    filter_fields = list(filter_fields)
+    if not filter_fields:
+        return []
+
+    filter_fields.append('no_filters')
+
+    for field in filter_fields:
+        dtype = numpy.bool_
+
+        size = (vars_in_chunk,)
+        maxshape = (None,)
+        chunks = (vars_in_chunk,)
+
+        missing_val = None
+
+        kwargs = DEF_DSET_PARAMS.copy()
+        kwargs['dtype'] = dtype
+        kwargs['maxshape'] = maxshape
+        kwargs['chunks'] = chunks
+        kwargs['fillvalue'] = missing_val
+        filter_grp.create_dataset(field, size, **kwargs)
+    return filter_fields
+
+
 def _expand_list_to_size(items, desired_size, filling):
     extra_empty_items = [filling[0]] * (desired_size - len(items))
     items.extend(extra_empty_items)
@@ -568,19 +598,21 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
     fmt_fields = _prepate_call_datasets(vcf, hdf5, vars_in_chunk)
     info_fields = _prepare_info_datasets(vcf, hdf5, vars_in_chunk)
+    filter_fields = _prepare_filter_datasets(vcf, hdf5, vars_in_chunk)
     _prepare_variation_datasets(vcf, hdf5, vars_in_chunk)
     var_fields = ['chrom', 'pos', 'id', 'ref', 'qual', 'alt']
 
     info_grp = var_grp['info']
+    filter_grp = var_grp['filter']
 
     fields = var_fields[:]
     fields.extend(fmt_fields)
     fields.extend(info_fields)
+    fields.extend(filter_fields)
 
     snp_chunks = _grouper(snps, vars_in_chunk)
     for chunk_i, chunk in enumerate(snp_chunks):
         chunk = list(chunk)
-
 
         first_field = True
         for field in fields:
@@ -590,6 +622,9 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             elif field in info_fields:
                 dset = info_grp[field]
                 grp = 'INFO'
+            elif field in filter_fields:
+                dset = filter_grp[field]
+                grp = 'FILTER'
             else:
                 dset = calldata[field]
                 grp = 'FORMAT'
@@ -600,8 +635,12 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
             new_size[0] = vars_in_chunk * (chunk_i + 1)
             dset.resize(new_size)
 
-            missing = _missing_val(vcf.metadata[grp][field]['dtype'])
-            filling = _filling_val(vcf.metadata[grp][field]['dtype'])
+            if grp == 'FILTER':
+                missing = False
+                filling = False
+            else:
+                missing = _missing_val(vcf.metadata[grp][field]['dtype'])
+                filling = _filling_val(vcf.metadata[grp][field]['dtype'])
 
             if len(size) == 3 and field != b'GT':
                 missing = [missing] * size[2]
@@ -622,8 +661,14 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
                 snp_n = snp_i + chunk_i * vars_in_chunk
 
-                if grp == 'INFO':
-                    info_data = (snp[7])
+                if grp == 'FILTER':
+                    data = snp[6]
+                    if field == 'no_filters':
+                        data = data is None
+                    else:
+                        data = field in data
+                elif grp == 'INFO':
+                    info_data = snp[7]
                     info_data = info_data.get(field, None)
                     if info_data is not None:
                         if len(size) == 1:
@@ -640,7 +685,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                                     log['data_no_fit'][field] = 0
                                 log['data_no_fit'][field] += 1
 
-                if grp == 'VARIATIONS':
+                elif grp == 'VARIATIONS':
                     if field == 'chrom':
                         item = snp[0]
                     elif field == 'pos':
@@ -670,7 +715,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                                 msg += '}\nto VCF reader'
                                 raise TypeError(msg)
 
-                if grp == 'FORMAT':
+                elif grp == 'FORMAT':
                     # store the calldata
                     gt_data = dict(gt_data)
                     call_sample_data = gt_data.get(field, None)
@@ -704,6 +749,8 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     for field in fields:
         if field in var_fields:
             dset = var_grp[field]
+        elif field in filter_fields:
+            dset = filter_grp[field]
         elif field in info_fields:
             dset = info_grp[field]
         else:
@@ -736,9 +783,6 @@ def test():
         os.remove(out_fhand)
     fhand = open(TEST_VCF2, 'rb')
     vcf = VCF(fhand, pre_read_max_size=1000)
-
-    print (vcf.max_field_lens)
-    print (vcf.max_field_str_lens)
 
     log = vcf_to_hdf5(vcf, out_fhand)
     print(log)

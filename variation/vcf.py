@@ -4,6 +4,7 @@ import re
 from itertools import zip_longest, chain
 import os
 import subprocess
+from collections import namedtuple
 
 import numpy
 import h5py
@@ -765,6 +766,84 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     return log
 
 
+DsetChunk = namedtuple('DsetChunk', ('data', 'group', 'shape', 'maxshape',
+                                     'chunks', 'dtype'))
+
+
+def dsets_chunks_iterator(hdf5, num_vars_per_yield_in_chunk_size=1):
+
+    dsets = {}
+    for grp in hdf5.values():
+        if not isinstance(grp, h5py.Group):
+            continue
+        for name, item in grp.items():
+            if isinstance(item, h5py.Dataset):
+                dset = item
+                dsets[name] = DsetChunk(dset, grp.name, dset.shape,
+                                        dset.maxshape, dset.chunks, dset.dtype)
+            else:
+                grp = item
+                for sname, dset in grp.items():
+                    if isinstance(dset, h5py.Dataset):
+                        dsets[sname] = DsetChunk(dset, grp.name,
+                                                 dset.shape, dset.maxshape,
+                                                 dset.chunks, dset.dtype)
+
+    one_dset = dsets[list(dsets.keys())[0]].data
+    chunk_size = one_dset.chunks[0] * num_vars_per_yield_in_chunk_size
+    nsnps = one_dset.shape
+    if isinstance(nsnps, (tuple, list)):
+        nsnps = nsnps[0]
+
+    for start in range(0, nsnps, chunk_size):
+        stop = start + chunk_size
+        if stop > nsnps:
+            stop = nsnps
+        chunks = {}
+        for name, dset in dsets.items():
+            chunk = list(dset[:])
+            chunk[0] = dset.data[start:stop]
+            chunks[name] = DsetChunk(*chunk)
+        yield chunks
+
+
+def _create_dsets_from_chunks(hdf5, dset_chunks):
+    dsets = {}
+    for sname, dset_chunk in dset_chunks.items():
+        grp_name = dset_chunk.group
+        try:
+            grp = hdf5[grp_name]
+        except KeyError:
+            grp = hdf5.create_group(grp_name)
+        dset = grp.create_dataset(sname, shape=dset_chunk.shape,
+                                  dtype=dset_chunk.dtype,
+                                  chunks=dset_chunk.chunks,
+                                  maxshape=dset_chunk.maxshape)
+        dsets[sname] = dset
+    return dsets
+
+
+def write_hdf5_from_chunks(hdf5, chunks):
+    dsets = None
+    current_snp_index = 0
+    for dsets_chunks in chunks:
+        if dsets is None:
+            dsets = _create_dsets_from_chunks(hdf5, dsets_chunks)
+
+        # check all chunks have the same number of snps
+        nsnps = [chunk.data.shape[0] for chunk in dsets_chunks.values()]
+        num_snps = nsnps[0]
+        assert all(num_snps == nsnp for nsnp in nsnps)
+
+        for dset_name, dset_chunk in dsets_chunks.items():
+            dset = dsets[dset_name]
+            start = current_snp_index
+            stop = current_snp_index + num_snps
+            dset[start:stop] = dset_chunk.data
+
+        current_snp_index += num_snps
+
+
 def read_gzip_file(fpath):
     zcat = ['zcat']
     pigz = ['pigz', '-dc']
@@ -778,6 +857,7 @@ def read_gzip_file(fpath):
 def test():
 
     out_fhand = 'snps.hdf5'
+    out_fhand2 = 'snps2.hdf5'
 
     if os.path.exists(out_fhand):
         os.remove(out_fhand)
@@ -786,6 +866,11 @@ def test():
 
     log = vcf_to_hdf5(vcf, out_fhand)
     print(log)
+
+    hdf5 = h5py.File(out_fhand, 'r')
+    hdf5_2 = h5py.File(out_fhand2, 'w')
+    write_hdf5_from_chunks(hdf5_2, dsets_chunks_iterator(hdf5))
+    assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
 
     if os.path.exists(out_fhand):
         os.remove(out_fhand)

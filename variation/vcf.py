@@ -18,6 +18,8 @@ TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                          '..', 'test_data'))
 TEST_VCF = join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz')
 
+TEST_VCF2 = join(TEST_DATA_DIR, 'format_def.vcf')
+
 # Speed is related to chunksize, so if you change snps-per-chunk check the
 # performance
 SNPS_PER_CHUNK = 200
@@ -35,7 +37,7 @@ def _do_nothing(value):
 
 
 def _to_int(string):
-    if string in ('', '.', None):
+    if string in ('', '.', None, b'.'):
         return MISSING_INT
     return int(string)
 
@@ -53,6 +55,7 @@ def _gt_data_to_list(mapper_function, sample_gt, missing_data):
         return None
 
     sample_gt = sample_gt.split(b',')
+    print(sample_gt)
     sample_gt = [mapper_function(item) for item in sample_gt]
     return sample_gt
 
@@ -215,7 +218,7 @@ class VCF():
                 if id_ is None:
                     raise RuntimeError('Header line has no ID: ' + line)
                 # The fields with a variable number of items
-                if meta['Number'].isdigit():
+                if 'Number' in meta and meta['Number'].isdigit():
                     meta['Number'] = int(meta['Number'])
             else:
                 id_, meta = line[2:].decode('utf-8').split('=', 1)
@@ -232,7 +235,10 @@ class VCF():
         parsed_infos = {}
         ignored_fields = self.ignored_fields
         for info in infos:
-            key, val = info.split(b'=', 1)
+            if b'=' in info:
+                key, val = info.split(b'=', 1)
+            else:
+                key, val = info, True
             if key in ignored_fields:
                 continue
             try:
@@ -243,7 +249,9 @@ class VCF():
                 raise RuntimeError(msg)
 
             type_ = meta['Type']
-            if b',' in val:
+            if isinstance(val, bool):
+                pass
+            elif b',' in val:
                 val = [type_(val) for val in val.split(b',')]
                 val_to_check_len = val
             else:
@@ -616,7 +624,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
 
                 if grp == 'INFO':
                     info_data = (snp[7])
-                    info_data = info_data[field]
+                    info_data = info_data.get(field, None)
                     if info_data is not None:
                         if len(size) == 1:
                             # we're expecting one item or a list with one item
@@ -726,6 +734,17 @@ def test():
 
     if os.path.exists(out_fhand):
         os.remove(out_fhand)
+    fhand = open(TEST_VCF2, 'rb')
+    vcf = VCF(fhand, pre_read_max_size=1000)
+
+    print (vcf.max_field_lens)
+    print (vcf.max_field_str_lens)
+
+    log = vcf_to_hdf5(vcf, out_fhand)
+    print(log)
+
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
 
     if False:
         fhand = gzip.open(TEST_VCF, 'rb')
@@ -740,8 +759,7 @@ def test():
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     #ignored_fields = []
     vcf = VCF(fhand, ignored_fields=ignored_fields,
-	      pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
-
+	          pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
 
 
     print (vcf.max_field_lens)

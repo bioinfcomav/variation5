@@ -4,6 +4,7 @@ import re
 from itertools import zip_longest, chain
 import os
 import subprocess
+from collections import namedtuple
 
 import numpy
 import h5py
@@ -354,8 +355,11 @@ class VCF():
                     # if your file has variable length str fields you
                     # should check and fix the following part of the code
                     raise NotImplementedError('Fixme')
+<<<<<<< HEAD
                     #print(gt_data)
                     #print( [val for smpl_data in gt_data for val in smpl_data])
+=======
+>>>>>>> 5d17a95a6e1697fc5e1177adbfe1e7dca189694b
                     max_len = max([len(val) for smpl_data in gt_data for val in smpl_data])
                     max_str = max([len(val) for val_ in val])
                     if self.max_field_str_lens['FORMAT'][key] < max_str:
@@ -700,7 +704,10 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                     if info_data is not None:
                         if len(size) == 1:
                             # we're expecting one item or a list with one item
+<<<<<<< HEAD
                             #print (field, info_data)
+=======
+>>>>>>> 5d17a95a6e1697fc5e1177adbfe1e7dca189694b
                             if isinstance(info_data, (list, tuple)):
                                 assert len(info_data) == 1
                                 info_data = info_data[0]
@@ -792,6 +799,127 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     return log
 
 
+DsetChunk = namedtuple('DsetChunk', ('data', 'group', 'shape', 'maxshape',
+                                     'chunks', 'dtype'))
+
+
+def dsets_chunks_iterator(hdf5, num_vars_per_yield_in_chunk_size=1,
+                          kept_fields=None, ignored_fields=None):
+
+    if kept_fields is not None and ignored_fields is not None:
+        msg = 'kept_fields and ignored_fields can not be set at the same time'
+        raise ValueError(msg)
+
+    # We read the hdf5 file to keep the datasets metadata
+    dsets = {}
+    for grp in hdf5.values():
+        if not isinstance(grp, h5py.Group):
+            continue
+        for name, item in grp.items():
+            if isinstance(item, h5py.Dataset):
+                dset = item
+                dsets[name] = DsetChunk(dset, grp.name, dset.shape,
+                                        dset.maxshape, dset.chunks, dset.dtype)
+            else:
+                grp = item
+                for sname, dset in grp.items():
+                    if isinstance(dset, h5py.Dataset):
+                        dsets[sname] = DsetChunk(dset, grp.name,
+                                                 dset.shape, dset.maxshape,
+                                                 dset.chunks, dset.dtype)
+
+    # We remove the unwanted fields
+    fields = dsets.keys()
+    if kept_fields:
+        fields = set(kept_fields).intersection(fields)
+    if ignored_fields:
+        fields = set(fields).difference(ignored_fields)
+    dsets = {field: dsets[field] for field in fields}
+
+    # how many snps are per chunk?
+    one_dset = dsets[list(dsets.keys())[0]].data
+    chunk_size = one_dset.chunks[0] * num_vars_per_yield_in_chunk_size
+    nsnps = one_dset.shape
+    if isinstance(nsnps, (tuple, list)):
+        nsnps = nsnps[0]
+
+    # Now we can yield the chunks
+    for start in range(0, nsnps, chunk_size):
+        stop = start + chunk_size
+        if stop > nsnps:
+            stop = nsnps
+        chunks = {}
+        for name, dset in dsets.items():
+            chunks[name] = _copy_chunk_with_new_data(dset,
+                                                     dset.data[start:stop])
+        yield chunks
+
+
+def _create_dsets_from_chunks(hdf5, dset_chunks):
+    dsets = {}
+    for sname, dset_chunk in dset_chunks.items():
+        grp_name = dset_chunk.group
+        try:
+            grp = hdf5[grp_name]
+        except KeyError:
+            grp = hdf5.create_group(grp_name)
+        dset = grp.create_dataset(sname, shape=dset_chunk.shape,
+                                  dtype=dset_chunk.dtype,
+                                  chunks=dset_chunk.chunks,
+                                  maxshape=dset_chunk.maxshape)
+        dsets[sname] = dset
+    return dsets
+
+
+def write_hdf5_from_chunks(hdf5, chunks):
+    dsets = None
+    current_snp_index = 0
+    for dsets_chunks in chunks:
+        if dsets is None:
+            dsets = _create_dsets_from_chunks(hdf5, dsets_chunks)
+
+        # check all chunks have the same number of snps
+        nsnps = [chunk.data.shape[0] for chunk in dsets_chunks.values()]
+        num_snps = nsnps[0]
+        assert all(num_snps == nsnp for nsnp in nsnps)
+
+        for dset_name, dset_chunk in dsets_chunks.items():
+            dset = dsets[dset_name]
+            start = current_snp_index
+            stop = current_snp_index + num_snps
+            dset[start:stop] = dset_chunk.data
+
+        current_snp_index += num_snps
+    hdf5.flush()
+
+
+def select_all(var_matrix):
+    n_snps = var_matrix.data.shape[0]
+    selector = numpy.ones((n_snps,), dtype=numpy.bool_)
+    return selector
+
+
+def select_all_genotypes(dsets_chunk):
+    gt_mat = dsets_chunk['GT']
+    return select_all(gt_mat)
+
+
+def _copy_chunk_with_new_data(dset_chunk, data):
+    new_dset_chunk = (data,) + dset_chunk[1:]
+    return DsetChunk(*new_dset_chunk)
+
+
+def filter_dsets_chunks(selector_function, dsets_chunks):
+    for dsets_chunk in dsets_chunks:
+        bool_selection = selector_function(dsets_chunk)
+        flt_dsets_chunk = {}
+        for field, dset_chunk in dsets_chunk.items():
+            flt_data = numpy.compress(bool_selection, dset_chunk.data, axis=0)
+            flt_dsets_chunk[field] = _copy_chunk_with_new_data(dset_chunk,
+                                                               flt_data)
+        yield flt_dsets_chunk
+
+
 def read_gzip_file(fpath):
     zcat = ['zcat']
     pigz = ['pigz', '-dc']
@@ -806,6 +934,7 @@ def read_gzip_file(fpath):
 def test():
 
     out_fhand = 'snps.hdf5'
+    out_fhand2 = 'snps2.hdf5'
 
     if os.path.exists(out_fhand):
         os.remove(out_fhand)
@@ -815,8 +944,32 @@ def test():
     log = vcf_to_hdf5(vcf, out_fhand)
     #print(log)
 
+    hdf5 = h5py.File(out_fhand, 'r')
+    hdf5_2 = h5py.File(out_fhand2, 'w')
+    write_hdf5_from_chunks(hdf5_2, dsets_chunks_iterator(hdf5))
+    assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
+    os.remove(out_fhand2)
+
+    hdf5 = h5py.File(out_fhand, 'r')
+    hdf5_2 = h5py.File(out_fhand2, 'w')
+    write_hdf5_from_chunks(hdf5_2, dsets_chunks_iterator(hdf5,
+                                                         kept_fields=['GT']))
+    assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
+    os.remove(out_fhand2)
+
+    hdf5 = h5py.File(out_fhand, 'r')
+    hdf5_2 = h5py.File(out_fhand2, 'w')
+    chunks = dsets_chunks_iterator(hdf5)
+    chunks = filter_dsets_chunks(select_all_genotypes, chunks)
+    write_hdf5_from_chunks(hdf5_2, chunks)
+
     if os.path.exists(out_fhand):
+<<<<<<< HEAD
         os.remove(out_fhand)'''
+=======
+        os.remove(out_fhand)
+        os.remove(out_fhand2)
+>>>>>>> 5d17a95a6e1697fc5e1177adbfe1e7dca189694b
 
     if False:
         fhand = gzip.open(TEST_VCF, 'rb')
@@ -833,6 +986,7 @@ def test():
     vcf = VCF(fhand, ignored_fields=ignored_fields,
 	          pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
 
+<<<<<<< HEAD
      
     #print (vcf.max_field_lens)
     #print (vcf.max_field_str_lens)
@@ -840,8 +994,26 @@ def test():
     log = vcf_to_hdf5(vcf, out_fhand)
     #print(log)
     #hdf5 = h5py.File(out_fhand, 'r')
+=======
+    print (vcf.max_field_lens)
+    print (vcf.max_field_str_lens)
 
-    #read_chunks(open('snps.hdf5'), ['caldata/GT'])
+    out_fhand = 'snps_big.hdf5'
+    out_fhand2 = 'snps_big2.hdf5'
+    #log = vcf_to_hdf5(vcf, out_fhand)
+    #print(log)
+
+    hdf5 = h5py.File(out_fhand, 'r')
+    hdf5_2 = h5py.File(out_fhand2, 'w')
+    chunks = dsets_chunks_iterator(hdf5, kept_fields=['GT'])
+    chunks = filter_dsets_chunks(select_all_genotypes, chunks)
+    write_hdf5_from_chunks(hdf5_2, chunks)
+    assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
+    if os.path.exists(out_fhand):
+        #os.remove(out_fhand)
+        os.remove(out_fhand2)
+>>>>>>> 5d17a95a6e1697fc5e1177adbfe1e7dca189694b
+
 
 if __name__ == '__main__':
     test()

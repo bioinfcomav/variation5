@@ -5,6 +5,8 @@ from itertools import zip_longest, chain
 import os
 import subprocess
 from collections import namedtuple
+import functools
+import operator
 
 import numpy
 import h5py
@@ -884,6 +886,37 @@ def filter_dsets_chunks(selector_function, dsets_chunks):
         yield flt_dsets_chunk
 
 
+def select_dset_chunks_for_field(dsets_chunks, field):
+    for dsets_chunk in dsets_chunks:
+        yield dsets_chunk[field]
+
+
+def keep_only_data_from_chunk(dset_chunks):
+    return (dset_chunk.data for dset_chunk in dset_chunks)
+
+
+class RowValueCounter():
+
+    def __init__(self, value, ratio=False):
+        self.value = value  # value to count
+        self.ratio = ratio
+
+    def __call__(self, mat):
+        ndims = len(mat.shape)
+        if ndims == 1:
+            raise ValueError('The matrix has to have at least 2 dimensions')
+        elif ndims == 2:
+            axes = 1
+        else:
+            axes = tuple([i +1 for i in range(ndims - 1)])
+        result = (mat == self.value).sum(axis=axes)
+        if self.ratio:
+            num_items_per_row = functools.reduce(operator.mul, mat.shape[1:],
+                                                 1)
+            result = result / num_items_per_row
+        return result
+
+
 def read_gzip_file(fpath):
     zcat = ['zcat']
     pigz = ['pigz', '-dc']
@@ -894,7 +927,92 @@ def read_gzip_file(fpath):
         yield line
 
 
+def test_count_value_per_row():
+    mat = numpy.array([[0, 0], [1, -1], [2, -1], [-1, -1]])
+    missing_counter = RowValueCounter(value=-1)
+    assert numpy.all(missing_counter(mat) == [0, 1, 1, 2])
+
+    missing_counter = RowValueCounter(value=-1, ratio=True)
+    assert numpy.allclose(missing_counter(mat), [0., 0.5, 0.5, 1.])
+
+
+    fhand = open(TEST_VCF2, 'rb')
+    vcf = VCF(fhand, pre_read_max_size=1000)
+    out_fhand = 'snps.hdf5'
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
+    vcf_to_hdf5(vcf, out_fhand)
+    hdf5 = h5py.File(out_fhand, 'r')
+    chunks = dsets_chunks_iterator(hdf5)
+    gt_chunks = select_dset_chunks_for_field(chunks, 'GT')
+    gt_chunks = list(keep_only_data_from_chunk(gt_chunks))
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
+    homo_counter = RowValueCounter(value=2)
+    assert numpy.all(homo_counter(gt_chunks[0]) == [0, 0, 4, 0, 1])
+
+    missing_counter = RowValueCounter(value=2, ratio=True)
+    assert numpy.allclose(missing_counter(gt_chunks[0]), [0., 0, 0.66666, 0.,
+                                                          0.166666])
+
+
+def concatenate_by_rows(matrices):
+    return numpy.concatenate(matrices, axis=0)
+
+
+def _first_item(iterable):
+    for item in iterable:
+        return item
+
+
+def concatenate_by_rows_into_dset(matrices, group, dset_name,
+                                  rows_in_chunk=SNPS_PER_CHUNK):
+    matrices = iter(matrices)
+    fst_mat = _first_item(matrices)
+    if matrices is None:
+        raise ValueError('There were no matrices to concatenate')
+    mats = chain([fst_mat], matrices)
+
+    size = fst_mat.shape
+    kwargs = DEF_DSET_PARAMS.copy()
+    kwargs['dtype'] = fst_mat.dtype
+    kwargs['maxshape'] = (None,) + size[1:]
+    kwargs['chunks'] = (SNPS_PER_CHUNK,) + size[1:]
+    dset = group.create_dataset(dset_name, size, **kwargs)
+
+    current_snp_index = 0
+    for mat in mats:
+        num_snps = mat.shape[0]
+        start = current_snp_index
+        stop = current_snp_index + num_snps
+
+        current_snps_in_dset = dset.shape[0]
+        if current_snps_in_dset < stop:
+            dset.resize((stop,) + size[1:])
+        dset[start:stop] = mat
+        current_snp_index += num_snps
+
+    return dset
+
+
+def test_concatenate():
+    mats = [numpy.array([[1, 1], [2 , 2]]), numpy.array([[3, 3]])]
+    assert numpy.all(concatenate_by_rows(mats) == [[1, 1], [2 , 2], [3, 3]])
+
+    fhand = 'concat.hdf5'
+    if os.path.exists(fhand):
+        os.remove(fhand)
+    hdf5 = h5py.File(fhand, 'w')
+    grp = hdf5.create_group('concat')
+
+    dset = concatenate_by_rows_into_dset(mats, grp, 'concat', rows_in_chunk=2)
+    assert numpy.all(dset[:] == [[1, 1], [2 , 2], [3, 3]])
+
+
 def test():
+    test_count_value_per_row()
+    test_concatenate()
+    return
 
     out_fhand = 'snps.hdf5'
     out_fhand2 = 'snps2.hdf5'
@@ -959,6 +1077,16 @@ def test():
     chunks = filter_dsets_chunks(select_all_genotypes, chunks)
     write_hdf5_from_chunks(hdf5_2, chunks)
     assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
+
+    hdf5 = h5py.File(out_fhand, 'r')
+    chunks = dsets_chunks_iterator(hdf5, kept_fields=['GT'])
+    gt_chunks = select_dset_chunks_for_field(chunks, 'GT')
+    gt_chunks = keep_only_data_from_chunk(gt_chunks)
+    calc_missing_data = RowValueCounter(value=-1, ratio=True)
+    missing_chunks = map(calc_missing_data, gt_chunks)
+    # histogram
+    # filter
+
     if os.path.exists(out_fhand):
         #os.remove(out_fhand)
         os.remove(out_fhand2)

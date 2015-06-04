@@ -341,8 +341,6 @@ class VCF():
                     # if your file has variable length str fields you
                     # should check and fix the following part of the code
                     raise NotImplementedError('Fixme')
-                    print(gt_data)
-                    print( [val for smpl_data in gt_data for val in smpl_data])
                     max_len = max([len(val) for smpl_data in gt_data for val in smpl_data])
                     max_str = max([len(val) for val_ in val])
                     if self.max_field_str_lens['FORMAT'][key] < max_str:
@@ -674,7 +672,6 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                     if info_data is not None:
                         if len(size) == 1:
                             # we're expecting one item or a list with one item
-                            print (field, info_data)
                             if isinstance(info_data, (list, tuple)):
                                 assert len(info_data) == 1
                                 info_data = info_data[0]
@@ -817,9 +814,8 @@ def dsets_chunks_iterator(hdf5, num_vars_per_yield_in_chunk_size=1,
             stop = nsnps
         chunks = {}
         for name, dset in dsets.items():
-            chunk = list(dset[:])
-            chunk[0] = dset.data[start:stop]
-            chunks[name] = DsetChunk(*chunk)
+            chunks[name] = _copy_chunk_with_new_data(dset,
+                                                     dset.data[start:stop])
         yield chunks
 
 
@@ -861,6 +857,33 @@ def write_hdf5_from_chunks(hdf5, chunks):
     hdf5.flush()
 
 
+def select_all(var_matrix):
+    n_snps = var_matrix.data.shape[0]
+    selector = numpy.ones((n_snps,), dtype=numpy.bool_)
+    return selector
+
+
+def select_all_genotypes(dsets_chunk):
+    gt_mat = dsets_chunk['GT']
+    return select_all(gt_mat)
+
+
+def _copy_chunk_with_new_data(dset_chunk, data):
+    new_dset_chunk = (data,) + dset_chunk[1:]
+    return DsetChunk(*new_dset_chunk)
+
+
+def filter_dsets_chunks(selector_function, dsets_chunks):
+    for dsets_chunk in dsets_chunks:
+        bool_selection = selector_function(dsets_chunk)
+        flt_dsets_chunk = {}
+        for field, dset_chunk in dsets_chunk.items():
+            flt_data = numpy.compress(bool_selection, dset_chunk.data, axis=0)
+            flt_dsets_chunk[field] = _copy_chunk_with_new_data(dset_chunk,
+                                                               flt_data)
+        yield flt_dsets_chunk
+
+
 def read_gzip_file(fpath):
     zcat = ['zcat']
     pigz = ['pigz', '-dc']
@@ -897,8 +920,15 @@ def test():
     assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
     os.remove(out_fhand2)
 
+    hdf5 = h5py.File(out_fhand, 'r')
+    hdf5_2 = h5py.File(out_fhand2, 'w')
+    chunks = dsets_chunks_iterator(hdf5)
+    chunks = filter_dsets_chunks(select_all_genotypes, chunks)
+    write_hdf5_from_chunks(hdf5_2, chunks)
+
     if os.path.exists(out_fhand):
         os.remove(out_fhand)
+        os.remove(out_fhand2)
 
     if False:
         fhand = gzip.open(TEST_VCF, 'rb')
@@ -915,19 +945,23 @@ def test():
     vcf = VCF(fhand, ignored_fields=ignored_fields,
 	          pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
 
-
     print (vcf.max_field_lens)
     print (vcf.max_field_str_lens)
 
-    log = vcf_to_hdf5(vcf, out_fhand)
-    print(log)
+    out_fhand = 'snps_big.hdf5'
+    out_fhand2 = 'snps_big2.hdf5'
+    #log = vcf_to_hdf5(vcf, out_fhand)
+    #print(log)
 
     hdf5 = h5py.File(out_fhand, 'r')
     hdf5_2 = h5py.File(out_fhand2, 'w')
-    write_hdf5_from_chunks(hdf5_2, dsets_chunks_iterator(hdf5,
-                                                         kept_fields=['GT']))
+    chunks = dsets_chunks_iterator(hdf5, kept_fields=['GT'])
+    chunks = filter_dsets_chunks(select_all_genotypes, chunks)
+    write_hdf5_from_chunks(hdf5_2, chunks)
     assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
-    os.remove(out_fhand2)
+    if os.path.exists(out_fhand):
+        #os.remove(out_fhand)
+        os.remove(out_fhand2)
 
 
 if __name__ == '__main__':

@@ -8,12 +8,13 @@ import subprocess
 import numpy
 import h5py
 
-from variation.compressed_queue import CCache
+from compressed_queue import CCache
 
 # Test imports
 import inspect
 from os.path import dirname, abspath, join
-
+#Json
+import json
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                          '..', 'test_data'))
 TEST_VCF = join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz')
@@ -84,6 +85,7 @@ class VCF():
                  ignored_fields=None, max_field_lens=None):
         self._fhand = fhand
         self.metadata = None
+        self.metadata2 = None
         self.vcf_format = None
         self.ploidy = None
         if ignored_fields is None:
@@ -164,6 +166,7 @@ class VCF():
             header_lines.append(line)
 
         metadata = {'FORMAT': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
+        metadata2 = {'FORMAT': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
         metadata['VARIATIONS'] = {'chrom': {'dtype': 'str',
                                             'type': _do_nothing},
                                   'pos': {'dtype': 'int32',
@@ -180,6 +183,7 @@ class VCF():
             if line[2:7] in (b'FORMA', b'INFO=', b'FILTE'):
                 line = line[2:]
                 meta = {}
+                meta2 = {}
                 if line.startswith(b'FORMAT='):
                     meta_kind = 'FORMAT'
                     line = line[8:-2]
@@ -199,10 +203,12 @@ class VCF():
                 id_ = None
                 for item in items:
                     key, val = item.split('=', 1)
+                    meta2[key] = val
                     if key == 'ID':
                         id_ = val.strip()
                     else:
                         if key == 'Type':
+                            meta2[key] = val
                             if val == 'Integer':
                                 val = _to_int
                                 val2 = 'int16'
@@ -214,6 +220,9 @@ class VCF():
                                 val2 = 'str'
                             meta['dtype'] = val2
                         meta[key] = val
+                        
+                        
+                        
                 if id_ is None:
                     raise RuntimeError('Header line has no ID: ' + line)
                 # The fields with a variable number of items
@@ -225,10 +234,15 @@ class VCF():
                     self.vcf_format = meta
                     continue
                 meta_kind = 'OTHER'
-            id_ = id_.encode('utf-8')
+                is_, meta2 = line[2:].decode('utf-8').split('=', 1)
+            
+            metadata2[meta_kind][id_] = meta2
+            
+            id_ = id_.encode('utf-8') 
             metadata[meta_kind][id_] = meta
+        self.metadata2 = metadata2
         self.metadata = metadata
-
+       
     def _parse_info(self, info):
         infos = info.split(b';')
         parsed_infos = {}
@@ -340,8 +354,8 @@ class VCF():
                     # if your file has variable length str fields you
                     # should check and fix the following part of the code
                     raise NotImplementedError('Fixme')
-                    print(gt_data)
-                    print( [val for smpl_data in gt_data for val in smpl_data])
+                    #print(gt_data)
+                    #print( [val for smpl_data in gt_data for val in smpl_data])
                     max_len = max([len(val) for smpl_data in gt_data for val in smpl_data])
                     max_str = max([len(val) for val_ in val])
                     if self.max_field_str_lens['FORMAT'][key] < max_str:
@@ -585,6 +599,19 @@ def _expand_list_to_size(items, desired_size, filling):
     items.extend(extra_empty_items)
 
 
+def add_header_info(vcf, out_fhand):
+    
+    group = out_fhand.create_group('header')
+ 
+    header = ['OTHER', 'INFO', 'FILTER', 'FORMAT']
+    for dset_name in header:
+        
+        
+        data= json.dumps([dset_name, vcf.metadata2[dset_name]])
+        dset=group.create_dataset(dset_name, (1,), data=numpy.string_(data))
+        
+        
+
 def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     snps = vcf.variations
 
@@ -592,7 +619,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
            'variations_processed': 0}
 
     hdf5 = h5py.File(out_fpath)
-
+    add_header_info(vcf, hdf5)
     var_grp = hdf5.create_group('variations')
     calldata = hdf5.create_group('calls')
 
@@ -673,7 +700,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                     if info_data is not None:
                         if len(size) == 1:
                             # we're expecting one item or a list with one item
-                            print (field, info_data)
+                            #print (field, info_data)
                             if isinstance(info_data, (list, tuple)):
                                 assert len(info_data) == 1
                                 info_data = info_data[0]
@@ -775,27 +802,28 @@ def read_gzip_file(fpath):
         yield line
 
 
+    
 def test():
 
     out_fhand = 'snps.hdf5'
 
     if os.path.exists(out_fhand):
         os.remove(out_fhand)
-    fhand = open(TEST_VCF2, 'rb')
+    '''fhand = open(TEST_VCF2, 'rb')
     vcf = VCF(fhand, pre_read_max_size=1000)
-
+    
     log = vcf_to_hdf5(vcf, out_fhand)
-    print(log)
+    #print(log)
 
     if os.path.exists(out_fhand):
-        os.remove(out_fhand)
+        os.remove(out_fhand)'''
 
     if False:
         fhand = gzip.open(TEST_VCF, 'rb')
     else:
         lines = read_gzip_file(TEST_VCF)
         fhand = lines
-
+    
     max_size_cache = 1024**3
     max_size_cache = 1000
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
@@ -805,12 +833,12 @@ def test():
     vcf = VCF(fhand, ignored_fields=ignored_fields,
 	          pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
 
-
-    print (vcf.max_field_lens)
-    print (vcf.max_field_str_lens)
+     
+    #print (vcf.max_field_lens)
+    #print (vcf.max_field_str_lens)
 
     log = vcf_to_hdf5(vcf, out_fhand)
-    print(log)
+    #print(log)
     #hdf5 = h5py.File(out_fhand, 'r')
 
     #read_chunks(open('snps.hdf5'), ['caldata/GT'])

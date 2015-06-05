@@ -7,6 +7,8 @@ import subprocess
 from collections import namedtuple
 import functools
 import operator
+import io
+import tempfile
 
 import numpy
 import h5py
@@ -956,7 +958,8 @@ def test_count_value_per_row():
                                                           0.166666])
 
 
-def concatenate_by_rows(matrices):
+def concatenate_by_rows_old(matrices):
+    matrices = iter(matrices)
     return numpy.concatenate(matrices, axis=0)
 
 
@@ -966,7 +969,7 @@ def _first_item(iterable):
 
 
 def concatenate_by_rows_into_dset(matrices, group, dset_name,
-                                  rows_in_chunk=SNPS_PER_CHUNK):
+                                 rows_in_chunk=SNPS_PER_CHUNK):
     matrices = iter(matrices)
     fst_mat = _first_item(matrices)
     if matrices is None:
@@ -995,9 +998,48 @@ def concatenate_by_rows_into_dset(matrices, group, dset_name,
     return dset
 
 
+def concatenate_by_rows(matrices, concat_in_memory=True):
+    '''concat_in_memory=False will require to use the double memory during
+    the process.
+    concat_in_memory=True will use a compressed hdf5 dset in disk, so it will
+    require less memory, but it will be slower
+    '''
+
+    if concat_in_memory:
+        matrices = list(matrices)
+
+    try:
+        return numpy.concatenate(matrices, axis=0)
+    except TypeError as error:
+        error = str(error)
+        if 'argument' in error and 'sequence' in error:
+            # the matrices are not in a list, but in an iterator
+            pass
+        else:
+            raise
+
+    # we will create an hdf5 dataset and uset it to store the matrices
+    # in the iterator. Once all of them are stored we will create from
+    # them the numpy.array
+    # This will save memory, even if we create the hdf5 in memory, because
+    # it will be compressed
+    fhand = tempfile.NamedTemporaryFile(suffix='.hdf5')
+
+    hdf5 = h5py.File(fhand)
+    group = hdf5.create_group('concat')
+    dset = concatenate_by_rows_into_dset(matrices, group, 'concat')
+    return dset[:]
+
+
 def test_concatenate():
     mats = [numpy.array([[1, 1], [2 , 2]]), numpy.array([[3, 3]])]
-    assert numpy.all(concatenate_by_rows(mats) == [[1, 1], [2 , 2], [3, 3]])
+    expected = [[1, 1], [2 , 2], [3, 3]]
+
+    assert numpy.all(concatenate_by_rows(mats) == expected)
+    assert numpy.all(concatenate_by_rows(iter(mats)) == expected)
+    assert numpy.all(concatenate_by_rows(iter(mats),
+                     concat_in_memory=True) == expected)
+
 
     fhand = 'concat.hdf5'
     if os.path.exists(fhand):
@@ -1012,7 +1054,6 @@ def test_concatenate():
 def test():
     test_count_value_per_row()
     test_concatenate()
-    return
 
     out_fhand = 'snps.hdf5'
     out_fhand2 = 'snps2.hdf5'
@@ -1084,6 +1125,8 @@ def test():
     gt_chunks = keep_only_data_from_chunk(gt_chunks)
     calc_missing_data = RowValueCounter(value=-1, ratio=True)
     missing_chunks = map(calc_missing_data, gt_chunks)
+    missing = concatenate_by_rows(missing_chunks)
+    assert missing.max() - 0.916666 < 0.01
     # histogram
     # filter
 

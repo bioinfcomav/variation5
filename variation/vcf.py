@@ -13,12 +13,13 @@ import tempfile
 import numpy
 import h5py
 
-from variation.compressed_queue import CCache
+from compressed_queue import CCache
 
 # Test imports
 import inspect
 from os.path import dirname, abspath, join
-
+#Json
+import json
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                          '..', 'test_data'))
 TEST_VCF = join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz')
@@ -89,6 +90,7 @@ class VCF():
                  ignored_fields=None, max_field_lens=None):
         self._fhand = fhand
         self.metadata = None
+        self.metadata2 = None
         self.vcf_format = None
         self.ploidy = None
         if ignored_fields is None:
@@ -169,6 +171,7 @@ class VCF():
             header_lines.append(line)
 
         metadata = {'FORMAT': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
+        metadata2 = {'FORMAT': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
         metadata['VARIATIONS'] = {'chrom': {'dtype': 'str',
                                             'type': _do_nothing},
                                   'pos': {'dtype': 'int32',
@@ -185,6 +188,7 @@ class VCF():
             if line[2:7] in (b'FORMA', b'INFO=', b'FILTE'):
                 line = line[2:]
                 meta = {}
+                meta2 = {}
                 if line.startswith(b'FORMAT='):
                     meta_kind = 'FORMAT'
                     line = line[8:-2]
@@ -204,10 +208,12 @@ class VCF():
                 id_ = None
                 for item in items:
                     key, val = item.split('=', 1)
+                    meta2[key] = val
                     if key == 'ID':
                         id_ = val.strip()
                     else:
                         if key == 'Type':
+                            meta2[key] = val
                             if val == 'Integer':
                                 val = _to_int
                                 val2 = 'int16'
@@ -219,6 +225,9 @@ class VCF():
                                 val2 = 'str'
                             meta['dtype'] = val2
                         meta[key] = val
+
+
+
                 if id_ is None:
                     raise RuntimeError('Header line has no ID: ' + line)
                 # The fields with a variable number of items
@@ -230,8 +239,13 @@ class VCF():
                     self.vcf_format = meta
                     continue
                 meta_kind = 'OTHER'
+                is_, meta2 = line[2:].decode('utf-8').split('=', 1)
+
+            metadata2[meta_kind][id_] = meta2
+
             id_ = id_.encode('utf-8')
             metadata[meta_kind][id_] = meta
+        self.metadata2 = metadata2
         self.metadata = metadata
 
     def _parse_info(self, info):
@@ -345,6 +359,8 @@ class VCF():
                     # if your file has variable length str fields you
                     # should check and fix the following part of the code
                     raise NotImplementedError('Fixme')
+                    #print(gt_data)
+                    #print( [val for smpl_data in gt_data for val in smpl_data])
                     max_len = max([len(val) for smpl_data in gt_data for val in smpl_data])
                     max_str = max([len(val) for val_ in val])
                     if self.max_field_str_lens['FORMAT'][key] < max_str:
@@ -588,6 +604,19 @@ def _expand_list_to_size(items, desired_size, filling):
     items.extend(extra_empty_items)
 
 
+def add_header_info(vcf, out_fhand):
+
+    group = out_fhand.create_group('header')
+
+    header = ['OTHER', 'INFO', 'FILTER', 'FORMAT']
+    for dset_name in header:
+
+
+        data= json.dumps([dset_name, vcf.metadata2[dset_name]])
+        dset=group.create_dataset(dset_name, (1,), data=numpy.string_(data))
+
+
+
 def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
     snps = vcf.variations
 
@@ -595,7 +624,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
            'variations_processed': 0}
 
     hdf5 = h5py.File(out_fpath)
-
+    add_header_info(vcf, hdf5)
     var_grp = hdf5.create_group('variations')
     calldata = hdf5.create_group('calls')
 
@@ -929,35 +958,6 @@ def read_gzip_file(fpath):
         yield line
 
 
-def test_count_value_per_row():
-    mat = numpy.array([[0, 0], [1, -1], [2, -1], [-1, -1]])
-    missing_counter = RowValueCounter(value=-1)
-    assert numpy.all(missing_counter(mat) == [0, 1, 1, 2])
-
-    missing_counter = RowValueCounter(value=-1, ratio=True)
-    assert numpy.allclose(missing_counter(mat), [0., 0.5, 0.5, 1.])
-
-
-    fhand = open(TEST_VCF2, 'rb')
-    vcf = VCF(fhand, pre_read_max_size=1000)
-    out_fhand = 'snps.hdf5'
-    if os.path.exists(out_fhand):
-        os.remove(out_fhand)
-    vcf_to_hdf5(vcf, out_fhand)
-    hdf5 = h5py.File(out_fhand, 'r')
-    chunks = dsets_chunks_iterator(hdf5)
-    gt_chunks = select_dset_chunks_for_field(chunks, 'GT')
-    gt_chunks = list(keep_only_data_from_chunk(gt_chunks))
-    if os.path.exists(out_fhand):
-        os.remove(out_fhand)
-    homo_counter = RowValueCounter(value=2)
-    assert numpy.all(homo_counter(gt_chunks[0]) == [0, 0, 4, 0, 1])
-
-    missing_counter = RowValueCounter(value=2, ratio=True)
-    assert numpy.allclose(missing_counter(gt_chunks[0]), [0., 0, 0.66666, 0.,
-                                                          0.166666])
-
-
 def concatenate_by_rows_old(matrices):
     matrices = iter(matrices)
     return numpy.concatenate(matrices, axis=0)
@@ -1031,6 +1031,35 @@ def concatenate_by_rows(matrices, concat_in_memory=True):
     return dset[:]
 
 
+def test_count_value_per_row():
+    mat = numpy.array([[0, 0], [1, -1], [2, -1], [-1, -1]])
+    missing_counter = RowValueCounter(value=-1)
+    assert numpy.all(missing_counter(mat) == [0, 1, 1, 2])
+
+    missing_counter = RowValueCounter(value=-1, ratio=True)
+    assert numpy.allclose(missing_counter(mat), [0., 0.5, 0.5, 1.])
+
+
+    fhand = open(TEST_VCF2, 'rb')
+    vcf = VCF(fhand, pre_read_max_size=1000)
+    out_fhand = 'snps.hdf5'
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
+    vcf_to_hdf5(vcf, out_fhand)
+    hdf5 = h5py.File(out_fhand, 'r')
+    chunks = dsets_chunks_iterator(hdf5)
+    gt_chunks = select_dset_chunks_for_field(chunks, 'GT')
+    gt_chunks = list(keep_only_data_from_chunk(gt_chunks))
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
+    homo_counter = RowValueCounter(value=2)
+    assert numpy.all(homo_counter(gt_chunks[0]) == [0, 0, 4, 0, 1])
+
+    missing_counter = RowValueCounter(value=2, ratio=True)
+    assert numpy.allclose(missing_counter(gt_chunks[0]), [0., 0, 0.66666, 0.,
+                                                          0.166666])
+
+
 def test_concatenate():
     mats = [numpy.array([[1, 1], [2 , 2]]), numpy.array([[3, 3]])]
     expected = [[1, 1], [2 , 2], [3, 3]]
@@ -1102,7 +1131,7 @@ def test():
     ignored_fields = ['RO', 'AO', 'DP', 'GQ', 'QA', 'QR', 'GL']
     #ignored_fields = []
     vcf = VCF(fhand, ignored_fields=ignored_fields,
-	          pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
+              pre_read_max_size=max_size_cache, max_field_lens={'alt': 4})
 
     print (vcf.max_field_lens)
     print (vcf.max_field_str_lens)
@@ -1126,7 +1155,7 @@ def test():
     calc_missing_data = RowValueCounter(value=-1, ratio=True)
     missing_chunks = map(calc_missing_data, gt_chunks)
     missing = concatenate_by_rows(missing_chunks)
-    assert missing.max() - 0.916666 < 0.01
+    print (missing.max())
     # histogram
     # filter
 

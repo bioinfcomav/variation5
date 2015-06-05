@@ -7,11 +7,14 @@ import subprocess
 from collections import namedtuple
 import functools
 import operator
-import io
 import tempfile
 
 import numpy
 import h5py
+
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 from variation.compressed_queue import CCache
 
@@ -1047,6 +1050,39 @@ def test_concatenate():
     assert numpy.all(dset[:] == [[1, 1], [2 , 2], [3, 3]])
 
 
+def ploti_histogram(mat):
+    pass
+
+
+def _get_mplot_axes(axes, fhand):
+    if axes is not None:
+        return axes, None
+    if fhand is None:
+        fig = plt.figure()
+    else:
+        fig = Figure()
+
+    canvas = FigureCanvas(fig)
+    axes = fig.add_subplot(111)
+    return axes, canvas
+
+
+def _print_figure(canvas, fhand):
+    if fhand is None:
+        plt.show()
+        return
+    canvas.print_figure(fhand)
+
+
+def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None):
+
+    axes, canvas = _get_mplot_axes(axes, fhand)
+
+    axes.hist(mat, bins=bins, range=range_)
+
+    _print_figure(canvas, fhand)
+
+
 def test():
     test_count_value_per_row()
     test_concatenate()
@@ -1124,7 +1160,7 @@ def test():
     missing = concatenate_by_rows(missing_chunks)
     assert missing.max() - 0.916666 < 0.01
     # histogram
-    # filter
+    plot_histogram(missing)
 
     if os.path.exists(out_fhand):
         #os.remove(out_fhand)

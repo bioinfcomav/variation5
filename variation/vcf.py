@@ -4,7 +4,7 @@ import re
 from itertools import zip_longest, chain
 import os
 import subprocess
-from collections import namedtuple
+from collections import namedtuple, Counter
 import functools
 import operator
 import tempfile
@@ -922,6 +922,26 @@ class RowValueCounter():
         return result
 
 
+def calc_mafs(genotypes, min_num_genotypes=10):
+
+    alleles = (numpy.unique(genotypes))
+    allele_counts = None
+    for allele in alleles:
+        if allele == MISSING_GT:
+            continue
+        counts = (genotypes == allele).sum(axis=(1,2))
+        if allele_counts is None:
+            allele_counts = counts
+        else:
+            allele_counts = numpy.vstack((allele_counts, counts))
+
+    max_ = numpy.amax(allele_counts, axis=0)
+    sum_ = numpy.sum(allele_counts, axis=0)
+    mafs = max_ / sum_
+    mafs[sum_ < min_num_genotypes] = numpy.nan
+    return mafs
+
+
 def read_gzip_file(fpath):
     zcat = ['zcat']
     pigz = ['pigz', '-dc']
@@ -932,42 +952,13 @@ def read_gzip_file(fpath):
         yield line
 
 
-def test_count_value_per_row():
-    mat = numpy.array([[0, 0], [1, -1], [2, -1], [-1, -1]])
-    missing_counter = RowValueCounter(value=-1)
-    assert numpy.all(missing_counter(mat) == [0, 1, 1, 2])
-
-    missing_counter = RowValueCounter(value=-1, ratio=True)
-    assert numpy.allclose(missing_counter(mat), [0., 0.5, 0.5, 1.])
-
-
-    fhand = open(TEST_VCF2, 'rb')
-    vcf = VCF(fhand, pre_read_max_size=1000)
-    out_fhand = 'snps.hdf5'
-    if os.path.exists(out_fhand):
-        os.remove(out_fhand)
-    vcf_to_hdf5(vcf, out_fhand)
-    hdf5 = h5py.File(out_fhand, 'r')
-    chunks = dsets_chunks_iterator(hdf5)
-    gt_chunks = select_dset_chunks_for_field(chunks, 'GT')
-    gt_chunks = list(keep_only_data_from_chunk(gt_chunks))
-    if os.path.exists(out_fhand):
-        os.remove(out_fhand)
-    homo_counter = RowValueCounter(value=2)
-    assert numpy.all(homo_counter(gt_chunks[0]) == [0, 0, 4, 0, 1])
-
-    missing_counter = RowValueCounter(value=2, ratio=True)
-    assert numpy.allclose(missing_counter(gt_chunks[0]), [0., 0, 0.66666, 0.,
-                                                          0.166666])
-
-
 def _first_item(iterable):
     for item in iterable:
         return item
     raise('The iterable was empty')
 
 
-def concatenate_by_rows_into_dset(matrices, group, dset_name,
+def concat_chunks_into_dset(matrices, group, dset_name,
                                  rows_in_chunk=SNPS_PER_CHUNK):
     matrices = iter(matrices)
     fst_mat = _first_item(matrices)
@@ -997,7 +988,7 @@ def concatenate_by_rows_into_dset(matrices, group, dset_name,
     return dset
 
 
-def concatenate_by_rows(matrices, concat_in_memory=True):
+def concat_chunks_into_array(matrices, concat_in_memory=True):
     '''concat_in_memory=False will require to use the double memory during
     the process.
     concat_in_memory=True will use a compressed hdf5 dset in disk, so it will
@@ -1026,32 +1017,8 @@ def concatenate_by_rows(matrices, concat_in_memory=True):
 
     hdf5 = h5py.File(fhand)
     group = hdf5.create_group('concat')
-    dset = concatenate_by_rows_into_dset(matrices, group, 'concat')
+    dset = concat_chunks_into_dset(matrices, group, 'concat')
     return dset[:]
-
-
-def test_concatenate():
-    mats = [numpy.array([[1, 1], [2 , 2]]), numpy.array([[3, 3]])]
-    expected = [[1, 1], [2 , 2], [3, 3]]
-
-    assert numpy.all(concatenate_by_rows(mats) == expected)
-    assert numpy.all(concatenate_by_rows(iter(mats)) == expected)
-    assert numpy.all(concatenate_by_rows(iter(mats),
-                     concat_in_memory=True) == expected)
-
-
-    fhand = 'concat.hdf5'
-    if os.path.exists(fhand):
-        os.remove(fhand)
-    hdf5 = h5py.File(fhand, 'w')
-    grp = hdf5.create_group('concat')
-
-    dset = concatenate_by_rows_into_dset(mats, grp, 'concat', rows_in_chunk=2)
-    assert numpy.all(dset[:] == [[1, 1], [2 , 2], [3, 3]])
-
-
-def ploti_histogram(mat):
-    pass
 
 
 def _get_mplot_axes(axes, fhand):
@@ -1081,6 +1048,58 @@ def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None):
     axes.hist(mat, bins=bins, range=range_)
 
     _print_figure(canvas, fhand)
+
+
+
+
+def test_concatenate():
+    mats = [numpy.array([[1, 1], [2 , 2]]), numpy.array([[3, 3]])]
+    expected = [[1, 1], [2 , 2], [3, 3]]
+
+    assert numpy.all(concat_chunks_into_array(mats) == expected)
+    assert numpy.all(concat_chunks_into_array(iter(mats)) == expected)
+    assert numpy.all(concat_chunks_into_array(iter(mats),
+                     concat_in_memory=True) == expected)
+
+
+    fhand = 'concat.hdf5'
+    if os.path.exists(fhand):
+        os.remove(fhand)
+    hdf5 = h5py.File(fhand, 'w')
+    grp = hdf5.create_group('concat')
+
+    dset = concat_chunks_into_dset(mats, grp, 'concat', rows_in_chunk=2)
+    assert numpy.all(dset[:] == [[1, 1], [2 , 2], [3, 3]])
+
+
+
+def test_count_value_per_row():
+    mat = numpy.array([[0, 0], [1, -1], [2, -1], [-1, -1]])
+    missing_counter = RowValueCounter(value=-1)
+    assert numpy.all(missing_counter(mat) == [0, 1, 1, 2])
+
+    missing_counter = RowValueCounter(value=-1, ratio=True)
+    assert numpy.allclose(missing_counter(mat), [0., 0.5, 0.5, 1.])
+
+
+    fhand = open(TEST_VCF2, 'rb')
+    vcf = VCF(fhand, pre_read_max_size=1000)
+    out_fhand = 'snps.hdf5'
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
+    vcf_to_hdf5(vcf, out_fhand)
+    hdf5 = h5py.File(out_fhand, 'r')
+    chunks = dsets_chunks_iterator(hdf5)
+    gt_chunks = select_dset_chunks_for_field(chunks, 'GT')
+    gt_chunks = list(keep_only_data_from_chunk(gt_chunks))
+    if os.path.exists(out_fhand):
+        os.remove(out_fhand)
+    homo_counter = RowValueCounter(value=2)
+    assert numpy.all(homo_counter(gt_chunks[0]) == [0, 0, 4, 0, 1])
+
+    missing_counter = RowValueCounter(value=2, ratio=True)
+    assert numpy.allclose(missing_counter(gt_chunks[0]), [0., 0, 0.66666, 0.,
+                                                          0.166666])
 
 
 def test():
@@ -1157,10 +1176,18 @@ def test():
     gt_chunks = keep_only_data_from_chunk(gt_chunks)
     calc_missing_data = RowValueCounter(value=-1, ratio=True)
     missing_chunks = map(calc_missing_data, gt_chunks)
-    missing = concatenate_by_rows(missing_chunks)
+    missing = concat_chunks_into_array(missing_chunks)
     assert missing.max() - 0.916666 < 0.01
     # histogram
-    plot_histogram(missing)
+    plot_histogram(missing, bins=10)
+
+    gts = hdf5['/calls/GT']
+    #print (gts.shape)
+    mafs = calc_mafs(gts[:])
+    assert numpy.nanmin(mafs) - 0.3501 < 0.01
+    assert numpy.nanmax(mafs) - 1 < 0.01
+    plot_histogram(mafs[~numpy.isnan(mafs)])
+
 
     if os.path.exists(out_fhand):
         #os.remove(out_fhand)

@@ -929,7 +929,8 @@ def calc_mafs(genotypes, min_num_genotypes=10):
     for allele in alleles:
         if allele == MISSING_GT:
             continue
-        counts = (genotypes == allele).sum(axis=(1,2))
+        allele_counter = RowValueCounter(allele)
+        counts = allele_counter(genotypes)
         if allele_counts is None:
             allele_counts = counts
         else:
@@ -1196,4 +1197,3 @@ def test():
 
 if __name__ == '__main__':
     test()
-

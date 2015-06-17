@@ -834,7 +834,9 @@ def _create_dsets_from_chunks(hdf5, dset_chunks):
             grp = hdf5[grp_name]
         except KeyError:
             grp = hdf5.create_group(grp_name)
-        dset = grp.create_dataset(sname, shape=dset_chunk.shape,
+        shape = list(dset_chunk.shape)
+        shape[0] = 0    # No snps yet
+        dset = grp.create_dataset(sname, shape=shape,
                                   dtype=dset_chunk.dtype,
                                   chunks=dset_chunk.chunks,
                                   maxshape=dset_chunk.maxshape)
@@ -858,6 +860,12 @@ def write_hdf5_from_chunks(hdf5, chunks):
             dset = dsets[dset_name]
             start = current_snp_index
             stop = current_snp_index + num_snps
+            # the dataset should fit the new data
+            size = dset.shape
+            new_size = list(size)
+            new_size[0] = stop
+            dset.resize(new_size)
+
             dset[start:stop] = dset_chunk.data
 
         current_snp_index += num_snps
@@ -870,9 +878,44 @@ def select_all(var_matrix):
     return selector
 
 
+def select_none(var_matrix):
+    n_snps = var_matrix.data.shape[0]
+    selector = numpy.zeros((n_snps,), dtype=numpy.bool_)
+    return selector
+
+
 def select_all_genotypes(dsets_chunk):
     gt_mat = dsets_chunk['GT']
     return select_all(gt_mat)
+
+
+def select_no_genotypes(dsets_chunk):
+    gt_mat = dsets_chunk['GT']
+    return select_none(gt_mat)
+
+
+class VariationSelectorByMaf():
+    def __init__(self, min_maf=None, max_maf=None, min_num_genotypes=10):
+        self.min_maf = min_maf
+        self.max_maf = max_maf
+        self.min_num_genotypes = min_num_genotypes
+
+    def __call__(self, dsets_chunk):
+        genotypes = dsets_chunk['GT']
+        mafs = calc_mafs(genotypes.data, min_num_genotypes=self.min_num_genotypes)
+        ok_mafs1 = None if self.min_maf is None else mafs >  self.min_maf
+        ok_mafs2 = None if self.max_maf is None else mafs < self.max_maf
+
+        if ok_mafs1 is not None and ok_mafs2 is not None:
+            ok_mafs = ok_mafs1 & ok_mafs2
+        elif ok_mafs1 is not None:
+            ok_mafs = ok_mafs1
+        elif ok_mafs2 is not None:
+            ok_mafs = ok_mafs2
+
+        not_maf = numpy.isnan(mafs)
+        ok_mafs = ok_mafs & ~not_maf
+        return ok_mafs
 
 
 def _copy_chunk_with_new_data(dset_chunk, data):
@@ -956,7 +999,7 @@ def read_gzip_file(fpath):
 def _first_item(iterable):
     for item in iterable:
         return item
-    raise('The iterable was empty')
+    raise ValueError('The iterable was empty')
 
 
 def concat_chunks_into_dset(matrices, group, dset_name,
@@ -1134,8 +1177,10 @@ def test():
     hdf5 = h5py.File(out_fhand, 'r')
     hdf5_2 = h5py.File(out_fhand2, 'w')
     chunks = dsets_chunks_iterator(hdf5)
-    chunks = filter_dsets_chunks(select_all_genotypes, chunks)
+    chunks = filter_dsets_chunks(select_no_genotypes, chunks)
     write_hdf5_from_chunks(hdf5_2, chunks)
+    hdf5_2 = h5py.File(out_fhand2)
+    assert hdf5_2['/calls/GT'].shape[0] == 0
 
     if os.path.exists(out_fhand):
         os.remove(out_fhand)
@@ -1183,12 +1228,29 @@ def test():
     plot_histogram(missing, bins=10)
 
     gts = hdf5['/calls/GT']
-    #print (gts.shape)
+    print (gts.shape)
     mafs = calc_mafs(gts[:])
     assert numpy.nanmin(mafs) - 0.3501 < 0.01
     assert numpy.nanmax(mafs) - 1 < 0.01
     plot_histogram(mafs[~numpy.isnan(mafs)])
 
+    if os.path.exists(out_fhand2):
+        #os.remove(out_fhand)
+        os.remove(out_fhand2)
+    hdf5_2 = h5py.File(out_fhand2, 'w')
+    maf_selector = VariationSelectorByMaf(min_maf=0.6, max_maf=0.7)
+    chunks = dsets_chunks_iterator(hdf5, kept_fields=['GT'])
+    chunks = filter_dsets_chunks(maf_selector, chunks)
+    write_hdf5_from_chunks(hdf5_2, chunks)
+
+    hdf5 = h5py.File(out_fhand2)
+    gts = hdf5['/calls/GT']
+    print (gts.shape)
+    print('*'*100)
+    mafs = calc_mafs(gts[:])
+    print (numpy.nanmin(mafs))
+    print (numpy.nanmax(mafs))
+    plot_histogram(mafs[~numpy.isnan(mafs)], bins=6)
 
     if os.path.exists(out_fhand):
         #os.remove(out_fhand)

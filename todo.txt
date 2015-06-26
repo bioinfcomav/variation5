@@ -1,4 +1,68 @@
 
+New class oriented desing
+
+
+# parallel hdf5 does not work with compressed files
+# if you have to do it in parallel in one node is because the computation
+# is hard, so io is not the limiting factor, so just use processing.map
+# parallel hdf5 only makes sense if you have several nodes
+
+
+parser = vcf.VcfParser('hola.vcf')
+vcfh5 = vcfh5.VcfH5('hola.hdf5')
+vcfh5.get_vars_from_vcf(parser)
+    # only can be called in an empty VcfH5
+
+in_vcf = vcfh5.VcfH5('hola.hdf5')
+chunks = in_vcf.chunks
+mafs = map(vcfh5.calculate_maf, chunks)
+maf_dset = Dset('/maf')
+maf_dset.extend(mafs)
+
+
+def vcfh5.calculate_maf(dsets_chunk):
+    dset_chunk = _get_dset('GT')
+    return array.stats.calculate_maf(dset_chunk)
+
+in_vcf = vcfh5.VcfH5('hola.hdf5')
+in_vcf.set_meta_only_first_dset = True
+chunks = in_vcf.chunks  # dict of dsets
+out_vcf = vcfh5.VcfH5('filtered.hdf5')
+maf_filter = vcfh5.filters.MafFilter(min_maf=0.5)
+chunks = filter(maf_filter, chunks)
+out_vcf.extend(chunks)
+
+__init__.py
+# global vars an basic config
+
+vcf.py
+class VcfParser
+
+vcfh5/
+__init__.py
+class VcfH5
+
+stats.py
+calculate_maf
+
+filters.py
+MafFilter
+
+array/
+stats.py
+calculate_maf
+
+var_dset/
+__init__.py
+class VarDset
+    .meta
+    .data
+
+class VarDset(h5py.dset)
+    .meta
+
+-----------------------------------------------------
+
 Store the is_phased in the vcf reader
 
 Could we create pipelines with map and filter functions?

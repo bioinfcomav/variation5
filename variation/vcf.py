@@ -4,7 +4,7 @@ import re
 from itertools import zip_longest, chain
 import os
 import subprocess
-from collections import namedtuple, Counter
+from collections import namedtuple
 import functools
 import operator
 import tempfile
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-from variation.compressed_queue import CCache
+from variation.utils.compressed_queue import CCache
 
 # Test imports
 import inspect
@@ -736,9 +736,8 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                         elif field == b'GT':
                             pass
                         else:
-                            call_sample_data = _expand_list_to_size(call_sample_data,
-                                                                    size[2],
-                                                                    filling)
+                            _expand_list_to_size(call_sample_data, size[2],
+                                                filling)
 
                         if call_sample_data is not None:
                             try:

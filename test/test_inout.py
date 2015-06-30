@@ -7,7 +7,7 @@ import gzip
 import numpy
 import h5py
 
-from variation.inout import (VCF, vcf_to_hdf5, dsets_chunks_iter,
+from variation.inout import (VCFParser, vcf_to_hdf5, dsets_chunks_iter,
                              write_hdf5_from_chunks)
 
 # Method could be a function
@@ -29,7 +29,7 @@ class TestIO(unittest.TestCase):
 
     def test_vcf_parsing(self):
         fhand = open(TEST_VCF2, 'rb')
-        vcf = VCF(fhand, pre_read_max_size=1000)
+        vcf = VCFParser(fhand, pre_read_max_size=1000)
         snps = list(vcf.variations)
         assert len(snps) == 5
         snp = snps[0]
@@ -45,13 +45,13 @@ class TestIO(unittest.TestCase):
         fhand.close()
 
         fhand = gzip.open(TEST_VCF, 'rb')
-        vcf = VCF(fhand, pre_read_max_size=100, max_field_lens={'alt': 4})
+        vcf = VCFParser(fhand, pre_read_max_size=100, max_field_lens={'alt': 4})
         assert vcf.max_field_lens['alt'] == 4
         assert vcf.max_field_str_lens == {'FILTER': 0,
                                           'INFO': {b'TYPE': 3, b'CIGAR': 2},
                                           'alt': 1, 'chrom': 10}
         fhand = gzip.open(TEST_VCF, 'rb')
-        vcf = VCF(fhand, pre_read_max_size=1000)
+        vcf = VCFParser(fhand, pre_read_max_size=1000)
         assert vcf.max_field_lens['alt'] == 2
         assert vcf.max_field_str_lens == {'FILTER': 0,
                                           'INFO': {b'TYPE': 7, b'CIGAR': 6},
@@ -59,7 +59,7 @@ class TestIO(unittest.TestCase):
 
     def test_write_hdf5(self):
         fhand = open(TEST_VCF2, 'rb')
-        vcf = VCF(fhand, pre_read_max_size=1000)
+        vcf = VCFParser(fhand, pre_read_max_size=1000)
         out_fhand = NamedTemporaryFile(suffix='.hdf5')
         try:
             log = vcf_to_hdf5(vcf, out_fhand.name)
@@ -69,7 +69,7 @@ class TestIO(unittest.TestCase):
         assert log == {'data_no_fit': {}, 'variations_processed': 5}
 
         fhand = gzip.open(TEST_VCF, 'rb')
-        vcf = VCF(fhand, pre_read_max_size=1000, max_field_lens={'alt': 4},
+        vcf = VCFParser(fhand, pre_read_max_size=1000, max_field_lens={'alt': 4},
                   kept_fields=['GT', 'QA'], max_n_vars=2500)
         out_fhand = NamedTemporaryFile(suffix='.hdf5')
         try:

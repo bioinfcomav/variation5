@@ -3,6 +3,7 @@ from itertools import chain, zip_longest, islice
 import re
 from collections import namedtuple
 import subprocess
+import warnings
 
 import numpy
 import h5py
@@ -14,8 +15,6 @@ from variation.utils.compressed_queue import CCache
 
 # Missing docstring
 # pylint: disable=C0111
-
-
 
 
 def read_gzip_file(fpath, pgiz=False):
@@ -454,6 +453,11 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
             continue
 
         y_axes_size = vcf.max_field_lens['INFO'][field]
+        if not y_axes_size:
+            msg = 'This field is empty in the preread SNPs: '
+            msg += field.decode("utf-8")
+            warnings.warn(msg, RuntimeWarning)
+            continue
 
         if y_axes_size == 1:
             size = (vars_in_chunk,)
@@ -488,7 +492,7 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
         fmt_fields = fmt_fields.intersection(vcf.kept_fields)
     fmt_fields = list(fmt_fields)
 
-
+    empty_fields = set()
     for field in fmt_fields:
         fmt = vcf.metadata['FORMAT'][field]
         if field == b'GT':
@@ -504,6 +508,12 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
                     z_axes_size = vcf.ploidy
                 else:
                     z_axes_size = vcf.max_field_lens['FORMAT'][field]
+                    if not z_axes_size:
+                        msg = 'This field is empty in the preread SNPs: '
+                        msg += field.decode("utf-8")
+                        warnings.warn(msg, RuntimeWarning)
+                        empty_fields.add(field)
+                        continue
 
         size = [vars_in_chunk, n_samples, z_axes_size]
         maxshape = (None, n_samples, z_axes_size)
@@ -527,6 +537,9 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
         kwargs['chunks'] = chunks
         kwargs['fillvalue'] = missing_val
         calldata.create_dataset(field, size, **kwargs)
+
+    if empty_fields:
+        fmt_fields = list(set(fmt_fields).difference(empty_fields))
     return fmt_fields
 
 
@@ -545,6 +558,10 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
             chunks=(vars_in_chunk,)
         else:
             y_axes_size = vcf.max_field_lens[field]
+            if not y_axes_size:
+                msg = 'No max size for field. Try prereading some SNPs: '
+                msg += field
+                raise RuntimeError(msg)
             size = [vars_in_chunk, y_axes_size]
             maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
             chunks=(vars_in_chunk,  y_axes_size)
@@ -688,7 +705,10 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                         if len(size) == 1:
                             # we're expecting one item or a list with one item
                             if isinstance(info_data, (list, tuple)):
-                                assert len(info_data) == 1
+                                if len(info_data) != 1:
+                                    if field not in log['data_no_fit']:
+                                        log['data_no_fit'][field] = 0
+                                    log['data_no_fit'][field] += 1
                                 info_data = info_data[0]
                         try:
                             dset[snp_n] = info_data
@@ -724,7 +744,7 @@ def vcf_to_hdf5(vcf, out_fpath, vars_in_chunk=SNPS_PER_CHUNK):
                                 msg = '\nYou might fix it prereading more'
                                 msg += ' SNPs, or passing: '
                                 msg += 'max_field_lens={'
-                                msg += 'alt:{}'.format(len(item))
+                                msg += '"alt":{}'.format(len(item))
                                 msg += '}\nto VCF reader'
                                 raise TypeError(msg)
 

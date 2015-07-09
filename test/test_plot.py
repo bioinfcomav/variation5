@@ -27,5 +27,5 @@ class PlotTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.test_vcf_parsing']
+    # import sys;sys.argv = ['', 'Test.test_vcf_parsing']
     unittest.main()

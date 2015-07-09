@@ -34,5 +34,5 @@ class ConcatTest(unittest.TestCase):
             assert numpy.all(dset[:] == [[1, 1], [2 , 2], [3, 3]])
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.test_vcf_parsing']
+    # import sys;sys.argv = ['', 'Test.test_vcf_parsing']
     unittest.main()

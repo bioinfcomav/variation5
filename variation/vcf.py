@@ -95,7 +95,6 @@ class VCFParser():
         kept_fields = [field.encode('utf-8') for field in kept_fields]
         self.ignored_fields = ignored_fields
         self.kept_fields = kept_fields
-
         self._determine_ploidy()
 
         self._empty_gt = [MISSING_GT] * self.ploidy

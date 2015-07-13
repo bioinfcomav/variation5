@@ -60,7 +60,18 @@ class VcfH5Test(unittest.TestCase):
         hdf5 = VcfH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         assert numpy.any(hdf5.allele_count)
 
+    def test_create_matrix(self):
+        out_fhand = NamedTemporaryFile(suffix='.hdf5')
+        os.remove(out_fhand.name)
+        hdf5 = VcfH5(out_fhand.name, 'w')
+        try:
+            hdf5.create_matrix('/group/')
+            self.fail('Value error expected')
+        except ValueError:
+            pass
+        dset = hdf5.create_matrix('/group/dset', shape = (200, 1))
+        assert dset.shape == (200, 1)
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Hdf5JoinTest']
+    #import sys;sys.argv = ['', 'VcfH5Test.test_vcf_parsing']
     unittest.main()

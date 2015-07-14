@@ -1,7 +1,7 @@
 
 import numpy
 
-from variation import MISSING_GT
+from variation import MISSING_VALUES
 from variation.matrix.stats import counts_by_row, row_value_counter_fact
 from functools import reduce
 import operator
@@ -9,7 +9,7 @@ import operator
 
 def calc_mafs(chunk, min_num_genotypes=10):
     genotypes = chunk['/calls/GT']
-    allele_counts = counts_by_row(genotypes, missing_value=MISSING_GT)
+    allele_counts = counts_by_row(genotypes, missing_value=MISSING_VALUES[int])
     max_ = numpy.amax(allele_counts, axis=1)
     sum_ = numpy.sum(allele_counts, axis=1)
     mafs = max_ / sum_
@@ -32,7 +32,7 @@ def missing_gt_rate(chunk):
 
 def _missing_gt_counts(chunk):
     genotypes = chunk['/calls/GT']
-    count_missing = row_value_counter_fact(MISSING_GT, ratio=False)
+    count_missing = row_value_counter_fact(MISSING_VALUES[int], ratio=False)
     return count_missing(genotypes)
 
 

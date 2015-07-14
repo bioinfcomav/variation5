@@ -7,10 +7,10 @@ import numpy
 import h5py
 from collections import OrderedDict
 
-from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_GT
-from variation.vcf import _missing_val, _filling_val
+from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
+from numpy import dtype
 
 # Missing docstring
 # pylint: disable=C0111
@@ -73,16 +73,13 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
             maxshape = (None, y_axes_size)
             chunks = (vars_in_chunk, y_axes_size)
 
-        missing_val = None
-
         kwargs = DEF_DSET_PARAMS.copy()
         kwargs['shape'] = size
         kwargs['dtype'] = dtype
         kwargs['maxshape'] = maxshape
         kwargs['chunks'] = chunks
-        kwargs['fillvalue'] = missing_val
         path = posixpath.join(info_grp_name, field)
-        matrix = hdf5.create_matrix(path, **kwargs)
+        matrix = _create_matrix(hdf5, path, **kwargs)
         info_matrices[path] = matrix
     return info_matrices
 
@@ -122,11 +119,6 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
         maxshape = (None, n_samples, z_axes_size)
         chunks = (vars_in_chunk, n_samples, z_axes_size)
 
-        if field == b'GT':
-            missing_val = MISSING_GT
-        else:
-            missing_val = _filling_val(fmt['dtype'])
-
         # If the last dimension only has one of len we can work with only
         # two dimensions (variations x samples)
         if size[-1] == 1:
@@ -139,12 +131,27 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
         kwargs['dtype'] = dtype
         kwargs['maxshape'] = maxshape
         kwargs['chunks'] = chunks
-        kwargs['fillvalue'] = missing_val
         path = posixpath.join(b'/calls', field)
-        matrix = hdf5.create_matrix(path, **kwargs)
+        matrix = _create_matrix(hdf5, path, **kwargs)
         fmt_matrices[path] = matrix
 
     return fmt_matrices
+
+
+def _create_matrix(var_matrices, path, **kwargs):
+    fillvalue = MISSING_VALUES[kwargs['dtype']]
+    kwargs['fillvalue'] = fillvalue
+
+    try:
+        matrix = var_matrices.create_matrix(path, **kwargs)
+    except TypeError:
+        dtype = kwargs['dtype']
+        fillvalue = MISSING_VALUES[dtype]
+        shape = kwargs['shape']
+        matrix = var_matrices.create_matrix(path, dtype=dtype,
+                                            fillvalue=fillvalue,
+                                            shape=shape)
+    return matrix
 
 
 def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
@@ -175,16 +182,13 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
         dtype = _numpy_dtype(meta[str_field]['dtype'], field,
                              vcf.max_field_str_lens)
 
-        missing_val = None
-
         kwargs = DEF_DSET_PARAMS.copy()
         kwargs['shape'] = size
         kwargs['dtype'] = dtype
         kwargs['maxshape'] = maxshape
         kwargs['chunks'] = chunks
-        kwargs['fillvalue'] = missing_val
         path = posixpath.join(var_grp_name, field)
-        matrix = hdf5.create_matrix(path, **kwargs)
+        matrix = _create_matrix(hdf5, path, **kwargs)
         var_matrices[path] = matrix
 
     return var_matrices
@@ -208,23 +212,20 @@ def _prepare_filter_datasets(vcf, hdf5, vars_in_chunk):
         maxshape = (None,)
         chunks = (vars_in_chunk,)
 
-        missing_val = None
-
         kwargs = DEF_DSET_PARAMS.copy()
         kwargs['shape'] = size
         kwargs['dtype'] = dtype
         kwargs['maxshape'] = maxshape
         kwargs['chunks'] = chunks
-        kwargs['fillvalue'] = missing_val
         path = posixpath.join(filter_grp_name,field)
-        matrix = hdf5.create_matrix(path, **kwargs)
+        matrix = _create_matrix(hdf5, path, **kwargs)
         filter_matrices[path] = matrix
 
     return filter_matrices
 
 
-def _expand_list_to_size(items, desired_size, filling):
-    extra_empty_items = [filling[0]] * (desired_size - len(items))
+def _expand_list_to_size(items, desired_size, missing):
+    extra_empty_items = [missing[0]] * (desired_size - len(items))
     items.extend(extra_empty_items)
 
 
@@ -264,6 +265,26 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
     return dsets
 
 
+# def _create_arrays_from_chunks(arrays_chunks, vars_in_chunk):
+#     for path, matrix in dset_chunks.items():
+#         grp_name, name = posixpath.split(path)
+#         try:
+#             grp = hdf5[grp_name]
+#         except KeyError:
+#             grp = hdf5.create_group(grp_name)
+#         shape = list(matrix.shape)
+#         shape[0] = 0    # No snps yet
+#         shape, dtype, chunks, maxshape = _dset_metadata_from_matrix(matrix,
+#                                                                   vars_in_chunk)
+#         dset = grp.create_dataset(name, shape=shape,
+#                                   dtype=dtype,
+#                                   chunks=chunks,
+#                                   maxshape=maxshape)
+#         dsets[path] = dset
+#     return dsets
+
+
+
 def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                          ignored_fields=None):
     snps = vcf.variations
@@ -293,7 +314,9 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                 grp = 'FILTER'
             else:
                 grp = 'FORMAT'
+
             matrix = hdf5[path]
+            #print(matrix)
             # resize the dataset to fit the new chunk
             size = matrix.shape
             new_size = list(size)
@@ -305,21 +328,17 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
 
             if grp == 'FILTER':
                 missing = False
-                filling = False
             else:
                 try:
                     dtype= vcf.metadata[grp][str_field]['dtype']
                 except KeyError:
                     dtype= vcf.metadata[grp][field]['dtype']
-                missing = _missing_val(dtype)
-                filling = _filling_val(dtype)
+                missing = MISSING_VALUES[dtype]
 
             if len(size) == 3 and field != b'GT':
                 missing = [missing] * size[2]
-                filling = [filling] * size[2]
             elif len(size) == 2:
                 missing = [missing] * size[1]
-                filling = [filling] * size[1]
             # We store the information
             for snp_i, snp in enumerate(chunk):
                 try:
@@ -405,7 +424,7 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                             pass
                         else:
                             _expand_list_to_size(call_sample_data, size[2],
-                                                 filling)
+                                                 missing)
 
                         if call_sample_data is not None:
                             try:
@@ -424,17 +443,19 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
         new_size = list(size)
         snp_n = snp_i + chunk_i * vars_in_chunk
         new_size[0] = snp_n
-        matrix.resize(new_size)
+        if hasattr(hdf5, 'resize'):
+            matrix.resize(new_size)
+        else:
+            matrix = numpy.resize(matrix, new_size)
 
     if hasattr(hdf5, 'flush'):
         hdf5.flush()
-
+    print(hdf5.hArrays.keys())
     return log
 
 
 class VcfH5:
-    def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
-                 kept_fields=None, ignored_fields=None):
+    def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK):
         self._fpath = fpath
         if mode not in ('r', 'w'):
             msg = 'mode should be r or w'
@@ -543,7 +564,8 @@ class VcfH5:
         counts = None
         for gt_chunk in select_dset_from_chunks(self.iterate_chunks(),
                                                 '/calls/GT'):
-            chunk_counts = counts_by_row(gt_chunk, missing_value=MISSING_GT)
+            chunk_counts = counts_by_row(gt_chunk,
+                                         missing_value=MISSING_VALUES[int])
             if counts is None:
                 counts = chunk_counts
             else:
@@ -589,3 +611,139 @@ class VcfH5:
 
 def select_dset_from_chunks(chunks, dset_path):
     return (chunk[dset_path] for chunk in chunks)
+
+#No hay que pasarle ningun path porque se guarda en memoria
+class VcfArrays:
+    def __init__(self, vars_in_chunk=SNPS_PER_CHUNK):
+        self._vars_in_chunk = vars_in_chunk
+        self.hArrays = {}
+
+    def write_vars_from_vcf(self, vcf):
+        return _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
+
+
+#     def iterate_chunks(self, kept_fields=None, ignored_fields=None):
+#
+#         if kept_fields is not None and ignored_fields is not None:
+#             msg = 'kept_fields and ignored_fields can not be set at the same time'
+#             raise ValueError(msg)
+#
+#         # We read the hdf5 file to keep the datasets metadata
+#         dsets = {}
+#         for grp in self.h5file.values():
+#             if not isinstance(grp, h5py.Group):
+#                 # We're assuming no dsets in root
+#                 continue
+#             for name, item in grp.items():
+#                 if isinstance(item, h5py.Dataset):
+#                     dset = item
+#                     key = posixpath.join(grp.name, name)
+#                     dsets[key] = dset
+#                 else:
+#                     grp = item
+#                     for sname, dset in grp.items():
+#                         if isinstance(dset, h5py.Dataset):
+#                             key = posixpath.join(grp.name, sname)
+#                             dsets[key] = dset
+#
+#         # We remove the unwanted fields
+#         fields = dsets.keys()
+#         if kept_fields:
+#             fields = set(kept_fields).intersection(fields)
+#         if ignored_fields:
+#             fields = set(fields).difference(ignored_fields)
+#         dsets = {field: dsets[field] for field in fields}
+#
+#         # how many snps are per chunk?
+#         one_dset = dsets[first(dsets.keys())]
+#         chunk_size = one_dset.chunks[0]
+#         nsnps = one_dset.shape
+#         if isinstance(nsnps, (tuple, list)):
+#             nsnps = nsnps[0]
+#
+#         # Now we can yield the chunks
+#         for start in range(0, nsnps, chunk_size):
+#             stop = start + chunk_size
+#             if stop > nsnps:
+#                 stop = nsnps
+#             chunks = {path: dset[start:stop] for path, dset in dsets.items()}
+#             yield chunks
+
+    def __getitem__(self, path):
+        return self.hArrays[path]
+
+#     def write_chunks(self, chunks, kept_fields=None, ignored_fields=None):
+#         arrays = None
+#         current_snp_index = 0
+#         for arrays_chunks in chunks:
+#             if arrays is None:
+#                 arrays = _create_dsets_from_chunks(self.h5file, dsets_chunks,
+#                                                   self._vars_in_chunk)
+#
+#             # check all chunks have the same number of snps
+#             nsnps = [chunk.data.shape[0] for chunk in dsets_chunks.values()]
+#             num_snps = nsnps[0]
+#             assert all(num_snps == nsnp for nsnp in nsnps)
+#
+#             for dset_name, dset_chunk in dsets_chunks.items():
+#                 dset = dsets[dset_name]
+#                 start = current_snp_index
+#                 stop = current_snp_index + num_snps
+#                 # the dataset should fit the new data
+#                 size = dset.shape
+#                 new_size = list(size)
+#                 new_size[0] = stop
+#                 dset.resize(new_size)
+#
+#                 dset[start:stop] = dset_chunk.data
+#
+#             current_snp_index += num_snps
+#         self.h5file.flush()
+
+
+    @property
+    def num_variations(self):
+        return self.hArrays['/variations/chrom'].shape[0]
+
+    @property
+    def allele_count(self):
+        counts = None
+        for gt_chunk in select_dset_from_chunks(self.iterate_chunks(),
+                                                '/calls/GT'):
+            chunk_counts = counts_by_row(gt_chunk,
+                                         missing_value=MISSING_VALUES[int])
+            if counts is None:
+                counts = chunk_counts
+            else:
+                if counts.shape[1:] < chunk_counts.shape[1:]:
+                    n_extra_cols = chunk_counts.shape[-1] - counts.shape[-1]
+                    shape = list(counts.shape)
+                    shape[-1] = n_extra_cols
+                    extra_cols = numpy.zeros(shape, dtype=chunk_counts.dtype)
+                    counts = numpy.hstack((counts, extra_cols))
+                elif counts.shape[1:] > chunk_counts.shape[1:]:
+                    n_extra_cols = counts.shape[-1] - chunk_counts.shape[-1]
+                    shape = list(chunk_counts.shape)
+                    shape[-1] = n_extra_cols
+                    extra_cols = numpy.zeros(shape, dtype=chunk_counts.dtype)
+                    chunk_counts = numpy.hstack((chunk_counts, extra_cols))
+                counts = numpy.concatenate([counts, chunk_counts], axis=0)
+        return counts
+
+
+    def create_matrix(self, path, shape, dtype, fillvalue):
+        hArrays = self.hArrays
+        array_name = posixpath.basename(path)
+        if not array_name:
+            msg = 'The path should include a array name: ' + path
+            raise ValueError(msg)
+
+        try:
+            hArrays[path]
+            msg = 'The array already exists: ' + path
+            raise ValueError(msg)
+        except KeyError:
+            pass
+        array = numpy.full(shape, fillvalue, dtype)
+        hArrays[path] = array
+        return array

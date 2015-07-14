@@ -2,32 +2,11 @@ from itertools import chain, islice
 import re
 import subprocess
 
-from variation import (MISSING_INT, MISSING_GT, MISSING_FLOAT, MISSING_STR,
-                       FILLING_INT, FILLING_FLOAT, FILLING_STR)
+from variation import MISSING_VALUES
 from variation.utils.compressed_queue import CCache
 
 # Missing docstring
 # pylint: disable=C0111
-
-
-def _missing_val(dtype_str):
-    if 'int' in dtype_str:
-        missing_val = MISSING_INT
-    elif 'float' in dtype_str:
-        missing_val = MISSING_FLOAT
-    elif 'str' in dtype_str:
-        missing_val = MISSING_STR
-    return missing_val
-
-
-def _filling_val(dtype_str):
-    if 'int' in dtype_str:
-        missing_val = FILLING_INT
-    elif 'float' in dtype_str:
-        missing_val = FILLING_FLOAT
-    elif 'str' in dtype_str:
-        missing_val = FILLING_STR
-    return missing_val
 
 
 def read_gzip_file(fpath, pgiz=False):
@@ -48,13 +27,13 @@ def _do_nothing(value):
 
 def _to_int(string):
     if string in ('', '.', None, b'.'):
-        return MISSING_INT
+        return MISSING_VALUES[int]
     return int(string)
 
 
 def _to_float(string):
     if string in ('', '.', None):
-        return MISSING_FLOAT
+        return MISSING_VALUES[float]
     return float(string)
 
 
@@ -97,7 +76,7 @@ class VCFParser():
         self.kept_fields = kept_fields
         self._determine_ploidy()
 
-        self._empty_gt = [MISSING_GT] * self.ploidy
+        self._empty_gt = [MISSING_VALUES[int]] * self.ploidy
         self._parse_header()
 
         if max_field_lens is None:
@@ -290,7 +269,7 @@ class VCFParser():
             format_.append((fmt, fmt_meta['Type'],
                             fmt_meta['Number'] != 1,  # Is list
                             fmt_meta,
-                            _missing_val(fmt_meta['dtype'])))
+                            MISSING_VALUES[fmt_meta['dtype']]))
         self._parsed_gt_fmts[orig_fmt] = format_
         return format_
 
@@ -310,7 +289,8 @@ class VCFParser():
             is_phased = False
             gt = gt.split(b'/')
         if gt is not None:
-            gt = [MISSING_GT if allele == b'.' else int(allele) for allele in gt]
+
+            gt = [MISSING_VALUES[int] if allele == b'.' else int(allele) for allele in gt]
         self._parsed_gt[gt_str] = gt
         return gt
 

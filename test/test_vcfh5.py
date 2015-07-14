@@ -37,8 +37,10 @@ class VcfH5Test(unittest.TestCase):
     def test_write_vars_arrays_from_vcf(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
-        hArrays = VcfArrays()
-        hArrays.write_vars_from_vcf(vcf)
+        snps = VcfArrays()
+        snps.write_vars_from_vcf(vcf)
+        assert snps[b'/calls/GT'].shape == (5, 3, 2)
+        assert numpy.all(snps[b'/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
         vcf_fhand.close()
 
     def test_create_hdf5_with_chunks(self):

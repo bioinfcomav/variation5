@@ -438,7 +438,6 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
     # we have to remove the empty snps from the last chunk
     for path in paths:
         matrix = hdf5[path]
-
         size = matrix.shape
         new_size = list(size)
         snp_n = snp_i + chunk_i * vars_in_chunk
@@ -446,11 +445,9 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
         if hasattr(hdf5, 'resize'):
             matrix.resize(new_size)
         else:
-            matrix = numpy.resize(matrix, new_size)
-
+            matrix.resize(new_size, refcheck=False)
     if hasattr(hdf5, 'flush'):
         hdf5.flush()
-    print(hdf5.hArrays.keys())
     return log
 
 
@@ -619,8 +616,8 @@ class VcfArrays:
         self.hArrays = {}
 
     def write_vars_from_vcf(self, vcf):
-        return _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
-
+        log = _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
+        return self
 
 #     def iterate_chunks(self, kept_fields=None, ignored_fields=None):
 #

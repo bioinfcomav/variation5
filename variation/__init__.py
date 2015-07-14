@@ -18,9 +18,11 @@ class _MissingValues():
                                 numpy.int32: MISSING_INT,
                                 numpy.float16: MISSING_FLOAT,
                                 numpy.float32: MISSING_FLOAT,
-                                numpy.bool_: MISSING_BOOL}
+                                numpy.bool_: MISSING_BOOL,
+                                bool: MISSING_BOOL}
 
     def __getitem__(self, dtype):
+        str_dtype = str(dtype)
         if dtype in self._missing_values:
             return self._missing_values[dtype]
         elif isinstance(dtype, str):
@@ -32,6 +34,16 @@ class _MissingValues():
                 return MISSING_FLOAT
             elif dtype[0] == 'S':
                 return MISSING_BYTE
+            elif dtype[:2] == '|S':
+                return MISSING_BYTE
+        elif 'int' in str_dtype:
+            return MISSING_INT
+        elif 'float' in str_dtype:
+            return MISSING_FLOAT
+        elif 'bool' in str_dtype:
+            return MISSING_BOOL
+        elif str_dtype[:2] == '|S':
+            return MISSING_BYTE
         else:
             raise ValueError('No missing type defined for type: ' + str(dtype))
 

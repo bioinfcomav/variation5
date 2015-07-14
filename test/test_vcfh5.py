@@ -68,28 +68,13 @@ class VcfH5Test(unittest.TestCase):
 
 
     def test_create_arrays_with_chunks(self):
-        hdf5 = VcfArrays(join(TEST_DATA_DIR, '1000snps.hdf5'))
-        out_fhand = NamedTemporaryFile(suffix='.hdf5')
-        os.remove(out_fhand.name)
-        hdf5_2 = VcfH5(out_fhand.name, 'w')
-        try:
-            hdf5_2.write_chunks(hdf5.iterate_chunks())
-            assert sorted(hdf5_2['calls'].keys()) == ['DP', 'GQ', 'GT', 'HQ']
-            assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
-        finally:
-            out_fhand.close()
-
         hdf5 = VcfH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
-        out_fhand = NamedTemporaryFile(suffix='.hdf5')
-        os.remove(out_fhand.name)
-        hdf5_2 = VcfH5(out_fhand.name, 'w')
+        snps = VcfArrays()
         try:
-            hdf5_2.write_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
-            assert list(hdf5_2['calls'].keys()) == ['GT']
-            assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
+            snps.write_chunks(hdf5.iterate_chunks())
+            assert numpy.all(hdf5['/calls/GT'][:] == snps['/calls/GT'][:])
         finally:
-            out_fhand.close()
-
+            pass
 
     def test_count_alleles(self):
         hdf5 = VcfH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -108,5 +93,5 @@ class VcfH5Test(unittest.TestCase):
         assert dset.shape == (200, 1)
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VcfH5Test.test_write_vars_arrays_from_vcf']
+    #import sys;sys.argv = ['', 'VcfH5Test.test_create_arrays_with_chunks']
     unittest.main()

@@ -242,7 +242,8 @@ def _dset_metadata_from_matrix(mat, vars_in_chunk):
         maxshape = list(shape)
         maxshape[0] = None
         maxshape = tuple(maxshape)
-    return shape, dtype, chunks, maxshape
+    fillvalue = MISSING_VALUES[dtype]
+    return shape, dtype, chunks, maxshape, fillvalue
 
 
 def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
@@ -265,23 +266,26 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
     return dsets
 
 
-# def _create_arrays_from_chunks(arrays_chunks, vars_in_chunk):
-#     for path, matrix in dset_chunks.items():
-#         grp_name, name = posixpath.split(path)
-#         try:
-#             grp = hdf5[grp_name]
-#         except KeyError:
-#             grp = hdf5.create_group(grp_name)
-#         shape = list(matrix.shape)
-#         shape[0] = 0    # No snps yet
-#         shape, dtype, chunks, maxshape = _dset_metadata_from_matrix(matrix,
-#                                                                   vars_in_chunk)
-#         dset = grp.create_dataset(name, shape=shape,
-#                                   dtype=dtype,
-#                                   chunks=chunks,
-#                                   maxshape=maxshape)
-#         dsets[path] = dset
-#     return dsets
+def _create_mats_from_chunks(var_mat, mats_chunks, vars_in_chunk):
+    matrices = {}
+    for path, mat_chunk in mats_chunks.items():
+        shape = list(mat_chunk.shape)
+        shape[0] = 0    # No snps yet
+        result = _dset_metadata_from_matrix(mat_chunk, vars_in_chunk)
+        shape, dtype, chunks, maxshape, fillvalue = result
+        try:
+            dset = var_mat.create_matrix(path, shape=shape,
+                                         dtype=dtype,
+                                         chunks=chunks,
+                                         maxshape=maxshape,
+                                         fillvalue=fillvalue)
+            matrix = dset
+        except TypeError:
+            array = var_mat.create_matrix(path, shape=shape, dtype=dtype,
+                                          fillvalue=fillvalue)
+            matrix = array
+        matrices[path] = matrix
+    return matrices
 
 
 
@@ -442,16 +446,50 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
         new_size = list(size)
         snp_n = snp_i + chunk_i * vars_in_chunk
         new_size[0] = snp_n
-        if hasattr(hdf5, 'resize'):
-            matrix.resize(new_size)
-        else:
+        try:
             matrix.resize(new_size, refcheck=False)
+        except TypeError:
+            matrix.resize(new_size)
     if hasattr(hdf5, 'flush'):
         hdf5.flush()
     return log
 
 
-class VcfH5:
+class VariationMatrices():
+    def write_chunks(self, chunks, kept_fields=None, ignored_fields=None):
+        matrices = None
+        current_snp_index = 0
+        for mats_chunks in chunks:
+            if matrices is None:
+                matrices = _create_mats_from_chunks(self, mats_chunks,
+                                                  self._vars_in_chunk)
+
+            # check all chunks have the same number of snps
+            nsnps = [chunk.data.shape[0] for chunk in mats_chunks.values()]
+            num_snps = nsnps[0]
+            assert all(num_snps == nsnp for nsnp in nsnps)
+
+            for path, dset_chunk in mats_chunks.items():
+                dset = matrices[path]
+                start = current_snp_index
+                stop = current_snp_index + num_snps
+                # the dataset should fit the new data
+                size = dset.shape
+                new_size = list(size)
+                new_size[0] = stop
+                try:
+                    dset.resize(new_size, refchecks=False)
+                except TypeError:
+                    dset.resize(new_size)
+                dset[start:stop] = dset_chunk.data
+
+            current_snp_index += num_snps
+
+        if hasattr(self, 'flush'):
+            self.h5file.flush()
+
+
+class VcfH5(VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK):
         self._fpath = fpath
         if mode not in ('r', 'w'):
@@ -463,10 +501,8 @@ class VcfH5:
         self.h5file = h5py.File(fpath, mode)
         self._vars_in_chunk = vars_in_chunk
 
-
     def write_vars_from_vcf(self, vcf):
         return _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
-
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None):
 
@@ -518,34 +554,6 @@ class VcfH5:
     def __getitem__(self, path):
         return self.h5file[path]
 
-    def write_chunks(self, chunks, kept_fields=None, ignored_fields=None):
-        dsets = None
-        current_snp_index = 0
-        for dsets_chunks in chunks:
-            if dsets is None:
-                dsets = _create_dsets_from_chunks(self.h5file, dsets_chunks,
-                                                  self._vars_in_chunk)
-
-            # check all chunks have the same number of snps
-            nsnps = [chunk.data.shape[0] for chunk in dsets_chunks.values()]
-            num_snps = nsnps[0]
-            assert all(num_snps == nsnp for nsnp in nsnps)
-
-            for dset_name, dset_chunk in dsets_chunks.items():
-                dset = dsets[dset_name]
-                start = current_snp_index
-                stop = current_snp_index + num_snps
-                # the dataset should fit the new data
-                size = dset.shape
-                new_size = list(size)
-                new_size[0] = stop
-                dset.resize(new_size)
-
-                dset[start:stop] = dset_chunk.data
-
-            current_snp_index += num_snps
-        self.h5file.flush()
-
     def flush(self):
         self.h5file.flush()
 
@@ -581,7 +589,6 @@ class VcfH5:
                 counts = numpy.concatenate([counts, chunk_counts], axis=0)
         return counts
 
-
     def create_matrix(self, path, *args, **kwargs):
         hdf5 = self.h5file
         group_name, dset_name = posixpath.split(path)
@@ -600,6 +607,19 @@ class VcfH5:
             group = hdf5[group_name]
         except KeyError:
             group = hdf5.create_group(group_name)
+
+        if 'fillvalue' not in kwargs:
+            if 'dtype' in kwargs:
+                dtype = kwargs['dtype']
+            else:
+                if len(args) > 2:
+                    dtype = args[2]
+                else:
+                    dtype = None
+            if dtype is not None:
+                fillvalue = MISSING_VALUES[dtype]
+                kwargs['fillvalue'] = fillvalue
+
         args = list(args)
         args.insert(0, dset_name)
         dset = group.create_dataset(*args, **kwargs)
@@ -609,8 +629,8 @@ class VcfH5:
 def select_dset_from_chunks(chunks, dset_path):
     return (chunk[dset_path] for chunk in chunks)
 
-#No hay que pasarle ningun path porque se guarda en memoria
-class VcfArrays:
+
+class VcfArrays(VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK):
         self._vars_in_chunk = vars_in_chunk
         self.hArrays = {}
@@ -619,84 +639,9 @@ class VcfArrays:
         log = _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
         return self
 
-#     def iterate_chunks(self, kept_fields=None, ignored_fields=None):
-#
-#         if kept_fields is not None and ignored_fields is not None:
-#             msg = 'kept_fields and ignored_fields can not be set at the same time'
-#             raise ValueError(msg)
-#
-#         # We read the hdf5 file to keep the datasets metadata
-#         dsets = {}
-#         for grp in self.h5file.values():
-#             if not isinstance(grp, h5py.Group):
-#                 # We're assuming no dsets in root
-#                 continue
-#             for name, item in grp.items():
-#                 if isinstance(item, h5py.Dataset):
-#                     dset = item
-#                     key = posixpath.join(grp.name, name)
-#                     dsets[key] = dset
-#                 else:
-#                     grp = item
-#                     for sname, dset in grp.items():
-#                         if isinstance(dset, h5py.Dataset):
-#                             key = posixpath.join(grp.name, sname)
-#                             dsets[key] = dset
-#
-#         # We remove the unwanted fields
-#         fields = dsets.keys()
-#         if kept_fields:
-#             fields = set(kept_fields).intersection(fields)
-#         if ignored_fields:
-#             fields = set(fields).difference(ignored_fields)
-#         dsets = {field: dsets[field] for field in fields}
-#
-#         # how many snps are per chunk?
-#         one_dset = dsets[first(dsets.keys())]
-#         chunk_size = one_dset.chunks[0]
-#         nsnps = one_dset.shape
-#         if isinstance(nsnps, (tuple, list)):
-#             nsnps = nsnps[0]
-#
-#         # Now we can yield the chunks
-#         for start in range(0, nsnps, chunk_size):
-#             stop = start + chunk_size
-#             if stop > nsnps:
-#                 stop = nsnps
-#             chunks = {path: dset[start:stop] for path, dset in dsets.items()}
-#             yield chunks
 
     def __getitem__(self, path):
         return self.hArrays[path]
-
-#     def write_chunks(self, chunks, kept_fields=None, ignored_fields=None):
-#         arrays = None
-#         current_snp_index = 0
-#         for arrays_chunks in chunks:
-#             if arrays is None:
-#                 arrays = _create_dsets_from_chunks(self.h5file, dsets_chunks,
-#                                                   self._vars_in_chunk)
-#
-#             # check all chunks have the same number of snps
-#             nsnps = [chunk.data.shape[0] for chunk in dsets_chunks.values()]
-#             num_snps = nsnps[0]
-#             assert all(num_snps == nsnp for nsnp in nsnps)
-#
-#             for dset_name, dset_chunk in dsets_chunks.items():
-#                 dset = dsets[dset_name]
-#                 start = current_snp_index
-#                 stop = current_snp_index + num_snps
-#                 # the dataset should fit the new data
-#                 size = dset.shape
-#                 new_size = list(size)
-#                 new_size[0] = stop
-#                 dset.resize(new_size)
-#
-#                 dset[start:stop] = dset_chunk.data
-#
-#             current_snp_index += num_snps
-#         self.h5file.flush()
-
 
     @property
     def num_variations(self):

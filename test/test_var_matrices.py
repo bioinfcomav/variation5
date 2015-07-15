@@ -121,6 +121,22 @@ class VarMatsTests(unittest.TestCase):
             assert matrix.dtype == float
             assert matrix[0, 0] == 1.5
 
+    def test_create_with_chunks(self):
+        in_snps = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        for klass in VAR_MAT_CLASSES:
+            out_snps = _init_var_mat(klass)
+            out_snps.write_chunks(in_snps.iterate_chunks())
+            assert '/calls/GQ' in out_snps.keys()
+            assert out_snps['/calls/GT'].shape == (5, 3, 2)
+            assert numpy.all(out_snps['/calls/GT'][0] == [[0, 0], [1, 0], [1, 1]])
+
+        for klass in VAR_MAT_CLASSES:
+            out_snps = _init_var_mat(klass)
+            out_snps.write_chunks(in_snps.iterate_chunks(kept_fields=['/calls/GT']))
+            assert '/calls/GQ' not in out_snps.keys()
+            assert out_snps['/calls/GT'].shape == (5, 3, 2)
+            assert numpy.all(out_snps['/calls/GT'][:] == in_snps['/calls/GT'])
+
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'VcfH5Test.test_create_arrays_with_chunks']
     unittest.main()

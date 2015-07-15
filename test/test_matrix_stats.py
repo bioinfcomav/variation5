@@ -12,7 +12,8 @@ from os.path import join
 import numpy
 
 from test_utils import TEST_DATA_DIR
-from variation.vcfh5 import VcfH5, select_dset_from_chunks
+from variation.vars_matrices.vars_matrices import (VariationsH5, VariationsArrays,
+                                                   select_dset_from_chunks)
 from variation.matrix.stats import row_value_counter_fact, counts_by_row
 from variation.iterutils import first
 
@@ -29,7 +30,7 @@ class RowValueCounterTest(unittest.TestCase):
 
         with NamedTemporaryFile(suffix='.hdf5') as hdf5_fhand:
 
-            hdf5 = VcfH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+            hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
             chunks = list(hdf5.iterate_chunks())
             gt_chunk = first(select_dset_from_chunks(chunks, '/calls/GT'))
 
@@ -43,7 +44,7 @@ class RowValueCounterTest(unittest.TestCase):
 
     def test_count_alleles(self):
 
-        hdf5 = VcfH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
         genotypes = chunk['/calls/GT']
         counts = counts_by_row(genotypes)

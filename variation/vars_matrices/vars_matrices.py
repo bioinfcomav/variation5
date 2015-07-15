@@ -142,12 +142,12 @@ def _create_matrix(var_matrices, path, **kwargs):
     kwargs['fillvalue'] = fillvalue
 
     try:
-        matrix = var_matrices.create_matrix(path, **kwargs)
+        matrix = var_matrices._create_matrix(path, **kwargs)
     except TypeError:
         dtype = kwargs['dtype']
         fillvalue = MISSING_VALUES[dtype]
         shape = kwargs['shape']
-        matrix = var_matrices.create_matrix(path, dtype=dtype,
+        matrix = var_matrices._create_matrix(path, dtype=dtype,
                                             fillvalue=fillvalue,
                                             shape=shape)
     return matrix
@@ -281,19 +281,18 @@ def _create_mats_from_chunks(var_mat, mats_chunks, vars_in_chunk):
         result = _dset_metadata_from_matrix(mat_chunk, vars_in_chunk)
         shape, dtype, chunks, maxshape, fillvalue = result
         try:
-            dset = var_mat.create_matrix(path, shape=shape,
-                                         dtype=dtype,
-                                         chunks=chunks,
-                                         maxshape=maxshape,
-                                         fillvalue=fillvalue)
+            dset = var_mat._create_matrix(path, shape=shape,
+                                          dtype=dtype,
+                                          chunks=chunks,
+                                          maxshape=maxshape,
+                                          fillvalue=fillvalue)
             matrix = dset
         except TypeError:
-            array = var_mat.create_matrix(path, shape=shape, dtype=dtype,
-                                          fillvalue=fillvalue)
+            array = var_mat._create_matrix(path, shape=shape, dtype=dtype,
+                                           fillvalue=fillvalue)
             matrix = array
         matrices[path] = matrix
     return matrices
-
 
 
 def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
@@ -613,7 +612,7 @@ class VariationsH5(_VariationMatrices):
                 counts = numpy.concatenate([counts, chunk_counts], axis=0)
         return counts
 
-    def create_matrix(self, path, *args, **kwargs):
+    def _create_matrix(self, path, *args, **kwargs):
         hdf5 = self.h5file
         group_name, dset_name = posixpath.split(path)
         if not dset_name:
@@ -678,7 +677,7 @@ class VariationsArrays(_VariationMatrices):
         counts = counts_by_row(gts, missing_value=MISSING_VALUES[int])
         return counts
 
-    def create_matrix(self, path, shape, dtype, fillvalue):
+    def _create_matrix(self, path, shape, dtype, fillvalue):
         hArrays = self.hArrays
         array_name = posixpath.basename(path)
         if not array_name:

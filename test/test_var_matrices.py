@@ -110,18 +110,16 @@ class VarMatsTests(unittest.TestCase):
             var_mat = _init_var_mat(klass)
             var_mat.write_vars_from_vcf(vcf_parser)
             assert numpy.all(var_mat.allele_count == expected)
+            fhand.close()
 
     def test_create_matrix(self):
-        out_fhand = NamedTemporaryFile(suffix='.hdf5')
-        os.remove(out_fhand.name)
-        hdf5 = VariationsH5(out_fhand.name, 'w')
-        try:
-            hdf5.create_matrix('/group/')
-            self.fail('Value error expected')
-        except ValueError:
-            pass
-        dset = hdf5.create_matrix('/group/dset', shape = (200, 1))
-        assert dset.shape == (200, 1)
+        for klass in VAR_MAT_CLASSES:
+            var_mat = _init_var_mat(klass)
+            matrix = var_mat._create_matrix('/calls/HQ', shape = (200, 1), dtype=float,
+                                           fillvalue=1.5)
+            assert matrix.shape == (200, 1)
+            assert matrix.dtype == float
+            assert matrix[0, 0] == 1.5
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'VcfH5Test.test_create_arrays_with_chunks']

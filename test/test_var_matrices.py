@@ -17,7 +17,6 @@ from variation.vcf import VCFParser
 import numpy
 
 
-
 class VcfH5Test(unittest.TestCase):
     def test_create_empty(self):
         with NamedTemporaryFile(suffix='.h5') as fhand:
@@ -39,8 +38,8 @@ class VcfH5Test(unittest.TestCase):
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
         snps = VariationsArrays()
         snps.write_vars_from_vcf(vcf)
-        assert snps[b'/calls/GT'].shape == (5, 3, 2)
-        assert numpy.all(snps[b'/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
+        assert snps['/calls/GT'].shape == (5, 3, 2)
+        assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
         vcf_fhand.close()
 
     def test_create_hdf5_with_chunks(self):
@@ -66,18 +65,51 @@ class VcfH5Test(unittest.TestCase):
         finally:
             out_fhand.close()
 
+
+VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
+
+
+def _init_var_mat(klass):
+    if klass is VariationsH5:
+        fhand = NamedTemporaryFile(suffix='.h5')
+        os.remove(fhand.name)
+        var_mat = klass(fhand.name, mode='w')
+    else:
+        var_mat = klass()
+    return var_mat
+
+
+class VarMatsTests(unittest.TestCase):
     def test_create_arrays_with_chunks(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
-        snps = VariationsArrays()
-        try:
-            snps.write_chunks(hdf5.iterate_chunks())
-            assert numpy.all(hdf5['/calls/GT'][:] == snps['/calls/GT'][:])
-        finally:
-            pass
+
+        for klass in VAR_MAT_CLASSES:
+            in_snps = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+            var_mat = _init_var_mat(klass)
+            try:
+                var_mat.write_chunks(in_snps.iterate_chunks())
+                assert numpy.all(in_snps['/calls/GT'][:] == var_mat['/calls/GT'][:])
+                in_snps.close()
+            finally:
+                pass
 
     def test_count_alleles(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        assert numpy.any(hdf5.allele_count)
+        for klass in VAR_MAT_CLASSES:
+            in_snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+            var_mat = _init_var_mat(klass)
+            try:
+                var_mat.write_chunks(in_snps.iterate_chunks(kept_fields=['/calls/GT']))
+                assert numpy.any(var_mat.allele_count)
+                in_snps.close()
+            finally:
+                pass
+
+        expected = [[3, 3, 0], [5, 1, 0], [0, 2, 4], [6, 0, 0], [2, 3, 1]]
+        for klass in VAR_MAT_CLASSES:
+            fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+            vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
+            var_mat = _init_var_mat(klass)
+            var_mat.write_vars_from_vcf(vcf_parser)
+            assert numpy.all(var_mat.allele_count == expected)
 
     def test_create_matrix(self):
         out_fhand = NamedTemporaryFile(suffix='.hdf5')

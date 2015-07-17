@@ -110,7 +110,8 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
                     z_axes_size = vcf.max_field_lens['FORMAT'][field]
                     if not z_axes_size:
                         msg = 'This field is empty in the preread SNPs: '
-                        msg += field.decode("utf-8")
+                        #msg += field.decode("utf-8")
+                        msg += 'FORMAT/' + field.decode("utf-8")
                         warnings.warn(msg, RuntimeWarning)
                         continue
 
@@ -207,11 +208,12 @@ def _prepare_filter_datasets(vcf, hdf5, vars_in_chunk):
     meta = vcf.metadata['FILTER']
     filter_fields = set(meta.keys()).difference(vcf.ignored_fields)
     filter_fields = list(filter_fields)
+
+    filter_matrices = OrderedDict()
     if not filter_fields:
-        return []
+        return filter_matrices
 
     filter_fields.append('no_filters')
-    filter_matrices = OrderedDict()
     for field in filter_fields:
         dtype = numpy.bool_
 
@@ -275,7 +277,8 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
 
 def _create_mats_from_chunks(var_mat, mats_chunks, vars_in_chunk):
     matrices = {}
-    for path, mat_chunk in mats_chunks.items():
+    for path in mats_chunks.keys():
+        mat_chunk = mats_chunks[path]
         shape = list(mat_chunk.shape)
         shape[0] = 0    # No snps yet
         result = _dset_metadata_from_matrix(mat_chunk, vars_in_chunk)
@@ -331,25 +334,29 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
             size = matrix.shape
             new_size = list(size)
             new_size[0] = vars_in_chunk * (chunk_i + 1)
-            matrix.resize(new_size)
+
+            try:
+                matrix.resize(new_size, refcheck=False)
+            except TypeError:
+                matrix.resize(new_size)
 
             field = posixpath.basename(path)
             field = _to_str(field)
             byte_field = field.encode('utf-8')
 
             if grp == 'FILTER':
-                missing = False
+                missing_val = False
             else:
                 try:
                     dtype= vcf.metadata[grp][field]['dtype']
                 except KeyError:
                     dtype= vcf.metadata[grp][byte_field]['dtype']
-                missing = MISSING_VALUES[dtype]
+                missing_val = MISSING_VALUES[dtype]
 
             if len(size) == 3 and field != 'GT':
-                missing = [missing] * size[2]
+                missing = [missing_val] * size[2]
             elif len(size) == 2:
-                missing = [missing] * size[1]
+                missing = [missing_val] * size[1]
             # We store the information
             for snp_i, snp in enumerate(chunk):
                 try:
@@ -426,11 +433,22 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                     if call_sample_data is not None:
                         if len(size) == 2:
                             # we're expecting a single item or a list with one item
-                            if isinstance(call_sample_data[0], (list, tuple)):
+                            try:
+                                one_element = first(filter(lambda x: x is not None, call_sample_data))
+                            except ValueError:
+                                one_element = None
+                            if isinstance(one_element, (list, tuple)):
                                 # We have a list in each item
                                 # we're assuming that all items have length 1
-                                assert max(map(len, call_sample_data)) == 1
-                                call_sample_data =  [item[0] for item in call_sample_data]
+                                if max([len(cll) for cll in call_sample_data if cll is not None]) == 1:
+                                    call_sample_data =  [missing_val if item is None else item[0] for item in call_sample_data]
+                                else:
+                                    if field not in log['data_no_fit']:
+                                        log['data_no_fit'][field] = 0
+                                    log['data_no_fit'][field] += 1
+                                    call_sample_data = None
+                            else:
+                                call_sample_data =  [missing_val] * len(call_sample_data)
                         elif field == 'GT':
                             pass
                         else:
@@ -472,11 +490,12 @@ class _VariationMatrices():
                                                   self._vars_in_chunk)
 
             # check all chunks have the same number of snps
-            nsnps = [chunk.data.shape[0] for chunk in mats_chunks.values()]
+            nsnps = [mats_chunks[path].data.shape[0] for path in mats_chunks.keys()]
             num_snps = nsnps[0]
             assert all(num_snps == nsnp for nsnp in nsnps)
 
-            for path, dset_chunk in mats_chunks.items():
+            for path in mats_chunks.keys():
+                dset_chunk = mats_chunks[path]
                 dset = matrices[path]
                 start = current_snp_index
                 stop = current_snp_index + num_snps
@@ -494,6 +513,47 @@ class _VariationMatrices():
 
         if hasattr(self, 'flush'):
             self.h5file.flush()
+
+    def iterate_chunks(self, kept_fields=None, ignored_fields=None):
+
+        if kept_fields is not None and ignored_fields is not None:
+            msg = 'kept_fields and ignored_fields can not be set at the same time'
+            raise ValueError(msg)
+
+        # We read the hdf5 file to keep the datasets metadata
+
+        # We remove the unwanted fields
+        paths = self.keys()
+        if kept_fields:
+            paths = set(kept_fields).intersection(paths)
+        if ignored_fields:
+            paths = set(paths).difference(ignored_fields)
+
+        dsets = {field: self[field] for field in paths}
+
+        # how many snps are per chunk?
+
+        chunk_size = self._vars_in_chunk
+        nsnps = self.num_snps
+
+        for start in range(0, nsnps, chunk_size):
+            var_array = VariationsArrays(vars_in_chunk=chunk_size)
+            stop = start + chunk_size
+            if stop > nsnps:
+                stop = nsnps
+            for path, dset in dsets.items():
+                var_array[path] = dset[start:stop]
+            yield var_array
+
+
+    @property
+    def num_snps(self):
+        try:
+            one_path = first(self.keys())
+        except ValueError:
+            return 0
+        one_mat = self[one_path]
+        return one_mat.shape[0]
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
@@ -535,39 +595,6 @@ class VariationsH5(_VariationMatrices):
 
     def write_vars_from_vcf(self, vcf):
         return _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
-
-    def iterate_chunks(self, kept_fields=None, ignored_fields=None):
-
-        if kept_fields is not None and ignored_fields is not None:
-            msg = 'kept_fields and ignored_fields can not be set at the same time'
-            raise ValueError(msg)
-
-        # We read the hdf5 file to keep the datasets metadata
-        dsets = {}
-        _get_hdf5_dsets(dsets, self.h5file, self)
-
-        # We remove the unwanted fields
-        paths = dsets.keys()
-        if kept_fields:
-            paths = set(kept_fields).intersection(paths)
-        if ignored_fields:
-            paths = set(paths).difference(ignored_fields)
-        dsets = {field: dsets[field] for field in paths}
-
-        # how many snps are per chunk?
-        one_dset = dsets[first(dsets.keys())]
-        chunk_size = one_dset.chunks[0]
-        nsnps = one_dset.shape
-        if isinstance(nsnps, (tuple, list)):
-            nsnps = nsnps[0]
-
-        # Now we can yield the chunks
-        for start in range(0, nsnps, chunk_size):
-            stop = start + chunk_size
-            if stop > nsnps:
-                stop = nsnps
-            chunks = {path: dset[start:stop] for path, dset in dsets.items()}
-            yield chunks
 
     def __getitem__(self, path):
         return self.h5file[path]
@@ -664,12 +691,29 @@ class VariationsArrays(_VariationMatrices):
     def __getitem__(self, path):
         return self.hArrays[path]
 
+    def __setitem__(self, path, array):
+        assert isinstance(array, numpy.ndarray)
+        if self.num_variations != 0:
+            assert self.num_variations == array.shape[0]
+        if path in self.hArrays:
+            raise ValueError('This path was already in the var_array', path)
+        self.hArrays[path] = array
+
+    def __delitem__(self,path):
+        if path in self.hArrays:
+            del self.hArrays[path]
+        else:
+            raise KeyError('The path is not in the variation_array', path)
+
     def keys(self):
         return self.hArrays.keys()
 
     @property
     def num_variations(self):
-        return self.hArrays['/variations/chrom'].shape[0]
+        if not self.hArrays.keys():
+            return 0
+        else:
+            return first(self.hArrays.values()).shape[0]
 
     @property
     def allele_count(self):

@@ -181,8 +181,23 @@ class VarMatsTests(unittest.TestCase):
         snps = VariationsArrays()
         snps.write_vars_from_vcf(vcf)
         del snps['/calls/GT']
-        assert ('/calls/GT' not in snps.keys())
+        assert '/calls/GT' not in snps.keys()
         vcf_fhand.close()
+
+    def test_metadata(self):
+        for klass in VAR_MAT_CLASSES :
+            fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+            vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
+            var_mat = _init_var_mat(klass)
+            var_mat.write_vars_from_vcf(vcf_parser)
+            metadata = var_mat.metadata
+            assert '/variations/filter/q10' in metadata.keys()
+
+            for klass in VAR_MAT_CLASSES:
+                out_snps = _init_var_mat(klass)
+                out_snps.write_chunks(var_mat.iterate_chunks())
+                assert '/variations/filter/q10' in out_snps.keys()
+            fhand.close()
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'VarMatsTests.test_create_arrays_with_chunks']

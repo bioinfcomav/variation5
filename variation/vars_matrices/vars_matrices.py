@@ -2,6 +2,7 @@
 from itertools import zip_longest
 import warnings
 import posixpath
+import json
 
 import numpy
 import h5py
@@ -298,8 +299,31 @@ def _create_mats_from_chunks(var_mat, mats_chunks, vars_in_chunk):
     return matrices
 
 
+def _prepare_metadata(vcf_metadata):
+    unwanted_fields = ['dtype', 'type_cast']
+    groups = ['INFO', 'FILTER', 'FORMAT', 'OTHER']
+    meta = {}
+    for group in groups:
+        for field, field_meta in vcf_metadata[group].items():
+            for ufield in unwanted_fields:
+                if ufield in field_meta:
+                    del field_meta[ufield]
+            if group == 'INFO':
+                dir_ = '/variations/info'
+            elif group == 'FILTER':
+                dir_ = '/variations/filter'
+            elif group == 'FORMAT':
+                dir_ = '/calls'
+            elif group == 'OTHER':
+                dir_ = '/'
+            path = posixpath.join(dir_, _to_str(field))
+            meta[path] = field_meta
+    return meta
+
 def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                          ignored_fields=None):
+
+
     snps = vcf.variations
     log = {'data_no_fit': {},
            'variations_processed': 0}
@@ -464,6 +488,7 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                         log['data_no_fit'][field] = 0
                                     log['data_no_fit'][field] += 1
             first_field = False
+
     # we have to remove the empty snps from the last chunk
     for path in paths:
         matrix = hdf5[path]
@@ -475,6 +500,10 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
             matrix.resize(new_size, refcheck=False)
         except TypeError:
             matrix.resize(new_size)
+
+    metadata = _prepare_metadata(vcf.metadata)
+    hdf5._set_metadata(metadata)
+
     if hasattr(hdf5, 'flush'):
         hdf5.flush()
     return log
@@ -488,7 +517,7 @@ class _VariationMatrices():
             if matrices is None:
                 matrices = _create_mats_from_chunks(self, mats_chunks,
                                                   self._vars_in_chunk)
-
+                self._set_metadata(mats_chunks.metadata)
             # check all chunks have the same number of snps
             nsnps = [mats_chunks[path].data.shape[0] for path in mats_chunks.keys()]
             num_snps = nsnps[0]
@@ -543,6 +572,7 @@ class _VariationMatrices():
                 stop = nsnps
             for path, dset in dsets.items():
                 var_array[path] = dset[start:stop]
+            var_array._set_metadata(self.metadata)
             yield var_array
 
 
@@ -554,6 +584,13 @@ class _VariationMatrices():
             return 0
         one_mat = self[one_path]
         return one_mat.shape[0]
+
+    def _set_metadata(self, metadata):
+        self._metadata = metadata
+
+    @property
+    def metadata(self):
+        return self._metadata
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
@@ -676,6 +713,18 @@ class VariationsH5(_VariationMatrices):
 
         return dset
 
+    def _set_metadata(self, metadata):
+        self.h5file.attrs['metadata'] = json.dumps(metadata)
+
+    @property
+    def metadata(self):
+        if 'metadata' in self.h5file.attrs:
+            metadata = json.loads(self.h5file.attrs['metadata'])
+        else:
+            metadata = {}
+        return metadata
+
+
 def select_dset_from_chunks(chunks, dset_path):
     return (chunk[dset_path] for chunk in chunks)
 
@@ -684,6 +733,7 @@ class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK):
         self._vars_in_chunk = vars_in_chunk
         self.hArrays = {}
+        self._metadata = {}
 
     def write_vars_from_vcf(self, vcf):
         return _write_vars_from_vcf(vcf, self, self._vars_in_chunk)

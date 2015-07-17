@@ -62,41 +62,51 @@ class FilterTest(unittest.TestCase):
         assert first(flt_chunk.values()).shape[0] == 62
 
         flt_chunk = min_called_gts_filter_fact()(chunk)
-        assert first(flt_chunk.values()).shape[0] == 200
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 200
 
         flt_chunk = min_called_gts_filter_fact(min_= 307)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 0
 
         flt_chunk = missing_rate_filter_fact(min_=0.6)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 64
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 64
 
         flt_chunk = missing_rate_filter_fact()(chunk)
-        assert first(flt_chunk.values()).shape[0] == 200
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 200
 
         flt_chunk = missing_rate_filter_fact(min_= 1.1)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 0
 
     def test_filter_mafs_varh5(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
         filter_mafs = mafs_filter_fact(min_=0.6)
         flt_chunk = filter_mafs(chunk)
-        assert first(flt_chunk.values()).shape[0] == 182
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 182
 
         flt_chunk = mafs_filter_fact()(chunk)
-        assert first(flt_chunk.values()).shape[0] == 200
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 200
 
         flt_chunk = mafs_filter_fact(max_=0.6)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 18
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 18
 
         flt_chunk = mafs_filter_fact(min_=0.6, max_=0.9)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 125
+        assert flt_chunk[path].shape[0] == 125
 
         flt_chunk = mafs_filter_fact(min_=1.1)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 0
 
         flt_chunk = mafs_filter_fact(max_=0)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
+        path = first(chunk.keys())
+        assert flt_chunk[path].shape[0] == 0
 
 
     def test_filter_varArray(self):
@@ -106,16 +116,14 @@ class FilterTest(unittest.TestCase):
         var_array.write_chunks(chunks)
 
         flt_var_array = VariationsArrays()
-        flt_chunks = map(_filter_all, var_array.chunks)
+        flt_chunks = map(_filter_all, var_array.iterate_chunks())
         flt_var_array.write_chunks(flt_chunks)
-
         assert flt_var_array.hArrays['/calls/GT'].shape[0] == 0
 
-        flt_chunks = map(_filter_none, chunks)
+        flt_chunks = map(_filter_none, var_h5.iterate_chunks())
         out_snps = VariationsArrays()
         out_snps.write_chunks(flt_chunks)
-
-        assert numpy.all(in_hdf5['/calls/GT'][:] == out_snps['/calls/GT'][:])
+        assert numpy.all(var_h5['/calls/GT'][:] == out_snps['/calls/GT'][:])
 
 
     def test_filter_missing_varArray(self):

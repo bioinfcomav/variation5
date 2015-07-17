@@ -3,6 +3,7 @@ from itertools import zip_longest
 import warnings
 import posixpath
 import json
+import copy
 
 import numpy
 import h5py
@@ -513,6 +514,7 @@ class _VariationMatrices():
     def write_chunks(self, chunks, kept_fields=None, ignored_fields=None):
         matrices = None
         current_snp_index = 0
+
         for mats_chunks in chunks:
             if matrices is None:
                 matrices = _create_mats_from_chunks(self, mats_chunks,
@@ -588,9 +590,13 @@ class _VariationMatrices():
     def _set_metadata(self, metadata):
         self._metadata = metadata
 
-    @property
-    def metadata(self):
-        return self._metadata
+    def _get_metadata(self):
+        return copy.deepcopy(self._metadata)
+
+    metadata = property(_get_metadata, _set_metadata)
+
+    def values(self):
+        return [self[key] for key in self.keys()]
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):

@@ -98,7 +98,6 @@ class VCFParser():
         self._variations_cache = CCache()
         self._read_snps_in_compressed_cache()
 
-
     def _init_max_field_lens(self):
         meta = self.metadata
         for section in ('INFO', 'FORMAT'):
@@ -145,20 +144,13 @@ class VCFParser():
                 self.samples = line.strip().split(b'\t')[9:]
                 break
             header_lines.append(line)
-
         metadata = {'FORMAT': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
-        metadata['VARIATIONS'] = {'chrom': {'dtype': 'str',
-                                            'type': _do_nothing},
-                                  'pos': {'dtype': 'int32',
-                                          'type': _to_int},
-                                  'id': {'dtype': 'str',
-                                         'type': _do_nothing},
-                                  'ref': {'dtype': 'str',
-                                          'type': _do_nothing},
-                                  'qual': {'dtype': 'float16',
-                                          'type': _to_float},
-                                  'alt': {'dtype': 'str',
-                                         'type': _do_nothing},}
+        metadata['VARIATIONS'] = {'chrom': {'dtype': 'str'},
+                                  'pos': {'dtype': 'int32'},
+                                  'id': {'dtype': 'str'},
+                                  'ref': {'dtype': 'str'},
+                                  'qual': {'dtype': 'float16'},
+                                  'alt': {'dtype': 'str'}}
         for line in header_lines:
             if line[2:7] in (b'FORMA', b'INFO=', b'FILTE'):
                 line = line[2:]
@@ -187,15 +179,17 @@ class VCFParser():
                     else:
                         if key == 'Type':
                             if val == 'Integer':
-                                val = _to_int
+                                type_cast = _to_int
                                 val2 = 'int16'
                             elif val == 'Float':
-                                val = _to_float
+                                type_cast = _to_float
                                 val2 = 'float16'
                             else:
-                                val = _do_nothing
+                                type_cast = _do_nothing
                                 val2 = 'str'
                             meta['dtype'] = val2
+                            meta['type_cast'] = type_cast
+                        val = val.strip('"')
                         meta[key] = val
                 if id_ is None:
                     raise RuntimeError('Header line has no ID: ' + line)
@@ -204,6 +198,7 @@ class VCFParser():
                     meta['Number'] = int(meta['Number'])
             else:
                 id_, meta = line[2:].decode('utf-8').split('=', 1)
+                meta = meta.strip()
                 if id_ == 'fileformat':
                     self.vcf_format = meta
                     continue
@@ -230,7 +225,7 @@ class VCFParser():
                 msg += key.decode('utf-8')
                 raise RuntimeError(msg)
 
-            type_ = meta['Type']
+            type_ = meta['type_cast']
             if isinstance(val, bool):
                 pass
             elif b',' in val:
@@ -266,7 +261,7 @@ class VCFParser():
                 msg = 'FORMAT metadata was not defined in header: '
                 msg += fmt.decode('utf-8')
                 raise RuntimeError(msg)
-            format_.append((fmt, fmt_meta['Type'],
+            format_.append((fmt, fmt_meta['type_cast'],
                             fmt_meta['Number'] != 1,  # Is list
                             fmt_meta,
                             MISSING_VALUES[fmt_meta['dtype']]))

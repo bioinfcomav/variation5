@@ -7,6 +7,7 @@ import copy
 
 import numpy
 import h5py
+import bcolz
 from collections import OrderedDict
 
 from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
@@ -235,9 +236,7 @@ def _prepare_filter_datasets(vcf, hdf5, vars_in_chunk):
     return filter_matrices
 
 
-def _expand_list_to_size(items, desired_size, missing):
-    extra_empty_items = [missing[0]] * (desired_size - len(items))
-    items.extend(extra_empty_items)
+_MISSING_ITEMS = {}
 
 
 def _dset_metadata_from_matrix(mat, vars_in_chunk):
@@ -274,6 +273,7 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
                                   chunks=chunks,
                                   maxshape=maxshape)
         dsets[path] = dset
+
     return dsets
 
 
@@ -300,6 +300,35 @@ def _create_mats_from_chunks(var_mat, mats_chunks, vars_in_chunk):
     return matrices
 
 
+def _size_recur(size, item):
+    if hasattr(item, '__len__') and not isinstance(item, (str, bytes)):
+        is_list = True
+    else:
+        is_list = False
+
+    if is_list:
+        size.append(len(item))
+        _size_recur(size, item[0])
+
+def _size(item):
+    size = []
+    _size_recur(size, item)
+
+    if not size:
+        return None
+    else:
+        return size
+
+def _create_slice(snp_n, item):
+    size = _size(item)
+    if size is None:
+        return snp_n
+    else:
+        slice_ = [snp_n]
+        slice_.extend([slice(dim_len) for dim_len in size])
+        return tuple(slice_)
+
+
 def _prepare_metadata(vcf_metadata):
     unwanted_fields = ['dtype', 'type_cast']
     groups = ['INFO', 'FILTER', 'FORMAT', 'OTHER']
@@ -321,7 +350,8 @@ def _prepare_metadata(vcf_metadata):
             meta[path] = field_meta
     return meta
 
-def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
+
+def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                          ignored_fields=None):
 
 
@@ -363,7 +393,10 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
             try:
                 matrix.resize(new_size, refcheck=False)
             except TypeError:
-                matrix.resize(new_size)
+                try:
+                    matrix.resize(new_size)
+                except TypeError:
+                    matrix = matrix.reshape(new_size)
 
             field = posixpath.basename(path)
             field = _to_str(field)
@@ -378,10 +411,6 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                     dtype= vcf.metadata[grp][byte_field]['dtype']
                 missing_val = MISSING_VALUES[dtype]
 
-            if len(size) == 3 and field != 'GT':
-                missing = [missing_val] * size[2]
-            elif len(size) == 2:
-                missing = [missing_val] * size[1]
             # We store the information
             for snp_i, snp in enumerate(chunk):
                 try:
@@ -413,7 +442,8 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                 info_data = info_data[0]
 
                         try:
-                            matrix[snp_n] = info_data
+                            slice_ = _create_slice(snp_n, info_data)
+                            matrix[slice_] = info_data
                         except TypeError as error:
                             if 'broadcast' in str(error):
                                 if field not in log['data_no_fit']:
@@ -431,12 +461,13 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                         item = snp[3]
                     elif field == 'alt':
                         item = snp[4]
-                        _expand_list_to_size(item, size[1], [b''])
+                        #_expand_list_to_size(item, size[1], b'')
                     elif field == 'qual':
                         item = snp[5]
                     if item is not None:
                         try:
-                            matrix[snp_n] = item
+                            slice_ = _create_slice(snp_n, item)
+                            matrix[slice_] = item
                         except TypeError as error:
                             if 'broadcast' in str(error) and field == 'alt':
                                 msg = 'More alt alleles than expected.'
@@ -449,7 +480,6 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                 msg += '"alt":{}'.format(len(item))
                                 msg += '}\nto VCF reader'
                                 raise TypeError(msg)
-
                 elif grp == 'FORMAT':
                     # store the calldata
                     gt_data = dict(gt_data)
@@ -474,22 +504,23 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                     call_sample_data = None
                             else:
                                 call_sample_data =  [missing_val] * len(call_sample_data)
-                        elif field == 'GT':
-                            pass
-                        else:
-                            _expand_list_to_size(call_sample_data, size[2],
-                                                 missing)
 
                         if call_sample_data is not None:
                             try:
-                                matrix[snp_n] = call_sample_data
+                                slice_ = _create_slice(snp_n, call_sample_data)
+                                matrix[slice_] = call_sample_data
                             except TypeError as error:
                                 if 'broadcast' in str(error):
                                     if field not in log['data_no_fit']:
                                         log['data_no_fit'][field] = 0
                                     log['data_no_fit'][field] += 1
-            first_field = False
+                            except:
+                                print('snp_id', snp_i)
+                                print('field', field)
+                                print('failed data', call_sample_data)
+                                raise
 
+            first_field = False
     # we have to remove the empty snps from the last chunk
     for path in paths:
         matrix = hdf5[path]
@@ -511,7 +542,7 @@ def _write_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
 
 
 class _VariationMatrices():
-    def write_chunks(self, chunks, kept_fields=None, ignored_fields=None):
+    def put_chunks(self, chunks, kept_fields=None, ignored_fields=None):
         matrices = None
         current_snp_index = 0
 
@@ -534,16 +565,19 @@ class _VariationMatrices():
                 size = dset.shape
                 new_size = list(size)
                 new_size[0] = stop
-                try:
-                    dset.resize(new_size, refcheck=False)
-                except TypeError:
-                    dset.resize(new_size)
-                dset[start:stop] = dset_chunk.data
+                if isinstance(dset, bcolz.carray):
+                    dset.append(dset_chunk.data)
+                else:
+                    try:
+                        dset.resize(new_size, refcheck=False)
+                    except TypeError:
+                        dset.resize(new_size)
+                    dset[start:stop] = dset_chunk.data
 
             current_snp_index += num_snps
 
         if hasattr(self, 'flush'):
-            self.h5file.flush()
+            self._h5file.flush()
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None):
 
@@ -607,7 +641,7 @@ def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
             raise ValueError(msg)
     item = h5_or_group_or_dset
     if hasattr(item, 'values'):
-        # h5file or group
+        # _h5file or group
         for subitem in item.values():
             _get_hdf5_dsets(dsets, subitem, var_mat)
     else:
@@ -633,25 +667,25 @@ class VariationsH5(_VariationMatrices):
         elif mode == 'w':
             mode = 'w-'
         self.mode = mode
-        self.h5file = h5py.File(fpath, mode)
+        self._h5file = h5py.File(fpath, mode)
         self._vars_in_chunk = vars_in_chunk
 
-    def write_vars_from_vcf(self, vcf):
-        return _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
+    def put_vars_from_vcf(self, vcf):
+        return _put_vars_from_vcf(vcf, self, self._vars_in_chunk)
 
     def __getitem__(self, path):
-        return self.h5file[path]
+        return self._h5file[path]
 
     def keys(self):
         dsets = []
-        _get_hdf5_dset_paths(dsets, self.h5file)
+        _get_hdf5_dset_paths(dsets, self._h5file)
         return dsets
 
     def flush(self):
-        self.h5file.flush()
+        self._h5file.flush()
 
     def close(self):
-        self.h5file.close()
+        self._h5file.close()
 
     @property
     def num_variations(self):
@@ -683,7 +717,7 @@ class VariationsH5(_VariationMatrices):
         return counts
 
     def _create_matrix(self, path, *args, **kwargs):
-        hdf5 = self.h5file
+        hdf5 = self._h5file
         group_name, dset_name = posixpath.split(path)
         if not dset_name:
             msg = 'The path should include a dset name: ' + path
@@ -720,12 +754,12 @@ class VariationsH5(_VariationMatrices):
         return dset
 
     def _set_metadata(self, metadata):
-        self.h5file.attrs['metadata'] = json.dumps(metadata)
+        self._h5file.attrs['metadata'] = json.dumps(metadata)
 
     @property
     def metadata(self):
-        if 'metadata' in self.h5file.attrs:
-            metadata = json.loads(self.h5file.attrs['metadata'])
+        if 'metadata' in self._h5file.attrs:
+            metadata = json.loads(self._h5file.attrs['metadata'])
         else:
             metadata = {}
         return metadata
@@ -738,38 +772,38 @@ def select_dset_from_chunks(chunks, dset_path):
 class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK):
         self._vars_in_chunk = vars_in_chunk
-        self.hArrays = {}
+        self._hArrays = {}
         self._metadata = {}
 
-    def write_vars_from_vcf(self, vcf):
-        return _write_vars_from_vcf(vcf, self, self._vars_in_chunk)
+    def put_vars_from_vcf(self, vcf):
+        return _put_vars_from_vcf(vcf, self, self._vars_in_chunk)
 
     def __getitem__(self, path):
-        return self.hArrays[path]
+        return self._hArrays[path]
 
     def __setitem__(self, path, array):
         assert isinstance(array, numpy.ndarray)
         if self.num_variations != 0:
             assert self.num_variations == array.shape[0]
-        if path in self.hArrays:
+        if path in self._hArrays:
             raise ValueError('This path was already in the var_array', path)
-        self.hArrays[path] = array
+        self._hArrays[path] = array
 
     def __delitem__(self,path):
-        if path in self.hArrays:
-            del self.hArrays[path]
+        if path in self._hArrays:
+            del self._hArrays[path]
         else:
             raise KeyError('The path is not in the variation_array', path)
 
     def keys(self):
-        return self.hArrays.keys()
+        return self._hArrays.keys()
 
     @property
     def num_variations(self):
-        if not self.hArrays.keys():
+        if not self._hArrays.keys():
             return 0
         else:
-            return first(self.hArrays.values()).shape[0]
+            return first(self._hArrays.values()).shape[0]
 
     @property
     def allele_count(self):
@@ -778,18 +812,82 @@ class VariationsArrays(_VariationMatrices):
         return counts
 
     def _create_matrix(self, path, shape, dtype, fillvalue):
-        hArrays = self.hArrays
+        _hArrays = self._hArrays
         array_name = posixpath.basename(path)
         if not array_name:
             msg = 'The path should include a array name: ' + path
             raise ValueError(msg)
 
         try:
-            hArrays[path]
+            _hArrays[path]
             msg = 'The array already exists: ' + path
             raise ValueError(msg)
         except KeyError:
             pass
         array = numpy.full(shape, fillvalue, dtype)
-        hArrays[path] = array
+        _hArrays[path] = array
         return array
+
+
+class VariationsBcolz(_VariationMatrices):
+    def __init__(self, vars_in_chunk=SNPS_PER_CHUNK):
+        self._vars_in_chunk = vars_in_chunk
+        self._bArrays = {}
+        self._metadata = {}
+
+    def put_vars_from_vcf(self, vcf):
+        return _put_vars_from_vcf(vcf, self, self._vars_in_chunk)
+
+    def __getitem__(self, path):
+        return self._bArrays[path]
+
+    def __setitem__(self, path, array):
+        'Entrando en setitem'
+        barray = bcolz.carray(array)
+        assert isinstance(barray, bcolz.carray)
+        if self.num_variations != 0:
+            assert self.num_variations == barray.shape[0]
+        if path in self._bArrays:
+            raise ValueError('This path was already in the var_array', path)
+        self._bArrays[path] = barray
+
+    def __delitem__(self,path):
+        if path in self._bArrays:
+            del self._bArrays[path]
+        else:
+            raise KeyError('The path is not in the variation_array', path)
+
+    def keys(self):
+        return self._bArrays.keys()
+
+    @property
+    def num_variations(self):
+        if not self._bArrays.keys():
+            return 0
+        else:
+            return first(self._bArrays.values()).shape[0]
+
+    @property
+    def allele_count(self):
+        gts = self['/calls/GT']
+        counts = counts_by_row(gts, missing_value=MISSING_VALUES[int])
+        return counts
+
+    def _create_matrix(self, path, shape, dtype, fillvalue):
+        _bArrays = self._bArrays
+        array_name = posixpath.basename(path)
+        if not array_name:
+            msg = 'The path should include a array name: ' + path
+            raise ValueError(msg)
+
+        try:
+            _bArrays[path]
+            msg = 'The array already exists: ' + path
+            raise ValueError(msg)
+        except KeyError:
+            pass
+        array_numpy = numpy.full(shape, fillvalue, dtype)
+        array = bcolz.carray(array_numpy)
+        _bArrays[path] = array
+        return array
+

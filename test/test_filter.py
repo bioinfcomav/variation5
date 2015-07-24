@@ -38,7 +38,7 @@ class FilterTest(unittest.TestCase):
             os.remove(fhand.name)
             out_hdf5 = VariationsH5(fhand.name, mode='w')
             flt_chunks = map(_filter_all, chunks)
-            out_hdf5.write_chunks(flt_chunks)
+            out_hdf5.put_chunks(flt_chunks)
 
             hdf5_2 = VariationsH5(fhand.name, mode='r')
             assert hdf5_2['/calls/GT'].shape[0] == 0
@@ -49,7 +49,7 @@ class FilterTest(unittest.TestCase):
             os.remove(fhand.name)
             out_hdf5 = VariationsH5(fhand.name, mode='w')
             flt_chunks = map(_filter_none, chunks)
-            out_hdf5.write_chunks(flt_chunks)
+            out_hdf5.put_chunks(flt_chunks)
 
             hdf5_2 = VariationsH5(fhand.name, mode='r')
             assert numpy.all(in_hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
@@ -113,16 +113,16 @@ class FilterTest(unittest.TestCase):
         var_h5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         chunks = var_h5.iterate_chunks()
         var_array = VariationsArrays()
-        var_array.write_chunks(chunks)
+        var_array.put_chunks(chunks)
 
         flt_var_array = VariationsArrays()
         flt_chunks = map(_filter_all, var_array.iterate_chunks())
-        flt_var_array.write_chunks(flt_chunks)
+        flt_var_array.put_chunks(flt_chunks)
         assert flt_var_array.hArrays['/calls/GT'].shape[0] == 0
 
         flt_chunks = map(_filter_none, var_h5.iterate_chunks())
         out_snps = VariationsArrays()
-        out_snps.write_chunks(flt_chunks)
+        out_snps.put_chunks(flt_chunks)
         assert numpy.all(var_h5['/calls/GT'][:] == out_snps['/calls/GT'][:])
 
 

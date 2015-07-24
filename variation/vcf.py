@@ -32,7 +32,7 @@ def _to_int(string):
 
 
 def _to_float(string):
-    if string in ('', '.', None):
+    if string in ('', '.', None, b'.'):
         return MISSING_VALUES[float]
     return float(string)
 
@@ -46,9 +46,6 @@ def _gt_data_to_list(mapper_function, sample_gt):
     sample_gt = sample_gt.split(b',')
     sample_gt = [mapper_function(item) for item in sample_gt]
     return sample_gt
-
-
-
 
 
 class VCFParser():

@@ -17,17 +17,19 @@ def _get_mplot_axes(axes, fhand):
     return axes, canvas
 
 
-def _print_figure(canvas, fhand):
+def _print_figure(canvas, fhand, no_interactive_win):
     if fhand is None:
-        plt.show()
+        if not no_interactive_win:
+            plt.show()
         return
     canvas.print_figure(fhand)
 
 
-def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None):
+def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None,
+                   no_interactive_win=False):
 
     axes, canvas = _get_mplot_axes(axes, fhand)
 
-    axes.hist(mat, bins=bins, range=range_)
-
-    _print_figure(canvas, fhand)
+    result = axes.hist(mat, bins=bins, range=range_)
+    _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result

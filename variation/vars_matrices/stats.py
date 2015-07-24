@@ -2,9 +2,27 @@
 import numpy
 
 from variation import MISSING_VALUES
+from variation.plot import plot_histogram
 from variation.matrix.stats import counts_by_row, row_value_counter_fact
 from functools import reduce
 import operator
+
+
+def plot_hist_missing_rate(var_mat, fhand=None, no_interactive_win=False):
+    missing = missing_gt_rate(var_mat)
+    return plot_histogram(missing, fhand=fhand,
+                          no_interactive_win=no_interactive_win)
+
+
+def _remove_nans(mat):
+    return mat[~numpy.isnan(mat)]
+
+
+def plot_hist_mafs(var_mat, fhand=None, no_interactive_win=False):
+    mafs = calc_mafs(var_mat)
+    mafs = _remove_nans(mafs)
+    return plot_histogram(mafs, fhand=fhand,
+                          no_interactive_win=no_interactive_win)
 
 
 def calc_mafs(chunk, min_num_genotypes=10):

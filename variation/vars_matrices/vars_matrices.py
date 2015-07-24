@@ -590,8 +590,19 @@ class _VariationMatrices():
         # We remove the unwanted fields
         paths = self.keys()
         if kept_fields:
-            paths = set(kept_fields).intersection(paths)
+            kept_fields = set(kept_fields)
+            not_in_matrix = kept_fields.difference(paths)
+            if not_in_matrix:
+                msg = 'Some fields are not in this VarMatrices: '
+                msg += ', '.join(not_in_matrix)
+                raise ValueError(msg)
+            paths = kept_fields.intersection(paths)
         if ignored_fields:
+            not_in_matrix = set(ignored_fields).difference(paths)
+            if not_in_matrix:
+                msg = 'Some fields are not in this VarMatrices: '
+                msg += ', '.join(not_in_matrix)
+                raise ValueError(msg)
             paths = set(paths).difference(ignored_fields)
 
         dsets = {field: self[field] for field in paths}
@@ -599,7 +610,7 @@ class _VariationMatrices():
         # how many snps are per chunk?
 
         chunk_size = self._vars_in_chunk
-        nsnps = self.num_snps
+        nsnps = self.num_variations
 
         for start in range(0, nsnps, chunk_size):
             var_array = VariationsArrays(vars_in_chunk=chunk_size)
@@ -613,7 +624,7 @@ class _VariationMatrices():
 
 
     @property
-    def num_snps(self):
+    def num_variations(self):
         try:
             one_path = first(self.keys())
         except ValueError:

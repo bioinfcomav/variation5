@@ -81,5 +81,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'VarMatricesStatsTest.test_plot_histogram_missing']
+    #import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_mafs']
     unittest.main()

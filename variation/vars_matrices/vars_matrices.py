@@ -622,16 +622,6 @@ class _VariationMatrices():
             var_array._set_metadata(self.metadata)
             yield var_array
 
-
-    @property
-    def num_variations(self):
-        try:
-            one_path = first(self.keys())
-        except ValueError:
-            return 0
-        one_mat = self[one_path]
-        return one_mat.shape[0]
-
     def _set_metadata(self, metadata):
         self._metadata = metadata
 
@@ -642,6 +632,15 @@ class _VariationMatrices():
 
     def values(self):
         return [self[key] for key in self.keys()]
+
+    @property
+    def num_variations(self):
+        try:
+            one_path = first(self.keys())
+        except ValueError:
+            return 0
+        one_mat = self[one_path]
+        return one_mat.shape[0]
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
@@ -697,10 +696,6 @@ class VariationsH5(_VariationMatrices):
 
     def close(self):
         self._h5file.close()
-
-    @property
-    def num_variations(self):
-        return self['/variations/chrom'].shape[0]
 
     @property
     def allele_count(self):
@@ -808,13 +803,6 @@ class VariationsArrays(_VariationMatrices):
 
     def keys(self):
         return self._hArrays.keys()
-
-    @property
-    def num_variations(self):
-        if not self._hArrays.keys():
-            return 0
-        else:
-            return first(self._hArrays.values()).shape[0]
 
     @property
     def allele_count(self):

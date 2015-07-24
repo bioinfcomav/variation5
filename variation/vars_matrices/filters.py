@@ -19,13 +19,13 @@ def _filter_dsets_chunks(selector_function, dsets_chunks):
 
 
 def _filter_all_rows(chunk):
-    n_snps = chunk.num_snps
+    n_snps = chunk.num_variations
     selector = numpy.zeros((n_snps,), dtype=numpy.bool_)
     return selector
 
 
 def _filter_no_row(chunk):
-    n_snps = chunk.num_snps
+    n_snps = chunk.num_variations
     selector = numpy.ones((n_snps,), dtype=numpy.bool_)
     return selector
 

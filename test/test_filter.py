@@ -118,7 +118,7 @@ class FilterTest(unittest.TestCase):
         flt_var_array = VariationsArrays()
         flt_chunks = map(_filter_all, var_array.iterate_chunks())
         flt_var_array.put_chunks(flt_chunks)
-        assert flt_var_array.hArrays['/calls/GT'].shape[0] == 0
+        assert flt_var_array['/calls/GT'].shape[0] == 0
 
         flt_chunks = map(_filter_none, var_h5.iterate_chunks())
         out_snps = VariationsArrays()

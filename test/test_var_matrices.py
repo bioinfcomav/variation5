@@ -56,6 +56,7 @@ class VcfH5Test(unittest.TestCase):
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
             h5f.put_vars_from_vcf(vcf)
+            dset = h5f['/calls/GT']
             vcf_fhand.close()
 
     def test_put_vars_arrays_from_vcf(self):
@@ -73,7 +74,6 @@ class VcfH5Test(unittest.TestCase):
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
         snps = VariationsBcolz()
         snps.put_vars_from_vcf(vcf)
-        print(type(snps['/calls/GT']))
         assert snps['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
         vcf_fhand.close()
@@ -224,5 +224,5 @@ class VarMatsTests(unittest.TestCase):
         pass
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'VarMatsTests.test_iterate_chunks']
+    #import sys;sys.argv = ['', 'VarMatsTests.test_dset_id']
     unittest.main()

@@ -49,6 +49,7 @@ def _gt_data_to_list(mapper_function, sample_gt):
 
 
 class VCFParser():
+
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
                  max_field_lens=None, max_n_vars=None):
@@ -61,7 +62,6 @@ class VCFParser():
         self.metadata = None
         self.vcf_format = None
         self.ploidy = None
-
         # We remove the unwanted fields
         if ignored_fields is None:
             ignored_fields = []

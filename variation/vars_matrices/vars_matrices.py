@@ -6,6 +6,7 @@ import json
 import copy
 
 import numpy
+from numpy import dtype
 import h5py
 import bcolz
 from collections import OrderedDict
@@ -13,7 +14,7 @@ from collections import OrderedDict
 from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
-from numpy import dtype
+from variation.matrix.methods import append_matrix, is_dataset
 
 # Missing docstring
 # pylint: disable=C0111
@@ -239,15 +240,16 @@ def _prepare_filter_datasets(vcf, hdf5, vars_in_chunk):
 _MISSING_ITEMS = {}
 
 
-def _dset_metadata_from_matrix(mat, vars_in_chunk):
+def _dset_metadata_from_matrix(mat):
     shape = mat.shape
     dtype = mat.dtype
+
     if hasattr(mat, 'chunks'):
         chunks = mat.chunks
         maxshape = mat.maxshape
     else:
         chunks = list(shape)
-        chunks[0] = vars_in_chunk
+        chunks[0] = SNPS_PER_CHUNK
         chunks = tuple(chunks)
         maxshape = list(shape)
         maxshape[0] = None
@@ -275,29 +277,6 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
         dsets[path] = dset
 
     return dsets
-
-
-def _create_mats_from_chunks(var_mat, mats_chunks, vars_in_chunk):
-    matrices = {}
-    for path in mats_chunks.keys():
-        mat_chunk = mats_chunks[path]
-        shape = list(mat_chunk.shape)
-        shape[0] = 0    # No snps yet
-        result = _dset_metadata_from_matrix(mat_chunk, vars_in_chunk)
-        shape, dtype, chunks, maxshape, fillvalue = result
-        try:
-            dset = var_mat._create_matrix(path, shape=shape,
-                                          dtype=dtype,
-                                          chunks=chunks,
-                                          maxshape=maxshape,
-                                          fillvalue=fillvalue)
-            matrix = dset
-        except TypeError:
-            array = var_mat._create_matrix(path, shape=shape, dtype=dtype,
-                                           fillvalue=fillvalue)
-            matrix = array
-        matrices[path] = matrix
-    return matrices
 
 
 def _size_recur(size, item):
@@ -384,7 +363,6 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                 grp = 'FORMAT'
 
             matrix = hdf5[path]
-            #print(matrix)
             # resize the dataset to fit the new chunk
             size = matrix.shape
             new_size = list(size)
@@ -542,15 +520,43 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
 
 
 class _VariationMatrices():
+    def create_matrix_from_matrix(self, path, matrix):
+
+        result = _dset_metadata_from_matrix(matrix)
+        shape, dtype, chunks, maxshape, fillvalue = result
+        try:
+            dset = self._create_matrix(path, shape=shape,
+                                          dtype=dtype,
+                                          chunks=chunks,
+                                          maxshape=maxshape,
+                                          fillvalue=fillvalue)
+            new_matrix = dset
+        except TypeError:
+            array = self._create_matrix(path, shape=shape, dtype=dtype,
+                                    fillvalue=fillvalue)
+            new_matrix = array
+        if is_dataset(matrix):
+            array = matrix[:]
+        else:
+            array = matrix
+        new_matrix[:] = array
+        return new_matrix
+
+    def _create_mats_from_chunks(self, mats_chunks):
+        matrices = {}
+        for path in mats_chunks.keys():
+            mat_chunk = mats_chunks[path]
+            matrix = self.create_matrix_from_matrix(path, mat_chunk)
+            matrices[path] = matrix
+        return matrices
+
     def put_chunks(self, chunks, kept_fields=None, ignored_fields=None):
         matrices = None
-        current_snp_index = 0
-
         for mats_chunks in chunks:
             if matrices is None:
-                matrices = _create_mats_from_chunks(self, mats_chunks,
-                                                  self._vars_in_chunk)
+                matrices = self._create_mats_from_chunks(mats_chunks)
                 self._set_metadata(mats_chunks.metadata)
+                continue
             # check all chunks have the same number of snps
             nsnps = [mats_chunks[path].data.shape[0] for path in mats_chunks.keys()]
             num_snps = nsnps[0]
@@ -559,22 +565,7 @@ class _VariationMatrices():
             for path in mats_chunks.keys():
                 dset_chunk = mats_chunks[path]
                 dset = matrices[path]
-                start = current_snp_index
-                stop = current_snp_index + num_snps
-                # the dataset should fit the new data
-                size = dset.shape
-                new_size = list(size)
-                new_size[0] = stop
-                if isinstance(dset, bcolz.carray):
-                    dset.append(dset_chunk.data)
-                else:
-                    try:
-                        dset.resize(new_size, refcheck=False)
-                    except TypeError:
-                        dset.resize(new_size)
-                    dset[start:stop] = dset_chunk.data
-
-            current_snp_index += num_snps
+                append_matrix(dset, dset_chunk)
 
         if hasattr(self, 'flush'):
             self._h5file.flush()
@@ -671,7 +662,7 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK):
         self._fpath = fpath
-        if mode not in ('r', 'w'):
+        if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
             raise ValueError(msg)
         elif mode == 'w':
@@ -752,7 +743,6 @@ class VariationsH5(_VariationMatrices):
             if dtype is not None:
                 fillvalue = MISSING_VALUES[dtype]
                 kwargs['fillvalue'] = fillvalue
-
         args = list(args)
         args.insert(0, dset_name)
         dset = group.create_dataset(*args, **kwargs)

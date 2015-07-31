@@ -8,13 +8,14 @@
 import unittest
 from tempfile import NamedTemporaryFile
 from os.path import join
-
+from time import time
 import numpy
 
 from test_utils import TEST_DATA_DIR
-from variation.vars_matrices.vars_matrices import (VariationsH5, VariationsArrays,
+from variation.vars_matrices.vars_matrices import (VariationsH5,
                                                    select_dset_from_chunks)
-from variation.matrix.stats import row_value_counter_fact, counts_by_row
+from variation.matrix.stats import (row_value_counter_fact,
+                                    counts_by_row)
 from variation.iterutils import first
 
 
@@ -47,14 +48,24 @@ class RowValueCounterTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
         genotypes = chunk['/calls/GT']
-        counts = counts_by_row(genotypes)
         expected = [[3, 3, 0],
                     [5, 1, 0],
                     [0, 2, 4],
                     [6, 0, 0],
                     [2, 3, 1]]
-        numpy.all(expected == counts)
+        counts = counts_by_row(genotypes, missing_value=-1)
+        assert numpy.all(expected == counts)
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        chunks = hdf5.iterate_chunks(kept_fields=['/calls/GT'])
+        chunks = (chunk['/calls/GT'] for chunk in chunks)
+        from variation.matrix.methods import extend_matrix
+        matrix = first(chunks)
+        for _ in range(20):
+            extend_matrix(matrix, chunks)
+
+        counts = counts_by_row(matrix, missing_value=-1)
+
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'Test.test_vcf_parsing']
+    #import sys;sys.argv = ['', 'RowValueCounterTest.test_count_alleles']
     unittest.main()

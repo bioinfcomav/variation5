@@ -181,5 +181,5 @@ class FilterTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-#    import sys;sys.argv = ['', 'FilterTest.test_filter_missing_varArray']
+    #import sys;sys.argv = ['', 'FilterTest.test_filter_varh5']
     unittest.main()

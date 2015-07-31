@@ -14,7 +14,7 @@ from collections import OrderedDict
 from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
-from variation.matrix.methods import append_matrix, is_dataset
+from variation.matrix.methods import append_matrix, is_dataset, resize_matrix
 
 # Missing docstring
 # pylint: disable=C0111
@@ -368,13 +368,7 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
             new_size = list(size)
             new_size[0] = vars_in_chunk * (chunk_i + 1)
 
-            try:
-                matrix.resize(new_size, refcheck=False)
-            except TypeError:
-                try:
-                    matrix.resize(new_size)
-                except TypeError:
-                    matrix = matrix.reshape(new_size)
+            resize_matrix(matrix, new_size)
 
             field = posixpath.basename(path)
             field = _to_str(field)
@@ -506,10 +500,8 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
         new_size = list(size)
         snp_n = snp_i + chunk_i * vars_in_chunk
         new_size[0] = snp_n
-        try:
-            matrix.resize(new_size, refcheck=False)
-        except TypeError:
-            matrix.resize(new_size)
+
+        resize_matrix(matrix, new_size)
 
     metadata = _prepare_metadata(vcf.metadata)
     hdf5._set_metadata(metadata)

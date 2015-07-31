@@ -13,9 +13,20 @@ from variation import SNPS_PER_CHUNK
 AVAILABLE_MEM = 0.5 * 1024 * 1024
 
 
+def resize_matrix(matrix, new_size):
+    try:
+        matrix.resize(new_size, refcheck=False)
+    except TypeError:
+        try:
+            matrix.resize(new_size)
+        except TypeError:
+            matrix = matrix.reshape(new_size)
+
+
 def _extend_dset(dset, arrays):
     for array in arrays:
         append_matrix(dset, array)
+
 
 def is_dataset(array):
     if isinstance(array, h5py.Dataset):

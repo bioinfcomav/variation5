@@ -8,13 +8,12 @@ import copy
 import numpy
 from numpy import dtype
 import h5py
-import bcolz
 from collections import OrderedDict
 
 from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
-from variation.matrix.methods import append_matrix, is_dataset, resize_matrix
+from variation.matrix.methods import (append_matrix, is_dataset, resize_matrix)
 
 # Missing docstring
 # pylint: disable=C0111
@@ -559,6 +558,7 @@ class _VariationMatrices():
                 dset = matrices[path]
                 append_matrix(dset, dset_chunk)
 
+
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
@@ -793,82 +793,19 @@ class VariationsArrays(_VariationMatrices):
         return counts
 
     def _create_matrix(self, path, shape, dtype, fillvalue):
-        _hArrays = self._hArrays
+        arrays = self._hArrays
         array_name = posixpath.basename(path)
         if not array_name:
             msg = 'The path should include a array name: ' + path
             raise ValueError(msg)
 
         try:
-            _hArrays[path]
+            arrays[path]
             msg = 'The array already exists: ' + path
             raise ValueError(msg)
         except KeyError:
             pass
         array = numpy.full(shape, fillvalue, dtype)
-        _hArrays[path] = array
-        return array
-
-
-class VariationsBcolz(_VariationMatrices):
-    def __init__(self, vars_in_chunk=SNPS_PER_CHUNK):
-        self._vars_in_chunk = vars_in_chunk
-        self._bArrays = {}
-        self._metadata = {}
-
-    def put_vars_from_vcf(self, vcf):
-        return _put_vars_from_vcf(vcf, self, self._vars_in_chunk)
-
-    def __getitem__(self, path):
-        return self._bArrays[path]
-
-    def __setitem__(self, path, array):
-        'Entrando en setitem'
-        barray = bcolz.carray(array)
-        assert isinstance(barray, bcolz.carray)
-        if self.num_variations != 0:
-            assert self.num_variations == barray.shape[0]
-        if path in self._bArrays:
-            raise ValueError('This path was already in the var_array', path)
-        self._bArrays[path] = barray
-
-    def __delitem__(self,path):
-        if path in self._bArrays:
-            del self._bArrays[path]
-        else:
-            raise KeyError('The path is not in the variation_array', path)
-
-    def keys(self):
-        return self._bArrays.keys()
-
-    @property
-    def num_variations(self):
-        if not self._bArrays.keys():
-            return 0
-        else:
-            return first(self._bArrays.values()).shape[0]
-
-    @property
-    def allele_count(self):
-        gts = self['/calls/GT']
-        counts = counts_by_row(gts, missing_value=MISSING_VALUES[int])
-        return counts
-
-    def _create_matrix(self, path, shape, dtype, fillvalue):
-        _bArrays = self._bArrays
-        array_name = posixpath.basename(path)
-        if not array_name:
-            msg = 'The path should include a array name: ' + path
-            raise ValueError(msg)
-
-        try:
-            _bArrays[path]
-            msg = 'The array already exists: ' + path
-            raise ValueError(msg)
-        except KeyError:
-            pass
-        array_numpy = numpy.full(shape, fillvalue, dtype)
-        array = bcolz.carray(array_numpy)
-        _bArrays[path] = array
+        arrays[path] = array
         return array
 

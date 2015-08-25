@@ -14,8 +14,7 @@ from time import time
 
 from test.test_utils import TEST_DATA_DIR
 from variation.vars_matrices.vars_matrices import (VariationsArrays,
-                                                   VariationsH5,
-                                                   VariationsBcolz)
+                                                   VariationsH5)
 from variation.vcf import VCFParser
 
 import numpy
@@ -68,15 +67,6 @@ class VcfH5Test(unittest.TestCase):
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
         vcf_fhand.close()
 
-    def xtest_put_vars_barrays_from_vcf(self):
-        print('dentro de test bcolz')
-        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
-        snps = VariationsBcolz()
-        snps.put_vars_from_vcf(vcf)
-        assert snps['/calls/GT'].shape == (5, 3, 2)
-        assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
-        vcf_fhand.close()
 
     def test_create_hdf5_with_chunks(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
@@ -220,9 +210,7 @@ class VarMatsTests(unittest.TestCase):
                 assert '/variations/filter/q10' in out_snps.keys()
             fhand.close()
 
-    def test_expand_list(self):
-        pass
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'VarMatsTests.test_dset_id']
+    #import sys;sys.argv = ['', 'VarMatsTests.test_count_alleles']
     unittest.main()

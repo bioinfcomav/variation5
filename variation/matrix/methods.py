@@ -3,6 +3,7 @@ import sys
 import math
 
 import h5py
+import numpy
 
 from variation.iterutils import group_items, first
 from variation import SNPS_PER_CHUNK
@@ -14,18 +15,23 @@ AVAILABLE_MEM = 0.5 * 1024 * 1024
 
 
 def resize_matrix(matrix, new_size):
-    try:
+    if is_array(matrix):
         matrix.resize(new_size, refcheck=False)
-    except TypeError:
-        try:
-            matrix.resize(new_size)
-        except TypeError:
-            matrix = matrix.reshape(new_size)
+
+    elif is_dataset(matrix):
+        matrix.resize(new_size)
 
 
 def _extend_dset(dset, arrays):
     for array in arrays:
         append_matrix(dset, array)
+
+
+def is_array(array):
+    if isinstance(array, numpy.ndarray):
+        return True
+    else:
+        return False
 
 
 def is_dataset(array):
@@ -45,11 +51,7 @@ def append_matrix(matrix, matrix_to_append):
         array = matrix_to_append[:]
     else:
         array = matrix_to_append
-
-    try:
-        matrix.resize(new_size, refcheck=False)
-    except TypeError:
-        matrix.resize(new_size)
+    resize_matrix(matrix, new_size)
 
     matrix[start:stop] = array
 

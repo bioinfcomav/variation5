@@ -8,7 +8,6 @@
 import unittest
 from os.path import join
 from tempfile import NamedTemporaryFile
-import os
 import numpy
 
 from test_utils import TEST_DATA_DIR
@@ -19,8 +18,6 @@ from variation.vars_matrices.stats import (calc_mafs,
                                            plot_hist_mafs,
                                            plot_hist_missing_rate,
                                            _remove_nans)
-from variation.iterutils import first
-from variation.matrix.stats import counts_by_row
 
 class VarMatricesStatsTest(unittest.TestCase):
     def test_calc_mafs(self):

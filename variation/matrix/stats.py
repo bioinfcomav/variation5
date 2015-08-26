@@ -37,6 +37,14 @@ def _crow_value_counter(mat, value, ratio=False):
         result = result / num_items_per_row
     return result
 
+def row_counter(mat):
+    mat[numpy.isnan(mat)]=0
+    result = numpy.sum(mat, axis=1)
+    num_items_per_row = reduce(operator.mul, mat.shape[1:], 1)
+    result = result / num_items_per_row
+    return result
+
+
 
 def _concat_arrays(arrays):
     concat = None
@@ -92,5 +100,6 @@ def counts_by_row(mat, missing_value=None):
             allele_counts = counts
         else:
             allele_counts = numpy.column_stack((allele_counts, counts))
+
     return allele_counts
 

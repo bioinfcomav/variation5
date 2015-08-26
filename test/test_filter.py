@@ -19,11 +19,16 @@ from variation.vars_matrices.filters import (_filter_all,
                                              _filter_none,
                                              mafs_filter_fact,
                                              missing_rate_filter_fact,
-                                             min_called_gts_filter_fact)
+                                             min_called_gts_filter_fact,
+                                             quality_filter_genotypes_fact,
+                                             quality_filter_snps_fact,
+                                             monomorfic_filter,
+                                             billelic_filter,
+                                             disorderly_allelic,
+                                             heterozygosity_filter,
+                                             quality_filter_snps_dp)
 from variation.iterutils import first
 #from variation.utils.concat import concat_chunks_into_array
-
-
 
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                         'test_data'))
@@ -128,7 +133,6 @@ class FilterTest(unittest.TestCase):
 
     def test_filter_missing_varArray(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        snps = VariationsArrays()
         #Fichero de entrada esta mal, cogeremos solo algunos
         kept_fields = ['/calls/GT','/variations/alt','/variations/info/AF']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
@@ -153,9 +157,9 @@ class FilterTest(unittest.TestCase):
         assert first(flt_chunk.values()).shape[0] == 0
 
     #TODO test for maf filter
+    
     def test_filter_mafs_varArray(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        snps = VariationsArrays()
         #Fichero de entrada esta mal, cogeremos solo algunos
         kept_fields = ['/calls/GT','/variations/alt','/variations/info/AF']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
@@ -180,6 +184,114 @@ class FilterTest(unittest.TestCase):
         assert first(flt_chunk.values()).shape[0] == 0
 
 
+    def test_filter_quality_genotype(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/calls/GQ']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = quality_filter_genotypes_fact(min_=0.6)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 196
+
+        flt_chunk = quality_filter_genotypes_fact()(chunk)
+        assert first(flt_chunk.values()).shape[0] == 200
+
+        flt_chunk = quality_filter_genotypes_fact(max_=0.6)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 4
+
+        flt_chunk = quality_filter_genotypes_fact(min_=0.6, max_=0.9)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 1
+
+        flt_chunk = quality_filter_genotypes_fact(min_=200)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 0
+
+        flt_chunk = quality_filter_genotypes_fact(max_=0)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 0
+
+
+    def test_filter_quality_snps(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/variations/qual']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = quality_filter_snps_fact(min_=530)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 126
+
+        flt_chunk = quality_filter_snps_fact()(chunk)
+        assert first(flt_chunk.values()).shape[0] == 200
+
+        flt_chunk = quality_filter_snps_fact(max_=1000)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 92
+
+        flt_chunk = quality_filter_snps_fact(min_=530, max_=1000)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 18
+
+        flt_chunk = quality_filter_snps_fact(min_=586325202)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 13
+
+        flt_chunk = quality_filter_snps_fact(max_= -1)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 0
+
+
+    def test_filter_quality_dp(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/calls/DP']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = quality_filter_snps_dp(min_=0.6)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 120
+
+        flt_chunk = quality_filter_snps_dp()(chunk)
+        assert first(flt_chunk.values()).shape[0] == 200
+
+        flt_chunk = quality_filter_snps_dp(max_=0.6)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 80
+
+        flt_chunk = quality_filter_snps_dp(min_=0.6, max_=0.9)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 12
+
+        flt_chunk = quality_filter_snps_dp(min_=200)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 0
+
+        flt_chunk = quality_filter_snps_dp(max_=-1)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 0
+
+
+    def test_filter_monomorfic(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/calls/GT']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = monomorfic_filter(chunk)
+        assert flt_chunk == 47
+
+
+    def test_filter_billelic(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/calls/GT']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = billelic_filter(chunk)
+        assert flt_chunk == 153
+
+
+    def test_filter_disorderly_allelic(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/calls/GT']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = disorderly_allelic(chunk)
+        assert flt_chunk == 153
+
+
+    def test_filter_heterozygosity(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/calls/GT']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = heterozygosity_filter(chunk)
+        assert flt_chunk == 153
+
+
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'FilterTest.test_filter_varh5']
+    #import sys;sys.argv = ['', 'FilterTest.test_filter_quality_dp']
     unittest.main()

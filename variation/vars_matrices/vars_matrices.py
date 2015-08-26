@@ -567,7 +567,6 @@ class _VariationMatrices():
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same time'
             raise ValueError(msg)
-
         # We read the hdf5 file to keep the datasets metadata
 
         # We remove the unwanted fields

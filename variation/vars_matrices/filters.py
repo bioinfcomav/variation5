@@ -4,7 +4,10 @@ from _functools import partial
 from variation.iterutils import first
 from variation.vars_matrices.stats import (calc_mafs,
                                            missing_gt_rate,
-                                           called_gt_counts)
+                                           called_gt_counts,
+                                           counts_by_row,
+                                           calc_quality_genotypes,
+                                           calc_quality_rd)
 from variation.vars_matrices import VariationsArrays
 
 
@@ -107,3 +110,84 @@ def min_called_gts_filter_fact(min_=None):
 def _calc_min(array, min_):
     selected_rows = None if min_ is None else array >= min_
     return selected_rows
+
+
+def _quality_filter_g(chunk, min_=None, max_=None):
+    genotypes_qual = calc_quality_genotypes(chunk)
+    selector_max = None if max_ is None else genotypes_qual <= max_
+    selector_min = None if min_ is None else genotypes_qual >= min_
+
+    if selector_max is None and selector_min is not None:
+        selected_rows = selector_min
+    elif selector_max is not None and selector_min is None:
+        selected_rows = selector_max
+    elif selector_max is not None and selector_min is not None:
+        selected_rows = selector_min & selector_max
+    else:
+        selected_rows = _filter_no_row(chunk)
+    return _filter_chunk2(chunk, selected_rows)
+
+
+def quality_filter_genotypes_fact(min_=None, max_=None):
+    return partial(_quality_filter_g, min_=min_, max_=max_)
+
+
+def _quality_filter_snps(chunk, min_=None, max_=None):
+    snps_qual = chunk['/variations/qual']
+    selector_max = None if max_ is None else snps_qual <= max_
+    selector_min = None if min_ is None else snps_qual >= min_
+
+    if selector_max is None and selector_min is not None:
+        selected_rows = selector_min
+    elif selector_max is not None and selector_min is None:
+        selected_rows = selector_max
+    elif selector_max is not None and selector_min is not None:
+        selected_rows = selector_min & selector_max
+    else:
+        selected_rows = _filter_no_row(chunk)
+    return _filter_chunk2(chunk, selected_rows)
+
+
+def quality_filter_snps_fact(min_=None, max_=None):
+    return partial(_quality_filter_snps, min_=min_, max_=max_)
+
+
+def _quality_filter_dp(chunk, min_=None, max_=None):
+    snps_qual = calc_quality_rd(chunk)
+    selector_max = None if max_ is None else snps_qual <= max_
+    selector_min = None if min_ is None else snps_qual >= min_
+
+    if selector_max is None and selector_min is not None:
+        selected_rows = selector_min
+    elif selector_max is not None and selector_min is None:
+        selected_rows = selector_max
+    elif selector_max is not None and selector_min is not None:
+        selected_rows = selector_min & selector_max
+    else:
+        selected_rows = _filter_no_row(chunk)
+    return _filter_chunk2(chunk, selected_rows)
+
+
+def quality_filter_snps_dp(min_=None, max_=None):
+    return partial(_quality_filter_dp, min_=min_, max_=max_)
+
+def monomorfic_filter(chunk):
+    data = chunk["/calls/GT"]
+    mafs = counts_by_row(data)
+    array = (mafs == 0)
+    result = numpy.logical_xor.reduce(array,1)
+    return numpy.sum(result == True)
+
+def billelic_filter(chunk):
+    return _no_monomorfic_filter(chunk)
+
+def disorderly_allelic(chunk):
+    return _no_monomorfic_filter(chunk)
+
+def heterozygosity_filter(chunk):
+    return _no_monomorfic_filter(chunk)
+
+def _no_monomorfic_filter(chunk):
+    dim = chunk["/calls/GT"].shape[0]
+    return dim-monomorfic_filter(chunk)
+

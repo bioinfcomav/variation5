@@ -3,7 +3,8 @@ import numpy
 
 from variation import MISSING_VALUES
 from variation.plot import plot_histogram
-from variation.matrix.stats import counts_by_row, row_value_counter_fact
+from variation.matrix.stats import counts_by_row, row_value_counter_fact,\
+    row_counter
 from functools import reduce
 import operator
 
@@ -13,9 +14,32 @@ def plot_hist_missing_rate(var_mat, fhand=None, no_interactive_win=False):
     return plot_histogram(missing, fhand=fhand,
                           no_interactive_win=no_interactive_win)
 
+def plot_hist_quality_snps(var_mat, fhand=None, no_interactive_win=False):
+    quality = var_mat['/variations/qual']
+    return _plot_hist_quality(quality, fhand=fhand,
+                       no_interactive_win=no_interactive_win)
+
+def plot_hist_quality_dp(var_mat, fhand=None, no_interactive_win=False):
+    quality = calc_quality_rd(var_mat)
+    return _plot_hist_quality(quality, fhand=fhand,
+                       no_interactive_win=no_interactive_win)
+
+def plot_hist_quality_genotypes(var_mat, fhand=None, no_interactive_win=False):
+    quality = calc_quality_genotypes(var_mat)
+    quality = _remove_nans(quality)
+    return _plot_hist_quality(quality, fhand=fhand,
+                       no_interactive_win=no_interactive_win)
+
+def _plot_hist_quality(quality, fhand=None, no_interactive_win=None ):
+    quality = _remove_infs(quality)
+    return plot_histogram(quality, fhand=fhand,
+                          no_interactive_win=no_interactive_win)
 
 def _remove_nans(mat):
     return mat[~numpy.isnan(mat)]
+
+def _remove_infs(mat):
+    return mat[~numpy.isinf(mat)]
 
 
 def plot_hist_mafs(var_mat, fhand=None, no_interactive_win=False):
@@ -57,3 +81,19 @@ def _missing_gt_counts(chunk):
 def called_gt_counts(chunk):
     genotypes = chunk['/calls/GT']
     return _calc_items_in_row(genotypes) - _missing_gt_counts(chunk)
+
+
+def calc_quality_rd(chunk):
+    genotypes = chunk['/calls/DP']
+    return _calc_quality(genotypes)
+
+def calc_quality_genotypes(chunk):
+    genotypes = chunk['/calls/GQ']
+    array_genotypes = genotypes[()]
+    return _calc_quality(array_genotypes)
+
+def _calc_quality(genotypes):
+    genotypes = row_counter(genotypes)
+    return genotypes
+
+

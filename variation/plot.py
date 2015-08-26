@@ -25,7 +25,7 @@ def _print_figure(canvas, fhand, no_interactive_win):
     canvas.print_figure(fhand)
 
 
-def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None,
+def plot_histogram(mat, bins=10, range_=None, fhand=None, axes=None,
                    no_interactive_win=False):
 
     axes, canvas = _get_mplot_axes(axes, fhand)

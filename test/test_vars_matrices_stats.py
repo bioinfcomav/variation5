@@ -20,7 +20,8 @@ from variation.vars_matrices.stats import (calc_mafs,
                                            plot_hist_missing_rate,
                                            _remove_nans,
                                            plot_hist_quality_snps,
-                                           plot_hist_quality_genotypes)
+                                           plot_hist_quality_genotypes,
+                                           plot_hist_quality_dp)
 
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                         'test_data'))
@@ -87,18 +88,27 @@ class VarMatricesStatsTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         result = plot_hist_quality_snps(hdf5, no_interactive_win=True)
         snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/variations/qual']))
-        result2 = plot_hist_quality_snps(hdf5, no_interactive_win=True)
+        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/variations/qual',
+                                                         '/calls/GT']))
+        result2 = plot_hist_quality_snps(snps, no_interactive_win=True)
         assert numpy.all(numpy.allclose(result[1], result2[1]))
 
     def test_plot_quality_genotypes(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result = plot_hist_quality_genotypes(hdf5, no_interactive_win=True)
+        result = plot_hist_quality_genotypes(hdf5, no_interactive_win=False)
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GQ']))
-        result2 = plot_hist_quality_genotypes(hdf5, no_interactive_win=True)
+        result2 = plot_hist_quality_genotypes(snps, no_interactive_win=False)
+        assert numpy.all(numpy.allclose(result[1], result2[1]))
+
+    def test_plot_quality_read_depth(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        result = plot_hist_quality_dp(hdf5, no_interactive_win=False)
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/DP']))
+        result2 = plot_hist_quality_dp(snps, no_interactive_win=False)
         assert numpy.all(numpy.allclose(result[1], result2[1]))
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'VarMatricesStatsTest.test_plot_quality_genotypes']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_plot_quality_genotypes']
     unittest.main()

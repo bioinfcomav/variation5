@@ -1,15 +1,12 @@
 import numpy
 from _functools import partial
 
-from variation.iterutils import first
 from variation.vars_matrices.stats import (calc_mafs,
                                            missing_gt_rate,
                                            called_gt_counts,
-                                           counts_by_row,
-                                           calc_quality_genotypes,
-                                           calc_quality_rd)
+                                           counts_by_row)
 from variation.vars_matrices import VariationsArrays
-
+from variation import MISSING_VALUES
 
 def _filter_dsets_chunks(selector_function, dsets_chunks):
     for dsets_chunk in dsets_chunks:
@@ -51,6 +48,17 @@ def _filter_chunk2(chunk, selected_rows):
     flt_chunk.metadata = chunk.metadata
     return flt_chunk
 
+
+def _filter_quality_GT(chunk, selected_rows):
+    matrix = chunk['calls/GT']
+    try:
+        array = matrix.data
+    except:
+        array = matrix
+    flt_data = numpy.extract(selected_rows,array)
+    print(flt_data.shape)
+    chunk['calls/GT'].data = flt_data
+    print(len(chunk['calls/GT']))
 
 def _filter_all(chunk):
     flt_chunk = _filter_chunk(chunk, ['/calls/GT'], _filter_all_rows)
@@ -112,24 +120,20 @@ def _calc_min(array, min_):
     return selected_rows
 
 
-def _quality_filter_g(chunk, min_=None, max_=None):
-    genotypes_qual = calc_quality_genotypes(chunk)
-    selector_max = None if max_ is None else genotypes_qual <= max_
-    selector_min = None if min_ is None else genotypes_qual >= min_
-
-    if selector_max is None and selector_min is not None:
-        selected_rows = selector_min
-    elif selector_max is not None and selector_min is None:
-        selected_rows = selector_max
-    elif selector_max is not None and selector_min is not None:
-        selected_rows = selector_min & selector_max
-    else:
-        selected_rows = _filter_no_row(chunk)
-    return _filter_chunk2(chunk, selected_rows)
+def _filter_gt(chunk, min_, path):
+    genotypes_qual = chunk[path]
+    gts = chunk['/calls/GT'].copy()
+    if min_ is not None:
+        gts[genotypes_qual < min_] = MISSING_VALUES[int]
+    return gts
 
 
-def quality_filter_genotypes_fact(min_=None, max_=None):
-    return partial(_quality_filter_g, min_=min_, max_=max_)
+def _quality_filter_gt(chunk, min_=None):
+    return _filter_gt(chunk, min_, '/calls/GQ')
+
+
+def quality_filter_genotypes_fact(min_=None):
+    return partial(_quality_filter_gt, min_=min_)
 
 
 def _quality_filter_snps(chunk, min_=None, max_=None):
@@ -152,42 +156,50 @@ def quality_filter_snps_fact(min_=None, max_=None):
     return partial(_quality_filter_snps, min_=min_, max_=max_)
 
 
-def _quality_filter_dp(chunk, min_=None, max_=None):
-    snps_qual = calc_quality_rd(chunk)
-    selector_max = None if max_ is None else snps_qual <= max_
-    selector_min = None if min_ is None else snps_qual >= min_
+def _filter_gts_by_dp(chunk, min_=None):
+    return _filter_gt(chunk, min_, '/calls/DP')
 
-    if selector_max is None and selector_min is not None:
-        selected_rows = selector_min
-    elif selector_max is not None and selector_min is None:
-        selected_rows = selector_max
-    elif selector_max is not None and selector_min is not None:
-        selected_rows = selector_min & selector_max
+
+def filter_gts_by_dp_fact(min_=None):
+    return partial(_filter_gts_by_dp, min_=min_)
+
+
+def filter_monomorphic_snps_fact(min_maf=None):
+    return partial(_filter_mafs, min_=min_maf)
+
+
+
+def _biallelic_filter(chunk, keep_monomorphic):
+    gts = chunk['/calls/GT']
+    shape = gts.shape
+
+    # we count how many different alleles are per row
+    # we do it adding a complex part to each number. The complex part is
+    # related with the row. Then we use unique
+    weight = 1j * numpy.arange(0, shape[0])
+    weight = numpy.repeat(weight, shape[1] * shape[2]).reshape(shape)
+    b = gts + weight
+    _, ind = numpy.unique(b, return_index=True)
+    b = numpy.zeros_like(gts)
+    c = numpy.ones_like(gts)
+    numpy.put(b, ind, c.flat[ind])
+    c = numpy.sum(b, axis=(2,1))
+
+    # we remove the missing values from the count
+    rows_with_missing = numpy.any(gts == -1, axis=(1,2))
+    c -= rows_with_missing
+
+    if keep_monomorphic:
+        selected_rows = (c <= 2)
     else:
-        selected_rows = _filter_no_row(chunk)
+        selected_rows = (c == 2)
+
     return _filter_chunk2(chunk, selected_rows)
 
 
-def quality_filter_snps_dp(min_=None, max_=None):
-    return partial(_quality_filter_dp, min_=min_, max_=max_)
+def biallelic_and_polymorphic_filter(chunk):
+    return _biallelic_filter(chunk, keep_monomorphic=False)
 
-def monomorfic_filter(chunk):
-    data = chunk["/calls/GT"]
-    mafs = counts_by_row(data)
-    array = (mafs == 0)
-    result = numpy.logical_xor.reduce(array,1)
-    return numpy.sum(result == True)
 
-def billelic_filter(chunk):
-    return _no_monomorfic_filter(chunk)
-
-def disorderly_allelic(chunk):
-    return _no_monomorfic_filter(chunk)
-
-def heterozygosity_filter(chunk):
-    return _no_monomorfic_filter(chunk)
-
-def _no_monomorfic_filter(chunk):
-    dim = chunk["/calls/GT"].shape[0]
-    return dim-monomorfic_filter(chunk)
-
+def biallelic_filter(chunk):
+    return _biallelic_filter(chunk, keep_monomorphic=True)

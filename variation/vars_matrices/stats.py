@@ -3,8 +3,7 @@ import numpy
 
 from variation import MISSING_VALUES
 from variation.plot import plot_histogram
-from variation.matrix.stats import counts_by_row, row_value_counter_fact,\
-    row_counter
+from variation.matrix.stats import counts_by_row, row_value_counter_fact
 from functools import reduce
 import operator
 

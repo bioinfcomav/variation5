@@ -95,20 +95,20 @@ class VarMatricesStatsTest(unittest.TestCase):
 
     def test_plot_quality_genotypes(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result = plot_hist_quality_genotypes(hdf5, no_interactive_win=False)
+        result = plot_hist_quality_genotypes(hdf5, no_interactive_win=True)
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GQ']))
-        result2 = plot_hist_quality_genotypes(snps, no_interactive_win=False)
+        result2 = plot_hist_quality_genotypes(snps, no_interactive_win=True)
         assert numpy.all(numpy.allclose(result[1], result2[1]))
 
     def test_plot_quality_read_depth(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result = plot_hist_quality_dp(hdf5, no_interactive_win=False)
+        result = plot_hist_quality_dp(hdf5, no_interactive_win=True)
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/DP']))
-        result2 = plot_hist_quality_dp(snps, no_interactive_win=False)
+        result2 = plot_hist_quality_dp(snps, no_interactive_win=True)
         assert numpy.all(numpy.allclose(result[1], result2[1]))
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_plot_quality_genotypes']
+    #import sys;sys.argv = ['', 'VarMatricesStatsTest.test_plot_quality_genotypes']
     unittest.main()

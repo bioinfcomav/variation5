@@ -6,31 +6,12 @@ from variation.plot import plot_histogram
 from variation.matrix.stats import counts_by_row, row_value_counter_fact
 from functools import reduce
 import operator
+from variation.matrix.methods import is_array
 
-
-def plot_hist_missing_rate(var_mat, fhand=None, no_interactive_win=False):
-    missing = missing_gt_rate(var_mat)
-    return plot_histogram(missing, fhand=fhand,
-                          no_interactive_win=no_interactive_win)
-
-def plot_hist_quality_snps(var_mat, fhand=None, no_interactive_win=False):
-    return _plot_hist_quality(var_mat['/variations/qual'], fhand=fhand,
-                              no_interactive_win=no_interactive_win)
-
-def plot_hist_quality_dp(var_mat, fhand=None, no_interactive_win=False):
-    return _plot_hist_quality(var_mat['/calls/DP'], fhand=fhand,
-                              no_interactive_win=no_interactive_win)
-
-def plot_hist_quality_genotypes(var_mat, fhand=None, no_interactive_win=False):
-    return _plot_hist_quality(var_mat['/calls/GQ'], fhand=fhand,no_interactive_win=no_interactive_win)
-
-def _plot_hist_quality(array, fhand=None, no_interactive_win=None ):
-    array = _remove_infs(array)
-    array = _remove_nans(array)
-    return plot_histogram(array, fhand=fhand,no_interactive_win=no_interactive_win)
 
 def _remove_nans(mat):
     return mat[~numpy.isnan(mat)]
+
 
 def _remove_infs(mat):
     return mat[~numpy.isinf(mat)]
@@ -77,5 +58,21 @@ def called_gt_counts(chunk):
     return _calc_items_in_row(genotypes) - _missing_gt_counts(chunk)
 
 
+def calc_obs_het(chunk):
+    if is_array(chunk):
+        het = calc_obs_het_prueba(chunk)
+    else:
+        gts = chunk ['/calls/GT'][:]
+        is_het = numpy.logical_xor.reduce(gts, axis=2)
+        rows_with_missing = numpy.any(gts == -1, axis=2)
+        is_het[rows_with_missing==True] = False
+        het = numpy.sum(is_het, axis=1)/is_het.shape[1]
+    return het
 
 
+def calc_obs_het_prueba(mat):
+    is_het = numpy.logical_xor.reduce(mat, axis=2)
+    rows_with_missing = numpy.any(mat == -1, axis=2)
+    is_het[rows_with_missing==True] = False
+    het = numpy.sum(is_het, axis=1)/is_het.shape[1]
+    return het

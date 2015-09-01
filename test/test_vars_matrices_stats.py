@@ -16,12 +16,9 @@ from variation.vars_matrices import VariationsH5, VariationsArrays
 from variation.vars_matrices.stats import (calc_mafs,
                                            missing_gt_rate,
                                            called_gt_counts,
-                                           plot_hist_mafs,
-                                           plot_hist_missing_rate,
                                            _remove_nans,
-                                           plot_hist_quality_snps,
-                                           plot_hist_quality_genotypes,
-                                           plot_hist_quality_dp)
+                                           calc_obs_het)
+from variation.matrix.methods import calc_min_max
 
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                         'test_data'))
@@ -40,7 +37,6 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert numpy.all(mafs >= 0.5)
         assert numpy.all(mafs <= 1)
         assert mafs.shape == (936,)
-
 
     def test_calc_missing_gt_rates(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -62,53 +58,20 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert counts.shape == (943,)
         assert numpy.all(counts == counts2)
 
-    def test_plot_histogram_mafs(self):
+    def test_calc_obs_het(self):
+        mat = numpy.array([[[0, 0], [1, -1], [0, 1], [-1, -1]]])
+        is_het = calc_obs_het(mat)
+        assert is_het == 0.25
+
+    def test_calc_min_max(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result1 = plot_hist_mafs(hdf5, no_interactive_win=True)
         snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
-        result2 = plot_hist_mafs(snps, no_interactive_win=True)
-        assert numpy.all(numpy.allclose(result1[1], result2[1]))
-
-        fhand = NamedTemporaryFile(suffix='.png')
-        plot_hist_mafs(snps, fhand=fhand, no_interactive_win=True)
-
-    def test_plot_histogram_missing(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result1 = plot_hist_missing_rate(hdf5, no_interactive_win=True)
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
-        result2 = plot_hist_missing_rate(snps, no_interactive_win=True)
-        assert numpy.all(numpy.allclose(result1[1], result2[1]))
-
-        fhand = NamedTemporaryFile(suffix='.png')
-        plot_hist_missing_rate(snps, fhand=fhand, no_interactive_win=True)
-
-    def test_plot_quality_snps(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result = plot_hist_quality_snps(hdf5, no_interactive_win=True)
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/variations/qual',
-                                                         '/calls/GT']))
-        result2 = plot_hist_quality_snps(snps, no_interactive_win=True)
-        assert numpy.all(numpy.allclose(result[1], result2[1]))
-
-    def test_plot_quality_genotypes(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result = plot_hist_quality_genotypes(hdf5, no_interactive_win=True)
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GQ']))
-        result2 = plot_hist_quality_genotypes(snps, no_interactive_win=True)
-        assert numpy.all(numpy.allclose(result[1], result2[1]))
-
-    def test_plot_quality_read_depth(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        result = plot_hist_quality_dp(hdf5, no_interactive_win=True)
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/DP']))
-        result2 = plot_hist_quality_dp(snps, no_interactive_win=True)
-        assert numpy.all(numpy.allclose(result[1], result2[1]))
+        snps.put_chunks(hdf5.iterate_chunks())
+        min_array, max_array = calc_min_max(snps['/calls/GT'])
+        min_h5, max_h5 = calc_min_max(hdf5['/calls/GT'])
+        assert min_array == min_h5
+        assert max_array == max_h5
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'VarMatricesStatsTest.test_plot_quality_genotypes']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_min_max']
     unittest.main()

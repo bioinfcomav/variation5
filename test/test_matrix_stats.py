@@ -13,10 +13,12 @@ import numpy
 
 from test_utils import TEST_DATA_DIR
 from variation.vars_matrices.vars_matrices import (VariationsH5,
-                                                   select_dset_from_chunks)
+                                                   select_dset_from_chunks,
+                                                   VariationsArrays)
 from variation.matrix.stats import (row_value_counter_fact,
                                     counts_by_row)
 from variation.iterutils import first
+from matrix.stats import histogram
 
 
 class RowValueCounterTest(unittest.TestCase):
@@ -64,6 +66,16 @@ class RowValueCounterTest(unittest.TestCase):
             extend_matrix(matrix, chunks)
 
         counts = counts_by_row(matrix, missing_value=-1)
+
+    def test_low_mem_histogram(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        chunk = first(hdf5.iterate_chunks())
+        genotypes = chunk['/calls/GT']
+        array = VariationsArrays()
+        array.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
+        gt_array = array['/calls/GT']
+        assert histogram(gt_array, 10, True) == histogram(genotypes,10, True)
+        assert histogram(gt_array, 10, True) == histogram(genotypes,10, False)
 
 
 if __name__ == "__main__":

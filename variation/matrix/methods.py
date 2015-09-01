@@ -119,3 +119,19 @@ def iterate_matrix_chunks(matrix):
             stop = nsnps
         yield matrix[start:stop]
 
+
+def calc_min_max(matrix):
+    if is_dataset(matrix):
+        max_ = None
+        min_ = None
+        for chunk in iterate_matrix_chunks(matrix):
+            chunk_max = numpy.max(chunk)
+            chunk_min = numpy.min(chunk)
+            if max_ is None or max_ < chunk_max:
+                max_ = chunk_max
+            if min_ is None or min_ > chunk_min:
+                min_ = chunk_min
+    else:
+        max_ = numpy.max(matrix)
+        min_ = numpy.min(matrix)
+    return min_, max_

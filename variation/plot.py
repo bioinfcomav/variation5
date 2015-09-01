@@ -33,3 +33,10 @@ def plot_histogram(mat, bins=10, range_=None, fhand=None, axes=None,
     result = axes.hist(mat, bins=bins, range=range_)
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return result
+
+def plot_hist(hist, bins):
+    width = 0.7 * (bins[1] - bins[0])
+    center = (bins[:-1] + bins[1:]) / 2
+    plt.bar(center, hist, align='center', width=width)
+    plt.show()
+

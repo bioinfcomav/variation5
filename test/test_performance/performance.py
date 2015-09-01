@@ -19,8 +19,10 @@ from variation.vars_matrices.filters import (mafs_filter_fact,
 
 from variation.vars_matrices.stats import (calc_mafs,
                                            missing_gt_rate)
+from variation.matrix.stats import histogram, _low_mem_histogram
 
 from variation.vcf import VCFParser
+from variation.matrix.methods import calc_min_max
 
 
 def from_vcf_to_hdf5():
@@ -77,6 +79,27 @@ def stats_mafs_from_hdf5():
     calc_mafs(var_mat)
 
 
+def histograma_from_hdf5():
+    fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
+    var_mat = VariationsH5(fpath, mode='r')
+    histogram(var_mat['/calls/GT'], 10, False)
+
+
+def histograma_low_from_hdf5():
+    fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
+    var_mat = VariationsH5(fpath, mode='r')
+    histogram(var_mat['/calls/GT'], 10, True)
+
+def histograma_min_max_prueba():
+    fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
+    var_mat = VariationsH5(fpath, mode='r')
+    min_,max_ = calc_min_max(var_mat['/calls/GT'])
+
+def histograma_prueba():
+    fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
+    var_mat = VariationsH5(fpath, mode='r')
+    _low_mem_histogram(var_mat['/calls/GT'], 30, -1, 3)
+
 def _prepare_smt_for_timeit(funct):
     per_path = (join(dirname(inspect.getfile(inspect.currentframe()))))
     var_package_path = abspath(join(per_path, '..', '..'))
@@ -101,6 +124,14 @@ def check_performance():
     print(timeit(smt, number=50))
     smt = _prepare_smt_for_timeit('stats_missing_rate_from_hdf5')
     print(timeit(smt, number=50))
+    smt = _prepare_smt_for_timeit('histograma_from_hdf5')
+    print(timeit(smt, number=1))
+    smt = _prepare_smt_for_timeit('histograma_low_from_hdf5')
+    print( timeit(smt, number=1))
+#     smt = _prepare_smt_for_timeit('histograma_min_max_prueba')
+#     print('Min_max', timeit(smt, number=50))
+#     smt = _prepare_smt_for_timeit('histograma_prueba')
+#     print('Histogram', timeit(smt, number=50))
 
 if __name__ == "__main__":
     check_performance()

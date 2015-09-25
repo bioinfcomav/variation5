@@ -47,12 +47,26 @@ def _gt_data_to_list(mapper_function, sample_gt):
     sample_gt = [mapper_function(item) for item in sample_gt]
     return sample_gt
 
+def _detect_fields_in_vcf(metadata, fields):
+    check_fields = []
+    for field in fields:
+        type_ = field.decode('utf-8').split('/')[1].upper()
+        check_field = field.decode('utf-8').split('/')[2]
+        if type_ == 'CALLS':
+            check_field = check_field.encode('utf-8')
+        if check_field not in list(metadata[type_]):
+            msg = 'Field does not exist in vcf '+ field.decode('utf-8')
+            raise ValueError(msg)
+        check_fields.append(check_field)
+    return check_fields
+
 
 class VCFParser():
 
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
-                 max_field_lens=None, max_n_vars=None):
+                 max_field_lens=None, max_n_vars=None,
+                 ignore_alt=False):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
@@ -71,6 +85,7 @@ class VCFParser():
         kept_fields = [field.encode('utf-8') for field in kept_fields]
         self.ignored_fields = ignored_fields
         self.kept_fields = kept_fields
+        self.ignore_alt = ignore_alt
         self._determine_ploidy()
 
         self._empty_gt = [MISSING_VALUES[int]] * self.ploidy
@@ -80,7 +95,7 @@ class VCFParser():
             user_max_field_lens = {}
         else:
             user_max_field_lens = max_field_lens
-        max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'FORMAT': {}}
+        max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
         max_field_lens.update(user_max_field_lens)
         self.max_field_lens = max_field_lens
 
@@ -97,7 +112,7 @@ class VCFParser():
 
     def _init_max_field_lens(self):
         meta = self.metadata
-        for section in ('INFO', 'FORMAT'):
+        for section in ('INFO', 'CALLS'):
             for field, meta_field in meta[section].items():
                 if isinstance(meta_field['Number'], int):
                     continue
@@ -141,7 +156,7 @@ class VCFParser():
                 self.samples = line.strip().split(b'\t')[9:]
                 break
             header_lines.append(line)
-        metadata = {'FORMAT': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
+        metadata = {'CALLS': {}, 'FILTER': {}, 'INFO': {}, 'OTHER': {}}
         metadata['VARIATIONS'] = {'chrom': {'dtype': 'str'},
                                   'pos': {'dtype': 'int32'},
                                   'id': {'dtype': 'str'},
@@ -153,7 +168,7 @@ class VCFParser():
                 line = line[2:]
                 meta = {}
                 if line.startswith(b'FORMAT='):
-                    meta_kind = 'FORMAT'
+                    meta_kind = 'CALLS'
                     line = line[8:-2]
                 elif line.startswith(b'FILTER='):
                     meta_kind = 'FILTER'
@@ -202,6 +217,10 @@ class VCFParser():
                 meta_kind = 'OTHER'
             id_ = id_.encode('utf-8')
             metadata[meta_kind][id_] = meta
+
+        self.kept_fields = _detect_fields_in_vcf(metadata, self.kept_fields)
+        self.ignored_fields = _detect_fields_in_vcf(metadata, self.ignored_fields)
+
         self.metadata = metadata
 
     def _parse_info(self, info):
@@ -249,7 +268,7 @@ class VCFParser():
         except KeyError:
             pass
 
-        meta = self.metadata['FORMAT']
+        meta = self.metadata['CALLS']
         format_ = []
         for fmt in fmt.split(b':'):
             try:
@@ -313,16 +332,16 @@ class VCFParser():
             meta = fmt[3]
             if not isinstance(meta['Number'], int):
                 max_len = max([0 if data is None else len(data) for data in gt_data])
-                if self.max_field_lens['FORMAT'][fmt[0]] < max_len:
-                    self.max_field_lens['FORMAT'][fmt[0]] = max_len
+                if self.max_field_lens['CALLS'][fmt[0]] < max_len:
+                    self.max_field_lens['CALLS'][fmt[0]] = max_len
                 if 'str' in meta['dtype'] and fmt[0] != b'GT':
                     # if your file has variable length str fields you
                     # should check and fix the following part of the code
                     raise NotImplementedError('Fixme')
                     max_len = max([len(val) for smpl_data in gt_data for val in smpl_data])
                     max_str = max([len(val) for val_ in val])
-                    if self.max_field_str_lens['FORMAT'][key] < max_str:
-                        self.max_field_str_lens['FORMAT'][key] = max_str
+                    if self.max_field_str_lens['CALLS'][key] < max_str:
+                        self.max_field_str_lens['CALLS'][key] = max_str
 
             parsed_gts.append((fmt[0], gt_data))
 
@@ -374,5 +393,4 @@ class VCFParser():
             info = self._parse_info(info)
             gts = self._parse_gts(fmt, gts)
             yield chrom, pos, id_, ref, alt, qual, flt, info, gts
-
 

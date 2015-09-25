@@ -14,8 +14,8 @@ from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.vars_matrices import VariationsArrays, VariationsH5
-from variation.vars_matrices.filters import (_filter_all,
+from variation.variations import VariationsArrays, VariationsH5
+from variation.variations.filters import (_filter_all,
                                              _filter_none,
                                              mafs_filter_fact,
                                              missing_rate_filter_fact,

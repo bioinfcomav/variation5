@@ -6,7 +6,7 @@ from posixpath import join
 import shutil
 
 from variation.matrix.methods import append_matrix, extend_matrix
-from variation.vars_matrices import VariationsH5
+from variation.variations import VariationsH5
 
 from test.test_utils import TEST_DATA_DIR
 # Method could be a function

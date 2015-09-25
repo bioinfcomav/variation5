@@ -13,8 +13,8 @@ import gzip
 from time import time
 
 from test.test_utils import TEST_DATA_DIR
-from variation.vars_matrices.vars_matrices import (VariationsArrays,
-                                                   VariationsH5)
+from variation.variations.vars_matrices import (VariationsArrays,
+                                                VariationsH5)
 from variation.vcf import VCFParser
 
 import numpy
@@ -50,12 +50,11 @@ class VcfH5Test(unittest.TestCase):
 
     def test_put_vars_hdf5_from_vcf(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
+        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000, max_field_lens={'alt':3})
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
             h5f.put_vars_from_vcf(vcf)
-            dset = h5f['/calls/GT']
             vcf_fhand.close()
 
     def test_put_vars_arrays_from_vcf(self):
@@ -166,7 +165,7 @@ class VarMatsTests(unittest.TestCase):
     def test_iterate_chunks(self):
 
         fpath = join(TEST_DATA_DIR, 'ril.vcf.gz')
-        kwargs = {'max_field_lens': {"alt":3}, 'ignored_fields': {'GL'}}
+        kwargs = {'max_field_lens': {"alt":3}, 'ignored_fields': {'/calls/GL'}}
         for var_mats in _create_var_mat_objs_from_vcf(fpath, kwargs=kwargs):
             start = time()
             chunks = list(var_mats.iterate_chunks())
@@ -198,7 +197,7 @@ class VarMatsTests(unittest.TestCase):
     def test_metadata(self):
         for klass in VAR_MAT_CLASSES :
             fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-            vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
+            vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000, kept_fields=['/calls/GT'])
             var_mat = _init_var_mat(klass)
             var_mat.put_vars_from_vcf(vcf_parser)
             metadata = var_mat.metadata
@@ -211,6 +210,22 @@ class VarMatsTests(unittest.TestCase):
             fhand.close()
 
 
+class VcfTests(unittest.TestCase):
+
+    def test_vcf_detect_fields(self):
+        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+        vcf_fhand2 = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000, kept_fields=['/variations/qual'])
+        vcf2 = VCFParser(vcf_fhand2, pre_read_max_size=1000, ignored_fields=['/variations/qual'])
+        snps = VariationsArrays()
+        snps.put_vars_from_vcf(vcf)
+        metadata = snps.metadata
+        snps2 = VariationsArrays()
+        snps2.put_vars_from_vcf(vcf2)
+        metadata2 = snps2.metadata
+        assert '/calls/HQ' in metadata.keys()
+        assert '/variations/qual' not in metadata2.keys()
+
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'VarMatsTests.test_count_alleles']
+    import sys;sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
     unittest.main()

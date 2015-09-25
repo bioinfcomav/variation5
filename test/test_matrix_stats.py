@@ -6,15 +6,18 @@
 # pylint: disable=C0111
 
 import unittest
+import inspect
 from tempfile import NamedTemporaryFile
-from os.path import join
-from time import time
+from os.path import dirname, abspath, join
 import numpy
 
-from test_utils import TEST_DATA_DIR
-from variation.vars_matrices.vars_matrices import (VariationsH5,
-                                                   select_dset_from_chunks,
-                                                   VariationsArrays)
+
+TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
+                        'test_data'))
+from variation.variations.vars_matrices import (VariationsH5,
+                                                select_dset_from_chunks,
+                                                VariationsArrays)
+
 from variation.matrix.stats import (row_value_counter_fact,
                                     counts_by_row)
 from variation.iterutils import first

@@ -40,6 +40,7 @@ def is_dataset(array):
     else:
         return False
 
+
 def append_matrix(matrix, matrix_to_append):
     start = matrix.shape[0]
     stop = start + matrix_to_append.shape[0]
@@ -54,6 +55,11 @@ def append_matrix(matrix, matrix_to_append):
     resize_matrix(matrix, new_size)
 
     matrix[start:stop] = array
+
+
+def fill_array(array, size):
+    num_fill = size - array.shape[0]
+    return numpy.pad(array, (0, num_fill), mode='constant', constant_values=0)
 
 
 def extend_matrix(matrix, arrays):

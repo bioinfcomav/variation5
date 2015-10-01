@@ -57,9 +57,10 @@ def append_matrix(matrix, matrix_to_append):
     matrix[start:stop] = array
 
 
-def fill_array(array, size):
-    num_fill = size - array.shape[0]
-    return numpy.pad(array, (0, num_fill), mode='constant', constant_values=0)
+def fill_array(array, size, dim=0):
+    num_fill = size - array.shape[dim]
+    fill_format = [[0, 0]] * dim + [[0, num_fill]] + [[0, 0]] * (array.ndim - dim - 1)
+    return numpy.pad(array, fill_format, mode='constant', constant_values=0)
 
 
 def extend_matrix(matrix, arrays):

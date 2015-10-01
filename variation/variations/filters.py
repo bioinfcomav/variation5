@@ -1,11 +1,12 @@
 import numpy
 from _functools import partial
 
-from variation.variations.stats import (MafCalculator,
-                                        MissingGTCalculator,
-                                        CalledGTCalculator)
+from variation.variations.stats import (_MafCalculator,
+                                        _MissingGTCalculator,
+                                        _CalledGTCalculator)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import MISSING_VALUES
+
 
 def _filter_dsets_chunks(selector_function, dsets_chunks):
     for dsets_chunk in dsets_chunks:
@@ -59,6 +60,7 @@ def _filter_quality_GT(chunk, selected_rows):
     chunk['calls/GT'].data = flt_data
     print(len(chunk['calls/GT']))
 
+
 def _filter_all(chunk):
     flt_chunk = _filter_chunk(chunk, ['/calls/GT'], _filter_all_rows)
     return flt_chunk
@@ -69,7 +71,7 @@ def _filter_none(chunk):
 
 
 def _filter_mafs(chunk, min_=None, max_=None):
-    calc_mafs = MafCalculator()
+    calc_mafs = _MafCalculator()
     mafs = calc_mafs(chunk)
     selector_max = None if max_ is None else mafs <= max_
     selector_min = None if min_ is None else mafs >= min_
@@ -90,7 +92,7 @@ def mafs_filter_fact(min_=None, max_=None):
 
 
 def _missing_rate_filter(chunk, min_=None):
-    calc_missing_gt = MissingGTCalculator()
+    calc_missing_gt = _MissingGTCalculator()
     rates = calc_missing_gt(chunk)
     if min_ is not None:
         selected_rows = _calc_min(rates, min_)
@@ -104,7 +106,7 @@ def missing_rate_filter_fact(min_=None):
 
 
 def _min_called_gts_filter(chunk, min_=None):
-    calc_called_gt = CalledGTCalculator(rate=False)
+    calc_called_gt = _CalledGTCalculator(rate=False)
     called_gts = calc_called_gt(chunk)
     if min_ is not None:
         selected_rows = _calc_min(called_gts, min_)
@@ -168,7 +170,6 @@ def filter_gts_by_dp_fact(min_=None):
 
 def filter_monomorphic_snps_fact(min_maf=None):
     return partial(_filter_mafs, min_=min_maf)
-
 
 
 def _biallelic_filter(chunk, keep_monomorphic):

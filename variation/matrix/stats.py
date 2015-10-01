@@ -18,12 +18,11 @@ def _row_value_counter_array(array, value, axes):
 
 
 def row_counter(mat):
-    mat[numpy.isnan(mat)]=0
+    mat[numpy.isnan(mat)] = 0
     result = numpy.sum(mat, axis=1)
     num_items_per_row = reduce(operator.mul, mat.shape[1:], 1)
     result = result / num_items_per_row
     return result
-
 
 
 def _concat_arrays(arrays):
@@ -48,7 +47,7 @@ def _row_value_counter(mat, value, ratio=False):
     elif ndims == 2:
         axes = 1
     else:
-        axes = tuple([i +1 for i in range(ndims - 1)])
+        axes = tuple([i + 1 for i in range(ndims - 1)])
 
     chunks = iterate_matrix_chunks(mat)
     result = numpy.zeros(mat.shape[0])

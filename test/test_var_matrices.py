@@ -10,7 +10,6 @@ from tempfile import NamedTemporaryFile
 import os
 from os.path import join
 import gzip
-from time import time
 
 from test.test_utils import TEST_DATA_DIR
 from variation.variations.vars_matrices import (VariationsArrays,
@@ -26,6 +25,7 @@ def _create_var_mat_objs_from_h5(h5_fpath):
         out_snps = _init_var_mat(klass)
         out_snps.put_chunks(in_snps.iterate_chunks())
         yield out_snps
+
 
 def _create_var_mat_objs_from_vcf(vcf_fpath, kwargs, kept_fields=None,
                                   ignored_fields=None):
@@ -50,7 +50,8 @@ class VcfH5Test(unittest.TestCase):
 
     def test_put_vars_hdf5_from_vcf(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000, max_field_lens={'alt':3})
+        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
+                        max_field_lens={'alt': 3})
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
@@ -65,7 +66,6 @@ class VcfH5Test(unittest.TestCase):
         assert snps['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
         vcf_fhand.close()
-
 
     def test_create_hdf5_with_chunks(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
@@ -108,7 +108,8 @@ class VarMatsTests(unittest.TestCase):
     def test_create_arrays_with_chunks(self):
 
         for klass in VAR_MAT_CLASSES:
-            in_snps = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+            in_snps = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'),
+                                   mode='r')
             var_mat = _init_var_mat(klass)
             try:
                 var_mat.put_chunks(in_snps.iterate_chunks())
@@ -129,7 +130,7 @@ class VarMatsTests(unittest.TestCase):
                 pass
 
         expected = [[3, 3, 0], [5, 1, 0], [0, 2, 4], [6, 0, 0], [2, 3, 1]]
-        for klass in VAR_MAT_CLASSES :
+        for klass in VAR_MAT_CLASSES:
             fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
             vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
             var_mat = _init_var_mat(klass)
@@ -140,8 +141,8 @@ class VarMatsTests(unittest.TestCase):
     def test_create_matrix(self):
         for klass in VAR_MAT_CLASSES:
             var_mat = _init_var_mat(klass)
-            matrix = var_mat._create_matrix('/calls/HQ', shape = (200, 1), dtype=float,
-                                           fillvalue=1.5)
+            matrix = var_mat._create_matrix('/calls/HQ', shape=(200, 1),
+                                            dtype=float, fillvalue=1.5)
             assert matrix.shape == (200, 1)
             assert matrix.dtype == float
             assert matrix[0, 0] == 1.5
@@ -153,7 +154,8 @@ class VarMatsTests(unittest.TestCase):
             out_snps.put_chunks(in_snps.iterate_chunks())
             assert '/calls/GQ' in out_snps.keys()
             assert out_snps['/calls/GT'].shape == (5, 3, 2)
-            assert numpy.all(out_snps['/calls/GT'][0] == [[0, 0], [1, 0], [1, 1]])
+            assert numpy.all(out_snps['/calls/GT'][0] == [[0, 0], [1, 0],
+                                                          [1, 1]])
 
         for klass in VAR_MAT_CLASSES:
             out_snps = _init_var_mat(klass)
@@ -165,23 +167,17 @@ class VarMatsTests(unittest.TestCase):
     def test_iterate_chunks(self):
 
         fpath = join(TEST_DATA_DIR, 'ril.vcf.gz')
-        kwargs = {'max_field_lens': {"alt":3}, 'ignored_fields': {'/calls/GL'}}
+        kwargs = {'max_field_lens': {"alt": 3}, 'ignored_fields': {'/calls/GL'}}
         for var_mats in _create_var_mat_objs_from_vcf(fpath, kwargs=kwargs):
-            start = time()
             chunks = list(var_mats.iterate_chunks())
             chunk = chunks[0]
-            fin = time()
-            elapsed = fin-start
             assert chunk['/calls/GT'].shape == (200, 153, 2)
 
         fpath = join(TEST_DATA_DIR, 'format_def.vcf')
         #check GT
         for var_mats in _create_var_mat_objs_from_vcf(fpath, {}):
-            start = time()
             chunks = list(var_mats.iterate_chunks())
             chunk = chunks[0]
-            fin = time()
-            elapsed = fin-start
             assert chunk['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(chunk['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
 
@@ -195,9 +191,10 @@ class VarMatsTests(unittest.TestCase):
         vcf_fhand.close()
 
     def test_metadata(self):
-        for klass in VAR_MAT_CLASSES :
+        for klass in VAR_MAT_CLASSES:
             fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-            vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000, kept_fields=['/calls/GT'])
+            vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000,
+                                   kept_fields=['/calls/GT'])
             var_mat = _init_var_mat(klass)
             var_mat.put_vars_from_vcf(vcf_parser)
             metadata = var_mat.metadata
@@ -215,8 +212,10 @@ class VcfTests(unittest.TestCase):
     def test_vcf_detect_fields(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf_fhand2 = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000, kept_fields=['/variations/qual'])
-        vcf2 = VCFParser(vcf_fhand2, pre_read_max_size=1000, ignored_fields=['/variations/qual'])
+        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
+                        kept_fields=['/variations/qual'])
+        vcf2 = VCFParser(vcf_fhand2, pre_read_max_size=1000,
+                         ignored_fields=['/variations/qual'])
         snps = VariationsArrays()
         snps.put_vars_from_vcf(vcf)
         metadata = snps.metadata
@@ -227,5 +226,5 @@ class VcfTests(unittest.TestCase):
         assert '/variations/qual' not in metadata2.keys()
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
+    import sys; sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
     unittest.main()

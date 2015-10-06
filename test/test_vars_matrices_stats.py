@@ -24,8 +24,9 @@ from variation.variations.stats import (_remove_nans,
                                         calc_gq_cumulative_distribution_per_sample,
                                         calc_hq_cumulative_distribution_per_sample,
                                         _calc_stat, _AlleleFreqCalculator,
-                                        calc_ref_allele_freq_distribution, calc_expected_het,
-                                        calc_inbreeding_coeficient, _is_het, _is_hom,
+                                        calc_expected_het,
+                                        calc_inbreeding_coeficient, _is_het,
+                                        _is_hom,
                                         calc_snv_density_distribution,
                                         GenotypeStatsCalculator,
                                         calc_called_gts_distrib_per_depth,
@@ -169,7 +170,9 @@ class VarMatricesStatsTest(unittest.TestCase):
     def test_calc_inbreeding_coeficient(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         obs_het = _calc_stat(hdf5, _ObsHetCalculatorBySnps())
-        allele_freq, _ = calc_ref_allele_freq_distribution(hdf5)
+        allele_freq = _calc_stat(hdf5, 
+                                 _AlleleFreqCalculator(max_num_allele=4),
+                                 by_chunk=True)
         exp_het = calc_expected_het(allele_freq)
         inbreeding_coef = calc_inbreeding_coeficient(obs_het, exp_het)
 

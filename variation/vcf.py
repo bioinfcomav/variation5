@@ -47,6 +47,7 @@ def _gt_data_to_list(mapper_function, sample_gt):
     sample_gt = [mapper_function(item) for item in sample_gt]
     return sample_gt
 
+
 def _detect_fields_in_vcf(metadata, fields):
     check_fields = []
     for field in fields:
@@ -119,7 +120,6 @@ class VCFParser():
                 self.max_field_lens[section][field] = 0
                 if 'str' in meta_field['dtype']:
                     self.max_field_str_lens[section][field] = 0
-
 
     def _read_snps_in_compressed_cache(self):
         if not self.pre_read_max_size:

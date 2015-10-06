@@ -95,7 +95,7 @@ def _missing_rate_filter(chunk, min_=None):
     calc_missing_gt = _MissingGTCalculator()
     rates = calc_missing_gt(chunk)
     if min_ is not None:
-        selected_rows = _calc_min(rates, min_)
+        selected_rows = _calc_rows_by_min(rates, min_)
     else:
         selected_rows = _filter_no_row(chunk)
     return _filter_chunk2(chunk, selected_rows)
@@ -109,7 +109,7 @@ def _min_called_gts_filter(chunk, min_=None):
     calc_called_gt = _CalledGTCalculator(rate=False)
     called_gts = calc_called_gt(chunk)
     if min_ is not None:
-        selected_rows = _calc_min(called_gts, min_)
+        selected_rows = _calc_rows_by_min(called_gts, min_)
     else:
         selected_rows = _filter_no_row(chunk)
     return _filter_chunk2(chunk, selected_rows)
@@ -119,7 +119,7 @@ def min_called_gts_filter_fact(min_=None):
     return partial(_min_called_gts_filter, min_=min_)
 
 
-def _calc_min(array, min_):
+def _calc_rows_by_min(array, min_):
     selected_rows = None if min_ is None else array >= min_
     return selected_rows
 

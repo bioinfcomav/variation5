@@ -159,8 +159,6 @@ class VarMatricesStatsTest(unittest.TestCase):
         result = _calc_stat(hdf5, _AlleleFreqCalculator(max_num_allele=4),
                             by_chunk=True)
         assert result[-2, 0] == 0.95
-        _, result2 = calc_ref_allele_freq_distribution(hdf5)
-        assert result2[0] == 142
 
     def test_calc_expected_het(self):
         allele_freq = numpy.array([[0.5, 0.5, 0., 0.],
@@ -220,7 +218,7 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert result.shape == (4, 153)
         assert numpy.all(numpy.sum(result, axis=0) == 943)
 
-    def test_calc_called_snps_distribution_per_depth(self):
+    def test_calc_called_gts_distribution_per_depth(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         dist, cum = calc_called_gts_distrib_per_depth(hdf5,
                                                       depths=range(30))
@@ -298,15 +296,17 @@ class VarMatricesStatsTest(unittest.TestCase):
                                                 [0], [0], [25], [20], [10]]),
                       '/calls/GQ': numpy.array([[40], [30], [35], [30], [0],
                                                [40], [30], [35], [30], [0]])}
-        distrb = calc_allele_obs_distrib_2D(variations, by_chunk=False)
-        assert distrb[5, 5] == 1
-        assert distrb[20, 20] == 1
-        assert distrb[25, 25] == 1
-        distrb = calc_allele_obs_gq_distrib_2D(variations, by_chunk=False)
-        assert distrb[5, 5] == 30
-        assert distrb[20, 20] == 30
-        assert distrb[25, 25] == 35
-        assert distrb[10, 0] == 40/3
+        allele_distrib_2D = calc_allele_obs_distrib_2D(variations,
+                                                       by_chunk=False)
+        assert allele_distrib_2D[5, 5] == 1
+        assert allele_distrib_2D[20, 20] == 1
+        assert allele_distrib_2D[25, 25] == 1
+        gq_distrib_2D = calc_allele_obs_gq_distrib_2D(variations,
+                                                      by_chunk=False)
+        assert gq_distrib_2D[5, 5] == 30
+        assert gq_distrib_2D[20, 20] == 30
+        assert gq_distrib_2D[25, 25] == 35
+        assert gq_distrib_2D[10, 0] == 40/3
 
 
 if __name__ == "__main__":

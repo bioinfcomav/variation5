@@ -475,7 +475,7 @@ def calculate_maf_depth_distribution(variations, by_chunk=True):
 def calculate_maf_distribution(variations, by_chunk=True):
     maf = _calc_stat(variations, _MafCalculator(), by_chunk=by_chunk)
     calc_distribution = _IntDistributionCalculator(max_value=100)
-    maf = calc_distribution((maf*100).reshape(maf.shape[0], 1))
+    maf = calc_distribution((maf * 100).reshape(maf.shape[0], 1))
     return maf
 
 
@@ -528,7 +528,7 @@ def calc_snp_density(variations, window):
             index_right = dic_index.index_pos(chrom, pos_right)
         index_left = dic_index.index_pos(chrom, pos_left)
         dens.append(index_left - index_right + 1)
-    return dens
+    return numpy.array(dens)
 
 
 class _AlleleFreqCalculator:
@@ -544,16 +544,6 @@ class _AlleleFreqCalculator:
         if allele_freq.shape[1] < self.max_num_allele:
             allele_freq = fill_array(allele_freq, self.max_num_allele, dim=1)
         return allele_freq
-
-
-def calc_ref_allele_freq_distribution(variations, by_chunk=True):
-    alleles = numpy.unique(variations['/calls/GT'])
-    max_num_alleles = alleles[alleles != -1].shape[0]
-    allele_freq = _calc_stat(variations, _AlleleFreqCalculator(max_num_alleles),
-                             by_chunk=by_chunk)
-
-    distributions = numpy.bincount((allele_freq[:, 0]*100).astype(int))
-    return allele_freq, distributions
 
 
 def calc_expected_het(alleles_freq):

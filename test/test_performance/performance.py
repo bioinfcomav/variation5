@@ -51,6 +51,7 @@ def from_vcf_to_hdf5():
     h5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'), mode='w')
     h5.put_vars_from_vcf(vcf_parser)
 
+
 def filter_mafs_from_hdf5():
     fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
     h5 = VariationsH5(fpath, mode='r')

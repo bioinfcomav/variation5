@@ -61,3 +61,9 @@ DEF_DSET_PARAMS = {
     'shuffle': True,
     'fletcher32': True  # checksum, slower but safer
 }
+PRE_READ_MAX_SIZE = 10000
+STATS_DEPTHS = ','.join([str(x) for x in range(0, 75, 5)])
+MAX_DEPTH = 100
+MIN_N_GENOTYPES = 10
+SNP_DENSITY_WINDOW_SIZE = 100000
+MAX_N_ALLELES = 4

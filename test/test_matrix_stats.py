@@ -21,7 +21,7 @@ from variation.variations.vars_matrices import (VariationsH5,
 from variation.matrix.stats import (row_value_counter_fact,
                                     counts_by_row)
 from variation.iterutils import first
-from matrix.stats import histogram
+from variation.matrix.stats import histogram
 
 
 class RowValueCounterTest(unittest.TestCase):

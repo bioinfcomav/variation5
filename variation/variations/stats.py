@@ -162,7 +162,7 @@ def _is_eq_hi_dp(variations, depth):
     return variations['/calls/DP'] >= depth
 
 
-class _CalledHigherDepthMasker(object):
+class _CalledHigherDepthMasker:
     def __init__(self, depth):
         self.depth = depth
         self.required_fields = ['/calls/GT', '/calls/DP']
@@ -174,15 +174,33 @@ class _CalledHigherDepthMasker(object):
         return is_called_eq_hi_than_dp
 
 
-class GQualityByDepthCalculator(object):
-    def __init__(self, depth):
+class _CalledHigherDepthDistribCalculator:
+    def __init__(self, depth, calc_distrib):
+        self.depth = depth
+        self.required_fields = ['/calls/GT', '/calls/DP']
+        self.calc_distrib = calc_distrib
+
+    def __call__(self, variations):
+        is_called_higher_depth = _CalledHigherDepthMasker(self.depth)
+        n_called_per_snp = numpy.sum(is_called_higher_depth(variations),
+                                     axis=1)
+        n_called_per_snp = n_called_per_snp.reshape((1, n_called_per_snp.shape[0]))
+        return self.calc_distrib(n_called_per_snp)
+
+
+class GQualityByDepthDistribCalculator:
+    def __init__(self, depth, calc_distrib):
         self.depth = depth
         self.required_fields = ['/calls/GQ', '/calls/DP']
+        self.calc_distrib = calc_distrib
 
     def __call__(self, variations):
         gqs = variations['/calls/GQ']
         gqs = gqs[variations['/calls/DP'] == self.depth]
-        return gqs
+        if gqs.shape[0] == 0:
+            return numpy.zeros((1, self.calc_distrib.max_value+1))
+        else:
+            return self.calc_distrib(gqs.reshape((1, gqs.shape[0])))
 
 
 class _ObsHetCalculatorBySnps(_ObsHetCalculator):
@@ -354,6 +372,7 @@ def calc_allele_obs_gq_distrib_2D(variations, max_values=[None, None],
 def _calc_distribution(variations, fields, max_value, fillna=None,
                        by_chunk=True, per_sample=True, mask_function=None,
                        mask_field=None):
+
     calc_distr = _IntDistributionCalculator(max_value=max_value,
                                             fields=fields,
                                             fillna=fillna,
@@ -381,23 +400,21 @@ def calc_depth_cumulative_distribution_per_sample(variations, max_depth=None,
 
 
 def calc_called_gts_distrib_per_depth(variations, depths, by_chunk=True):
-    called_gts_per_snp_per_depth = None
+    distributions = None
+    max_called_per_snp = variations['/calls/GT'].shape[1]
+    calc_distrib = _IntDistributionCalculator(max_value=max_called_per_snp,
+                                              per_sample=False)
     for depth in depths:
-        called_gt_per_snp = _calc_stat(variations,
-                                       _CalledHigherDepthMasker(depth=depth),
-                                       matrix_transform=numpy.sum,
-                                       matrix_transform_axis=1,
-                                       by_chunk=by_chunk)
-        if called_gts_per_snp_per_depth is None:
-            called_gts_per_snp_per_depth = numpy.copy(called_gt_per_snp)
+        calc_call_hi_dp_distr = _CalledHigherDepthDistribCalculator(depth=depth,
+                                                                    calc_distrib=calc_distrib)
+        called_gt_per_snp_distrib = _calc_stat(variations,
+                                               calc_call_hi_dp_distr,
+                                               reduce_funct=numpy.add,
+                                               by_chunk=by_chunk)
+        if distributions is None:
+            distributions = numpy.copy(called_gt_per_snp_distrib)
         else:
-            append_matrix(called_gts_per_snp_per_depth, called_gt_per_snp)
-    called_gts_per_snp_per_depth = called_gts_per_snp_per_depth.reshape((len(depths),
-                                                                         called_gt_per_snp.shape[0]))
-    _, max_value = calc_min_max(called_gts_per_snp_per_depth)
-    calculate_distribution = _IntDistributionCalculator(max_value=max_value,
-                                                        per_sample=False)
-    distributions = calculate_distribution(called_gts_per_snp_per_depth)
+            append_matrix(distributions, called_gt_per_snp_distrib)
     dp_cumulative_distr = numpy.cumsum(distributions, axis=1)
     return distributions, dp_cumulative_distr
 
@@ -408,15 +425,11 @@ def calc_quality_by_depth(variations, depths, by_chunk=True):
     calculate_distribution = _IntDistributionCalculator(max_value=max_value,
                                                         per_sample=False)
     for depth in depths:
-        numpy.set_printoptions(threshold=numpy.nan)
-        gq_by_depth = _calc_stat(variations,
-                                 GQualityByDepthCalculator(depth=depth),
-                                 by_chunk=by_chunk)
-        if gq_by_depth.shape[0] == 0:
-            distribution = numpy.zeros((1, max_value+1))
-        else:
-            distribution = calculate_distribution(gq_by_depth.reshape((1,
-                                                  gq_by_depth.shape[0])))
+        calc_gq_by_dp_distrib = GQualityByDepthDistribCalculator(depth=depth,
+                                         calc_distrib=calculate_distribution)
+        distribution = _calc_stat(variations, calc_gq_by_dp_distrib,
+                                  reduce_funct=numpy.add,
+                                  by_chunk=by_chunk)
         gq_cumulative_distr = numpy.cumsum(distribution, axis=1)
         if distributions is None:
             distributions = numpy.copy(distribution)

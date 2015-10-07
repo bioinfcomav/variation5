@@ -170,7 +170,7 @@ class VarMatricesStatsTest(unittest.TestCase):
     def test_calc_inbreeding_coeficient(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         obs_het = _calc_stat(hdf5, _ObsHetCalculatorBySnps())
-        allele_freq = _calc_stat(hdf5, 
+        allele_freq = _calc_stat(hdf5,
                                  _AlleleFreqCalculator(max_num_allele=4),
                                  by_chunk=True)
         exp_het = calc_expected_het(allele_freq)

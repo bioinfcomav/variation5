@@ -8,7 +8,7 @@ from variation import MISSING_VALUES
 from variation.matrix.stats import counts_by_row, row_value_counter_fact
 from variation.matrix.methods import append_matrix, calc_min_max, fill_array
 from variation.variations.index import PosIndex
-
+import pandas
 
 CHUNK_SIZE = 200
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10

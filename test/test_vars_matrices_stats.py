@@ -313,5 +313,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_gq_by_depth']
+#     import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_gq_by_depth']
     unittest.main()

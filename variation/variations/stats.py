@@ -337,23 +337,8 @@ class _IntDistribution2DCalculator():
 
 
 def calc_allele_obs_distrib_2D(variations, max_values=[None, None],
-                               by_chunk=True, mask_function=None):
-    required_fields = ['/calls/RO', '/calls/AO']
-    for i, field in enumerate(required_fields):
-        if max_values[i] is None:
-            _, max_values[i] = calc_min_max(variations[field])
-    transform_func = [None, lambda x: numpy.max(x, axis=2)]
-    calc_distr = _IntDistribution2DCalculator(max_values=max_values,
-                                              fields=required_fields,
-                                              transform_func=transform_func,
-                                              mask_function=mask_function)
-    distrib = _calc_stat(variations, calc_distr, reduce_funct=numpy.add,
-                         by_chunk=by_chunk)
-    return distrib
-
-
-def calc_allele_obs_gq_distrib_2D(variations, max_values=[None, None],
-                                  by_chunk=True, mask_function=None):
+                               by_chunk=True, mask_function=None,
+                               mask_field=None):
     required_fields = ['/calls/RO', '/calls/AO']
     for i, field in enumerate(required_fields):
         if max_values[i] is None:
@@ -363,6 +348,25 @@ def calc_allele_obs_gq_distrib_2D(variations, max_values=[None, None],
                                               fields=required_fields,
                                               transform_func=transform_func,
                                               mask_function=mask_function,
+                                              mask_field=mask_field)
+    distrib = _calc_stat(variations, calc_distr, reduce_funct=numpy.add,
+                         by_chunk=by_chunk)
+    return distrib
+
+
+def calc_allele_obs_gq_distrib_2D(variations, max_values=[None, None],
+                                  by_chunk=True, mask_function=None,
+                                  mask_field=None):
+    required_fields = ['/calls/RO', '/calls/AO']
+    for i, field in enumerate(required_fields):
+        if max_values[i] is None:
+            _, max_values[i] = calc_min_max(variations[field])
+    transform_func = [None, lambda x: numpy.max(x, axis=2)]
+    calc_distr = _IntDistribution2DCalculator(max_values=max_values,
+                                              fields=required_fields,
+                                              transform_func=transform_func,
+                                              mask_function=mask_function,
+                                              mask_field=mask_field,
                                               weights_field='/calls/GQ')
     distrib = _calc_stat(variations, calc_distr, reduce_funct=numpy.add,
                          by_chunk=by_chunk)

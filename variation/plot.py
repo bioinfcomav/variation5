@@ -3,6 +3,8 @@ import numpy
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+from pandas.core.frame import DataFrame
+plt.style.use('ggplot')
 
 
 def _get_mplot_axes(axes, fhand, figsize=None):
@@ -27,11 +29,13 @@ def _print_figure(canvas, fhand, no_interactive_win):
 
 
 def plot_histogram(mat, bins=10, range_=None, fhand=None, axes=None,
-                   no_interactive_win=False):
+                   no_interactive_win=False, color=None, label=None):
 
     axes, canvas = _get_mplot_axes(axes, fhand)
 
-    result = axes.hist(mat, bins=bins, range=range_)
+    result = axes.hist(mat, bins=bins, range=range_, color=color, label=label)
+    if label is not None:
+        axes.legend()
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return result
 
@@ -57,7 +61,8 @@ def calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
         stats['fliers'] = numpy.array([])
         if show_fliers:
             fliers_indices = list(range(0, int(stats['whislo'])))
-            fliers_indices += list(range(int(stats['whishi']), distrib.shape[0]))
+            fliers_indices += list(range(int(stats['whishi']),
+                                         distrib.shape[0]))
             stats['fliers'] = numpy.repeat(numpy.arange(len(fliers_indices)),
                                            fliers_indices)
         series_stats.append(stats)
@@ -84,9 +89,41 @@ def plot_boxplot(mat, by_row=True, make_bins=False, fhand=None, axes=None,
     return result
 
 
+def plot_barplot(x, height, width=0.8, fhand=None, axes=None,
+                 no_interactive_win=False, figsize=None,
+                 mpl_params={}, **kwargs):
+    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    result = axes.bar(x, height, width=width, **kwargs)
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def plot_pandas_barplot(matrix, columns, fpath, stacked=True):
+    df = DataFrame(matrix, columns=columns)
+    plot_ = df.plot(kind='bar', stacked=stacked, figsize=(70, 10))
+    figura = plot_.get_figure()
+
+    figura.savefig(fpath)
+    return plot_
+
+
+def plot_hexabinplot(matrix, columns, fpath):
+    y = []
+    for i in range(matrix.shape[1]):
+            y.extend([i]*matrix.shape[0])
+    x = list(range(0, matrix.shape[0]))*matrix.shape[1]
+    z = matrix.reshape((matrix.shape[0]*matrix.shape[1],))
+    df = DataFrame(numpy.array([x, y, z]).transpose(), columns=['x', 'y', 'z'])
+    plot_ = df.plot(kind='hexbin', x='x', y='y', C='z')
+    figura = plot_.get_figure()
+    figura.savefig(fpath)
+
+
 def plot_hist(hist, bins):
     width = 0.7 * (bins[1] - bins[0])
     center = (bins[:-1] + bins[1:]) / 2
     plt.bar(center, hist, align='center', width=width)
     plt.show()
-

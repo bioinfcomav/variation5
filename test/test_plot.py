@@ -114,5 +114,5 @@ class PlotTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'PlotTest.test_plot_hexbin']
+#     import sys;sys.argv = ['', 'PlotTest.test_plot_hexbin']
     unittest.main()

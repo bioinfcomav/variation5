@@ -11,13 +11,7 @@ class PosIndex():
         self.dictionary = self._create_dict
 
     def index_pos(self, chrom, pos):
-        first_chrom = self.dictionary[chrom][0]
-        if pos < first_chrom:
-            msg = 'The are not any chrom in this position.'
-            msg += 'The first position in the chrom is '+str(first_chrom)
-            raise ValueError(msg)
-        else:
-            return self._bisect(self.dictionary[chrom], pos)
+        return self._bisect(self.dictionary[chrom], pos)
 
     @property
     def _create_dict(self):

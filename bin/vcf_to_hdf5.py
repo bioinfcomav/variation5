@@ -18,16 +18,16 @@ def _setup_argparse(**kwargs):
     parser.add_argument('-o', '--output', required=True,
                         help='Output HDF5 file path')
     help_msg = 'Ignore SNPs with a number of alleles higher than --alt_gt_num'
-    parser.add_argument('-i', '--ingnore_alt', action='store_true',
+    parser.add_argument('-i', '--ignore_alt', action='store_true',
                         default=False, help=help_msg)
     parser.add_argument('-a', '--alt_gt_num', default=None, type=int,
                         help='Max number of alternative genotypes per variant')
     parser.add_argument('-p', '--pre_read_max_size', default=PRE_READ_MAX_SIZE,
                         help='Max number of records to get alt_gt_num',
                         type=int)
-    parser.add_argument('-kf', '--kept fields', default=None, action='append',
+    parser.add_argument('-kf', '--kept_fields', default=None, action='append',
                         help='Fields to write to HDF5 file (all fields)')
-    parser.add_argument('-if', '--ignored fields', default=None,
+    parser.add_argument('-if', '--ignored_fields', default=None,
                         action='append',
                         help='Fields to avoid writing to HDF5 file (None)')
     return parser
@@ -43,6 +43,8 @@ def _parse_args(parser):
             raise ArgumentError('alt_gt_num is required when ignore_alt')
         else:
             args['alt_gt_num'] = parsed_args.alt_gt_num
+    else:
+        args['alt_gt_num'] = None
     args['pre_read_max_size'] = parsed_args.pre_read_max_size
     args['ignore_alt'] = parsed_args.ignore_alt
     args['kept_fields'] = parsed_args.kept_fields

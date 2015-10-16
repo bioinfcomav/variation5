@@ -26,7 +26,8 @@ from variation.variations.stats import (_calc_stat, _MafCalculator,
                                         calc_called_gts_distrib_per_depth,
                                         calc_quality_by_depth,
                                         calculate_maf_depth_distribution,
-                                        calc_allele_obs_distrib_2D)
+                                        calc_allele_obs_distrib_2D,
+    _remove_nans)
 from variation.plot import plot_histogram, plot_pandas_barplot, plot_boxplot,\
     _print_figure, plot_barplot
 from matplotlib.figure import Figure
@@ -164,7 +165,8 @@ def main():
     het_sample = _calc_stat(h5, _ObsHetCalculatorBySample(),
                             by_chunk=args['by_chunk'])
     title = 'Sample observed Heterozygosity distribution'
-    plot_histogram(het_sample, bins=100, fhand=open(fpath, 'w'), color='c',
+    het_sample = _remove_nans(het_sample)
+    plot_histogram(het_sample, bins=50, fhand=open(fpath, 'w'), color='c',
                    mpl_params={'set_xlabel': {'args': ['Heterozygosity'],
                                               'kwargs': {}},
                                'set_ylabel': {'args': ['Counts'], 'kwargs': {}},
@@ -187,7 +189,7 @@ def main():
     fpath = join(data_dir, 'snps_density.csv')
     title = 'SNP density distribution per {} bp windows'
     title = title.format(args['window_size'])
-    plot_histogram(rates, bins=100, fhand=open(fpath, 'w'), color='c',
+    plot_histogram(rates, bins=50, fhand=open(fpath, 'w'), color='c',
                    mpl_params={'set_xlabel': {'args': ['SNP density'],
                                               'kwargs': {}},
                                'set_ylabel': {'args': ['Counts'], 'kwargs': {}},

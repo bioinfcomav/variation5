@@ -11,3 +11,4 @@ import inspect
 
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                         'test_data'))
+BIN_DIR = abspath(join(dirname(__file__), '..', 'bin'))

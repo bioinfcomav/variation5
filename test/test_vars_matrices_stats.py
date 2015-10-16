@@ -6,9 +6,10 @@
 # pylint: disable=C0111
 
 import unittest
+import sys
 import inspect
 from os.path import dirname, abspath, join
-
+import os
 import numpy
 
 from variation.variations import VariationsH5, VariationsArrays
@@ -38,7 +39,8 @@ from variation.variations.stats import (_remove_nans,
                                         calc_allele_obs_gq_distrib_2D)
 
 from variation.matrix.methods import calc_min_max
-import pysam
+from test.test_utils import BIN_DIR
+from subprocess import check_output
 
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                         'test_data'))
@@ -311,7 +313,13 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert gq_distrib_2D[25, 25] == 35
         assert gq_distrib_2D[10, 0] == 40/3
 
+    def test_calc_hdf5_stats_bin(self):
+        bin_ = join(BIN_DIR, 'calculate_h5_stats.py')
+        cmd = [sys.executable, bin_, join(TEST_DATA_DIR, 'ril.hdf5'), '-o',
+               join(TEST_DATA_DIR, 'ril_stats')]
+        check_output(cmd)
+
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_gq_by_depth']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_hdf5_stats_bin']
     unittest.main()

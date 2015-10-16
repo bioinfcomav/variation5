@@ -17,6 +17,7 @@ from variation.variations.vars_matrices import (VariationsArrays,
 from variation.vcf import VCFParser
 
 import numpy
+import h5py
 
 
 def _create_var_mat_objs_from_h5(h5_fpath):
@@ -56,6 +57,9 @@ class VcfH5Test(unittest.TestCase):
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
             h5f.put_vars_from_vcf(vcf)
+            assert h5f['/calls/GT'].shape == (5, 3, 2)
+            assert numpy.all(h5f['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
+            assert numpy.all(h5f['/calls/GQ'][0, :] == numpy.array([48, 48, 43], dtype=numpy.int16))
             vcf_fhand.close()
 
     def test_put_vars_arrays_from_vcf(self):
@@ -65,6 +69,7 @@ class VcfH5Test(unittest.TestCase):
         snps.put_vars_from_vcf(vcf)
         assert snps['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
+        assert numpy.all(snps['/calls/GQ'][0, :] == numpy.array([48, 48, 43], dtype=numpy.int16))
         vcf_fhand.close()
 
     def test_create_hdf5_with_chunks(self):
@@ -206,6 +211,39 @@ class VarMatsTests(unittest.TestCase):
                 assert '/variations/filter/q10' in out_snps.keys()
             fhand.close()
 
+    def test_vcf_to_hdf5(self):
+        path = join(TEST_DATA_DIR, 'format_def')
+        try:
+            os.remove(path + '.hdf5')
+        except FileNotFoundError:
+            pass
+        fhand = open(join(TEST_DATA_DIR, path + '.vcf'), 'rb')
+        vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
+        h5 = VariationsH5(path + '.hdf5', mode='w')
+        h5.put_vars_from_vcf(vcf_parser)
+        fhand.close()
+        h5 = h5py.File(path + '.hdf5', 'r')
+        assert h5['/calls/GT'].shape == (5, 3, 2)
+        assert numpy.all(h5['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
+        assert numpy.all(h5['/calls/GQ'][0, :] == numpy.array([48, 48, 43],
+                                                               dtype=numpy.int16))
+
+        # With another file
+        path = join(TEST_DATA_DIR, 'phylome.sample')
+        try:
+            os.remove(path + '.hdf5')
+        except FileNotFoundError:
+            pass
+        fhand = open(join(TEST_DATA_DIR, path + '.vcf'), 'rb')
+        vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
+        h5 = VariationsH5(path + '.hdf5', mode='w')
+        h5.put_vars_from_vcf(vcf_parser)
+        fhand.close()
+        h5 = h5py.File(path + '.hdf5', 'r')
+        assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
+        assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
+        assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
+
 
 class VcfTests(unittest.TestCase):
 
@@ -226,5 +264,5 @@ class VcfTests(unittest.TestCase):
         assert '/variations/qual' not in metadata2.keys()
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
+#     import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
     unittest.main()

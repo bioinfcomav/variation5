@@ -170,7 +170,7 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
         if field in one_item_fields:
             size = [vars_in_chunk]
             maxshape = (None,)  # is resizable, we can add SNPs
-            chunks=(vars_in_chunk,)
+            chunks = (vars_in_chunk,)
         else:
             y_axes_size = vcf.max_field_lens[str_field]
             if not y_axes_size:
@@ -179,7 +179,7 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
                 raise RuntimeError(msg)
             size = [vars_in_chunk, y_axes_size]
             maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
-            chunks=(vars_in_chunk,  y_axes_size)
+            chunks = (vars_in_chunk,  y_axes_size)
 
         dtype = meta[str_field]['dtype']
         dtype = _numpy_dtype(meta[str_field]['dtype'], field,
@@ -268,7 +268,7 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
         shape = list(matrix.shape)
         shape[0] = 0    # No snps yet
         shape, dtype, chunks, maxshape = _dset_metadata_from_matrix(matrix,
-                                                                  vars_in_chunk)
+                                                                    vars_in_chunk)
         dset = grp.create_dataset(name, shape=shape,
                                   dtype=dtype,
                                   chunks=chunks,
@@ -288,6 +288,7 @@ def _size_recur(size, item):
         size.append(len(item))
         _size_recur(size, item[0])
 
+
 def _size(item):
     size = []
     _size_recur(size, item)
@@ -296,6 +297,7 @@ def _size(item):
         return None
     else:
         return size
+
 
 def _create_slice(snp_n, item):
     size = _size(item)
@@ -330,7 +332,7 @@ def _prepare_metadata(vcf_metadata):
 
 
 def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
-                         ignored_fields=None):
+                       ignored_fields=None):
 
     ignore_alt = vcf.ignore_alt
     snps = vcf.variations
@@ -379,9 +381,9 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                 missing_val = False
             else:
                 try:
-                    dtype= vcf.metadata[grp][field]['dtype']
+                    dtype = vcf.metadata[grp][field]['dtype']
                 except KeyError:
-                    dtype= vcf.metadata[grp][byte_field]['dtype']
+                    dtype = vcf.metadata[grp][byte_field]['dtype']
                 missing_val = MISSING_VALUES[dtype]
 
             # We store the information
@@ -456,35 +458,45 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                     raise TypeError(msg)
                                 else:
                                     log['num_alt_item_descarted'] += 1
-                                    if log['alt_max_detected']<len(item):
+                                    if log['alt_max_detected'] < len(item):
                                         log['alt_max_detected'] = len(item)
                                     continue
                 elif grp == 'CALLS':
                     # store the calldata
                     gt_data = dict(gt_data)
                     call_sample_data = gt_data.get(byte_field, None)
-
                     if call_sample_data is not None:
                         if len(size) == 2:
                             # we're expecting a single item or a list with one item
                             try:
-                                one_element = first(filter(lambda x: x is not None, call_sample_data))
+                                one_element = first(filter(lambda x: x is not None,
+                                                           call_sample_data))
                             except ValueError:
                                 one_element = None
                             if isinstance(one_element, (list, tuple)):
                                 # We have a list in each item
                                 # we're assuming that all items have length 1
-                                if max([len(cll) for cll in call_sample_data if cll is not None]) == 1:
-                                    call_sample_data =  [missing_val if item is None else item[0] for item in call_sample_data]
+                                if max([len(cll) for cll in call_sample_data
+                                        if cll is not None]) == 1:
+                                    call_sample_data = [missing_val if item is None
+                                                        else item[0]
+                                                        for item in call_sample_data]
                                 else:
                                     if field not in log['data_no_fit']:
                                         log['data_no_fit'][field] = 0
                                     log['data_no_fit'][field] += 1
                                     call_sample_data = None
                             else:
-                                call_sample_data =  [missing_val] * len(call_sample_data)
-
+                                call_sample_data = [missing_val if item is None
+                                                    else item
+                                                    for item in call_sample_data]
+                        #In case of GL and GT [[[1,2,3],[1,2,3],[1,2,3], none]]
+                        elif len(size) > 2:
+                            call_sample_data = [[missing_val]*size[-1]
+                                                if item is None else item
+                                                for item in call_sample_data]
                         if call_sample_data is not None:
+
                             try:
                                 slice_ = _create_slice(snp_n, call_sample_data)
                                 matrix[slice_] = call_sample_data
@@ -498,9 +510,9 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                 print('field', field)
                                 print('failed data', call_sample_data)
                                 raise
-
             first_field = False
     # we have to remove the empty snps from the last chunk
+
     for path in paths:
         matrix = hdf5[path]
         size = matrix.shape
@@ -509,7 +521,6 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
         new_size[0] = snp_n
 
         resize_matrix(matrix, new_size)
-
     metadata = _prepare_metadata(vcf.metadata)
     hdf5._set_metadata(metadata)
 
@@ -528,14 +539,14 @@ class _VariationMatrices():
         shape, dtype, chunks, maxshape, fillvalue = result
         try:
             dset = self._create_matrix(path, shape=shape,
-                                          dtype=dtype,
-                                          chunks=chunks,
-                                          maxshape=maxshape,
-                                          fillvalue=fillvalue)
+                                       dtype=dtype,
+                                       chunks=chunks,
+                                       maxshape=maxshape,
+                                       fillvalue=fillvalue)
             new_matrix = dset
         except TypeError:
             array = self._create_matrix(path, shape=shape, dtype=dtype,
-                                    fillvalue=fillvalue)
+                                        fillvalue=fillvalue)
             new_matrix = array
         if is_dataset(matrix):
             array = matrix[:]
@@ -561,7 +572,8 @@ class _VariationMatrices():
                 self._set_samples(mats_chunks.samples)
                 continue
             # check all chunks have the same number of snps
-            nsnps = [mats_chunks[path].data.shape[0] for path in mats_chunks.keys()]
+            nsnps = [mats_chunks[path].data.shape[0]
+                     for path in mats_chunks.keys()]
             num_snps = nsnps[0]
             assert all(num_snps == nsnp for nsnp in nsnps)
 
@@ -569,7 +581,6 @@ class _VariationMatrices():
                 dset_chunk = mats_chunks[path]
                 dset = matrices[path]
                 append_matrix(dset, dset_chunk)
-
 
         if hasattr(self, 'flush'):
             self._h5file.flush()
@@ -779,7 +790,8 @@ class VariationsH5(_VariationMatrices):
         if 'samples' in self._h5file.attrs:
             samples = json.loads(self._h5file.attrs['samples'])
         else:
-            #TODO: si no hay calldata: error por no haber calldata sino None
+            if '/calls/GT' not in self.keys():
+                raise 'There are not genotypes in hdf5 file'
             samples = None
         return samples
 
@@ -809,7 +821,7 @@ class VariationsArrays(_VariationMatrices):
             raise ValueError('This path was already in the var_array', path)
         self._hArrays[path] = array
 
-    def __delitem__(self,path):
+    def __delitem__(self, path):
         if path in self._hArrays:
             del self._hArrays[path]
         else:

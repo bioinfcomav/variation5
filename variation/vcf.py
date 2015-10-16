@@ -308,33 +308,32 @@ class VCFParser():
     def _parse_gts(self, fmt, gts):
         fmt = self._parse_gt_fmt(fmt)
         empty_gt = [None] * len(fmt)
-
         gts = [empty_gt if gt == b'.' else gt.split(b':') for gt in gts]
         gts = zip(*gts)
 
         parsed_gts = []
         ignored_fields = self.ignored_fields
         kept_fields = self.kept_fields
-        for fmt, gt_data in zip(fmt, gts):
-            if fmt[0] in ignored_fields:
+        for fmt_data, gt_data in zip(fmt, gts):
+            if fmt_data[0] in ignored_fields:
                 continue
-            if kept_fields and fmt[0] not in kept_fields:
+            if kept_fields and fmt_data[0] not in kept_fields:
                 continue
-            if fmt[0] == b'GT':
+            if fmt_data[0] == b'GT':
                 gt_data = [self._parse_gt(sample_gt) for sample_gt in gt_data]
             else:
-                if fmt[2]:  # the info for a sample in this field is or should
+                if fmt_data[2]:  # the info for a sample in this field is or should
                             # be a list
-                    gt_data = [_gt_data_to_list(fmt[1], sample_gt) for sample_gt in gt_data]
+                    gt_data = [_gt_data_to_list(fmt_data[1], sample_gt) for sample_gt in gt_data]
                 else:
-                    gt_data = [fmt[1](sample_gt) for sample_gt in gt_data]
+                    gt_data = [fmt_data[1](sample_gt) for sample_gt in gt_data]
 
-            meta = fmt[3]
+            meta = fmt_data[3]
             if not isinstance(meta['Number'], int):
                 max_len = max([0 if data is None else len(data) for data in gt_data])
-                if self.max_field_lens['CALLS'][fmt[0]] < max_len:
-                    self.max_field_lens['CALLS'][fmt[0]] = max_len
-                if 'str' in meta['dtype'] and fmt[0] != b'GT':
+                if self.max_field_lens['CALLS'][fmt_data[0]] < max_len:
+                    self.max_field_lens['CALLS'][fmt_data[0]] = max_len
+                if 'str' in meta['dtype'] and fmt_data[0] != b'GT':
                     # if your file has variable length str fields you
                     # should check and fix the following part of the code
                     raise NotImplementedError('Fixme')
@@ -343,7 +342,7 @@ class VCFParser():
                     if self.max_field_str_lens['CALLS'][key] < max_str:
                         self.max_field_str_lens['CALLS'][key] = max_str
 
-            parsed_gts.append((fmt[0], gt_data))
+            parsed_gts.append((fmt_data[0], gt_data))
 
         return parsed_gts
 

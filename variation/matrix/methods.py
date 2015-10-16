@@ -128,6 +128,8 @@ def iterate_matrix_chunks(matrix):
 
 
 def calc_min_max(matrix):
+    if matrix.size == 0:
+        return numpy.inf, -numpy.inf
     if is_dataset(matrix):
         max_ = None
         min_ = None

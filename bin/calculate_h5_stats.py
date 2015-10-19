@@ -9,7 +9,7 @@ from variation.variations.vars_matrices import VariationsH5
 from variation import (SNPS_PER_CHUNK, STATS_DEPTHS, MAX_DEPTH,
                        SNP_DENSITY_WINDOW_SIZE, MIN_N_GENOTYPES,
                        MAX_N_ALLELES)
-from variation.variations.stats import (_calc_stat, _MafCalculator,
+from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         _MissingGTCalculator,
                                         _ObsHetCalculatorBySnps,
                                         _ObsHetCalculatorBySample,
@@ -20,10 +20,10 @@ from variation.variations.stats import (_calc_stat, _MafCalculator,
                                         GenotypeStatsCalculator,
                                         calc_called_gts_distrib_per_depth,
                                         calc_quality_by_depth_distrib,
-                                        calculate_maf_depth_distribution,
                                         calc_allele_obs_distrib_2D,
                                         _remove_nans, _is_hom_ref, _is_hom_alt,
-                                        calc_allele_obs_gq_distrib_2D)
+                                        calc_allele_obs_gq_distrib_2D,
+    _MafCalculator)
 from variation.plot import (plot_histogram, plot_pandas_barplot,
                             plot_boxplot, plot_barplot, plot_hist2d)
 from matplotlib.figure import Figure
@@ -127,7 +127,7 @@ def plot_maf(h5, by_chunk, data_dir):
 
 def plot_maf_dp(h5, by_chunk, data_dir):
     try:
-        maf_depths_distrib = calculate_maf_depth_distribution(h5)
+        maf_depths_distrib = calc_maf_depth_distrib(h5, by_chunk)
         fpath = join(data_dir, 'mafs_depths_distribution.png')
         title = 'Depth based Maximum allele frequency (MAF) distribution'
         mpl_params = {'set_xlabel': {'args': ['Samples'], 'kwargs': {}},

@@ -3,7 +3,7 @@
 import sys
 import argparse
 from argparse import ArgumentError
-from variation.vcf import VCFParser
+from variation.vcf import VCFParser, read_gzip_file
 from variation.variations.vars_matrices import VariationsH5
 from variation import PRE_READ_MAX_SIZE
 
@@ -12,7 +12,7 @@ def _setup_argparse(**kwargs):
     'It prepares the command line argument parsing.'
     parser = argparse.ArgumentParser(**kwargs)
 
-    parser.add_argument('input', type=argparse.FileType('rb'),
+    parser.add_argument('input',
                         help='Input VCF file (default STDIN)',
                         default=sys.stdin, nargs=1)
     parser.add_argument('-o', '--output', required=True,
@@ -36,7 +36,7 @@ def _setup_argparse(**kwargs):
 def _parse_args(parser):
     parsed_args = parser.parse_args()
     args = {}
-    args['in_fhand'] = parsed_args.input[0]
+    args['in_fpath'] = parsed_args.input[0]
     args['out_fpath'] = parsed_args.output
     if parsed_args.ignore_alt:
         if parsed_args.alt_gt_num is None:
@@ -56,7 +56,12 @@ def main():
     description = 'Transforms VCF file into HDF5 format'
     parser = _setup_argparse(description=description)
     args = _parse_args(parser)
-    vcf_parser = VCFParser(fhand=args['in_fhand'],
+    in_fpath = args['in_fpath']
+    if in_fpath.split('.')[-1] == 'gz':
+        fhand = read_gzip_file(in_fpath)
+    else:
+        fhand = open(in_fpath, 'rb')
+    vcf_parser = VCFParser(fhand=fhand,
                            pre_read_max_size=args['pre_read_max_size'],
                            ignored_fields=args['ignored_fields'],
                            kept_fields=args['kept_fields'],

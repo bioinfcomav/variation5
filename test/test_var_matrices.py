@@ -11,13 +11,15 @@ import os
 from os.path import join
 import gzip
 
-from test.test_utils import TEST_DATA_DIR
+from test.test_utils import TEST_DATA_DIR, BIN_DIR
 from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5)
 from variation.vcf import VCFParser
 
 import numpy
 import h5py
+import sys
+from subprocess import check_output
 
 
 def _create_var_mat_objs_from_h5(h5_fpath):
@@ -244,6 +246,37 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
 
+    def test_vcf_to_hdf5_bin(self):
+        path = join(TEST_DATA_DIR, 'phylome.sample')
+        in_fpath = path + '.vcf'
+        out_fpath = path + '.hdf5'
+        try:
+            os.remove(out_fpath)
+        except FileNotFoundError:
+            pass
+        cmd = [sys.executable, join(BIN_DIR, 'vcf_to_hdf5.py'), in_fpath, '-o',
+               out_fpath, '-i', '-a', '4']
+        check_output(cmd)
+        h5 = h5py.File(out_fpath, 'r')
+        assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
+        assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
+        assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
+
+        # Input compressed with gzip
+        in_fpath = path + '.vcf.gz'
+        out_fpath = path + '.hdf5'
+        try:
+            os.remove(out_fpath)
+        except FileNotFoundError:
+            pass
+        cmd = [sys.executable, join(BIN_DIR, 'vcf_to_hdf5.py'), in_fpath, '-o',
+               out_fpath, '-i', '-a', '4']
+        check_output(cmd)
+        h5 = h5py.File(out_fpath, 'r')
+        assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
+        assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
+        assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
+
 
 class VcfTests(unittest.TestCase):
 
@@ -264,5 +297,5 @@ class VcfTests(unittest.TestCase):
         assert '/variations/qual' not in metadata2.keys()
 
 if __name__ == "__main__":
-#     import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
+    import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5_bin']
     unittest.main()

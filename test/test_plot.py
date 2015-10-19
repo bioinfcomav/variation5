@@ -21,7 +21,7 @@ from variation.variations.stats import (_MissingGTCalculator,
                                         calc_gq_cumulative_distribution_per_sample,
                                         _calc_stat,
                                         calc_snv_density_distribution,
-                                        calc_quality_by_depth,
+                                        calc_quality_by_depth_distrib,
                                         GenotypeStatsCalculator,
     calc_allele_obs_distrib_2D)
 from plot import plot_barplot, plot_pandas_barplot, plot_hexabinplot
@@ -59,7 +59,7 @@ class PlotTest(unittest.TestCase):
 
     def test_plot_boxplot(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        dist, _ = calc_quality_by_depth(hdf5, depths=range(1, 30))
+        dist, _ = calc_quality_by_depth_distrib(hdf5, depths=range(1, 30))
         fhand = open(join(TEST_DATA_DIR, 'pruebadeverdadverdadera.png'),
                      mode='w')
         mpl_params = {'set_xlabel': {'args': ['Depth'], 'kwargs': {}},

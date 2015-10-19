@@ -31,13 +31,13 @@ from variation.variations.stats import (_remove_nans,
                                         calc_snv_density_distribution,
                                         GenotypeStatsCalculator,
                                         calc_called_gts_distrib_per_depth,
-                                        calc_quality_by_depth,
+                                        calc_quality_by_depth_distrib,
                                         _MafDepthCalculator,
-                                        calculate_maf_depth_distribution,
+                                        calc_maf_depth_distrib,
                                         calculate_maf_distribution,
                                         calc_allele_obs_distrib_2D,
                                         calc_allele_obs_gq_distrib_2D,
-    _is_hom_ref, _is_hom_alt)
+                                        _is_hom_ref, _is_hom_alt)
 
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
@@ -136,7 +136,7 @@ class VarMatricesStatsTest(unittest.TestCase):
                                                                by_chunk=True)
         distribution, cum_dist = result
         assert distribution.shape == (153, 559)
-        assert numpy.all(cum_dist[:, -1] == expected)
+        assert numpy.all(cum_dist[:, 0] == expected)
 
     def test_calc_gq_distribution(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -145,7 +145,7 @@ class VarMatricesStatsTest(unittest.TestCase):
         result = calc_gq_cumulative_distribution_per_sample(hdf5, by_chunk=True)
         distribution, cum_dist = result
         assert distribution[0, 25] == 15
-        assert cum_dist[-1, -1] == 537
+        assert cum_dist[-1, 0] == 537
 
     def test_calc_hq_distribution(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), mode='r')
@@ -187,14 +187,14 @@ class VarMatricesStatsTest(unittest.TestCase):
                                                        mask_field='/calls/GT')
         dist_dp_het, cum_dp_het = result
         assert dist_dp_het[0, 2] == 4
-        assert cum_dp_het[0, -1] == 25
+        assert cum_dp_het[0, 0] == 25
         result2 = calc_depth_cumulative_distribution_per_sample(hdf5,
                                                         max_depth=30,
                                                         mask_function=_is_hom,
                                                         mask_field='/calls/GT')
         dist_dp_hom, cum_dp_hom = result2
         assert dist_dp_hom[0, 2] == 72
-        assert cum_dp_hom[0, -1] == 470
+        assert cum_dp_hom[0, 0] == 470
 
     def test_calc_qual_all_samples(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -203,13 +203,13 @@ class VarMatricesStatsTest(unittest.TestCase):
                                                         mask_field='/calls/GT')
         dist_gq_het, cum_gq_het = result
         assert dist_gq_het[0, 0] == 7
-        assert cum_gq_het[0, -1] == 25
+        assert cum_gq_het[0, 0] == 25
         result2 = calc_gq_cumulative_distribution_per_sample(hdf5,
                                                         mask_function=_is_hom,
                                                         mask_field='/calls/GT')
         dist_gq_hom, cum_gq_hom = result2
         assert dist_gq_hom[0, 2] == 0
-        assert cum_gq_hom[0, -1] == 510
+        assert cum_gq_hom[0, 0] == 510
 
     def test_calc_snv_density_distribution(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -229,18 +229,18 @@ class VarMatricesStatsTest(unittest.TestCase):
         dist, cum = calc_called_gts_distrib_per_depth(hdf5,
                                                       depths=range(30))
         assert dist[1, 1] == 0
-        assert cum[-1, -1] == 943
+        assert cum[-1, 0] == 943
 
     def test_calc_gq_by_depth(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        dist, cum = calc_quality_by_depth(hdf5, depths=range(3))
+        dist, cum = calc_quality_by_depth_distrib(hdf5, depths=range(3))
         assert dist[0, 0] == 0
-        assert cum[-1, -1] == 11680
+        assert cum[-1, 0] == 11680
 
     def test_calc_maf_depth_distrib(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'),
                             mode='r')
-        maf_depths_dist = calculate_maf_depth_distribution(hdf5)
+        maf_depths_dist = calc_maf_depth_distrib(hdf5, by_chunk=True)
         assert maf_depths_dist.shape == (hdf5['/calls/GT'].shape[1], 101)
 
     def test_calc_maf_distrib(self):
@@ -259,19 +259,19 @@ class VarMatricesStatsTest(unittest.TestCase):
                                                       depths=[5, 10],
                                                       by_chunk=False)
         assert dist[0, -1] == 8
-        assert cum[-1, -1] == 10
+        assert cum[-1, 0] == 10
 
     def test_calculate_gq_by_depth(self):
         variations = {'/calls/DP': numpy.array([[10], [5], [15], [7], [10],
                                                 [0], [0], [25], [20], [10]]),
                       '/calls/GQ': numpy.array([[40], [30], [35], [30], [0],
                                                [40], [30], [35], [30], [0]])}
-        dist, cum = calc_quality_by_depth(variations, depths=[5, 10],
-                                          by_chunk=False)
+        dist, cum = calc_quality_by_depth_distrib(variations, depths=[5, 10],
+                                                  by_chunk=False)
         assert dist[0, 30] == 1
         assert dist[1, 0] == 2
-        assert cum[0, -1] == 1
-        assert cum[1, -1] == 3
+        assert cum[0, 0] == 1
+        assert cum[1, 0] == 3
 
     def test_calculate_maf(self):
         variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
@@ -296,14 +296,14 @@ class VarMatricesStatsTest(unittest.TestCase):
 
     def test_calculate_maf_depth_dist(self):
         variations = {'/calls/AO': numpy.array([[[0, 0]], [[5, 0]], [[-1, -1]],
-                                                 [[0, -1]], [[0, 0]], [[0, 10]],
-                                                 [[20, 0]], [[25, 0]], [[20, 20]],
-                                                 [[0, 0]], [[20, 0]], [[-1, -1]]]),
+                                                [[0, -1]], [[0, 0]], [[0, 10]],
+                                                [[20, 0]], [[25, 0]], [[20, 20]],
+                                                [[0, 0]], [[20, 0]], [[-1, -1]]]),
                       '/calls/RO': numpy.array([[10, 5, 15, 7, 10,
                                                 0, 0, 25, 20, 10, 0, -1]])}
-        result = calculate_maf_depth_distribution(variations, by_chunk=False)
-        print(result)
+        result = calc_maf_depth_distrib(variations, by_chunk=False)
         expected = numpy.zeros((1, 101))
+        expected[0, 0] = 1
         expected[0, -1] = 8
         expected[0, 50] = 2
         expected[0, 33] = 1
@@ -356,5 +356,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calculate_maf_depth_dist']
+#     import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_maf_depth_distrib']
     unittest.main()

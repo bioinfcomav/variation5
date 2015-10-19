@@ -74,6 +74,7 @@ def _calc_stat(var_matrices, function, reduce_funct=None, matrix_transform=None,
         else:
             return function(var_matrices)
 
+
 class _MafCalculator:
     def __init__(self, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
         self.required_fields = ['/calls/GT']
@@ -213,6 +214,18 @@ class GQualityByDepthDistribCalculator:
             return numpy.zeros((1, self.calc_distrib.max_value+1))
         else:
             return self.calc_distrib(gqs.reshape((1, gqs.shape[0])))
+
+
+class MafDepthDistribCalculator:
+    def __init__(self, calc_distrib):
+        self.required_fields = ['/calls/AO', '/calls/RO']
+        self.calc_distrib = calc_distrib
+
+    def __call__(self, variations):
+        maf_dp_calc = _MafDepthCalculator()
+        maf_dp = maf_dp_calc(variations)
+        distribution = self.calc_distrib(maf_dp*100)
+        return distribution
 
 
 class _ObsHetCalculatorBySnps(_ObsHetCalculator):
@@ -463,6 +476,15 @@ def calc_quality_by_depth_distrib(variations, depths, by_chunk=True):
     return distributions, gq_cumulative_distrs
 
 
+def calc_maf_depth_distrib(variations, by_chunk=True):
+    calculate_distribution = _IntDistributionCalculator(max_value=100)
+    calc_maf_dp_distrib = MafDepthDistribCalculator(calc_distrib=calculate_distribution)
+    distrib = _calc_stat(variations, calc_maf_dp_distrib,
+                         reduce_funct=numpy.add,
+                         by_chunk=by_chunk)
+    return distrib
+
+
 def calc_gq_cumulative_distribution_per_sample(variations, by_chunk=True,
                                                mask_function=None,
                                                mask_field=None):
@@ -495,15 +517,6 @@ def calc_snv_density_distribution(variations, window):
     density = calc_snp_density(variations, window)
     distribution = numpy.bincount(density)
     return distribution
-
-
-def calculate_maf_depth_distribution(variations, by_chunk=True):
-    # TODO: calcular la distribucion dentro de calc_stat
-    maf_depths = _calc_stat(variations, _MafDepthCalculator(),
-                            by_chunk=by_chunk)
-    calc_distribution = _IntDistributionCalculator(max_value=100)
-    maf_depths_distrib = calc_distribution(maf_depths*100)
-    return maf_depths_distrib
 
 
 def calculate_maf_distribution(variations, by_chunk=True):

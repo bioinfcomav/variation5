@@ -27,6 +27,10 @@ def _calc_items_in_row(mat):
     return num_items_per_row
 
 
+def _calc_cum_distrib(distrib):
+    return numpy.fliplr(numpy.cumsum(numpy.fliplr(distrib), axis=1))
+
+
 # def plot_hist_mafs(var_mat, fhand=None, no_interactive_win=False):
 #     mafs = calc_mafs(var_mat)
 #     mafs = _remove_nans(mafs)
@@ -154,6 +158,14 @@ def _is_hom(gts):
     return is_hom
 
 
+def _is_hom_ref(gts):
+    return numpy.logical_and(_is_hom(gts), gts[:, :, 0] == 0)
+
+
+def _is_hom_alt(gts):
+    return numpy.logical_and(_is_hom(gts), gts[:, :, 0] != 0)
+
+
 def _is_called(gts):
     return numpy.logical_not(_is_missing(gts))
 
@@ -251,7 +263,7 @@ def _calc_counts_matrix(mat, variations, max_value, mask_function=None,
     if mask_function is not None:
         if mask_field is None:
             raise ValueError('A field is required for mask function')
-        mask_mat = variations[mask_field]
+        mask_mat = variations[mask_field][:]
         mask = mask_function(mask_mat)
         if per_sample:
             mask = mask.transpose()
@@ -297,14 +309,15 @@ class _IntDistribution2DCalculator():
 
     def __call__(self, variations):
         if self.required_fields is not None:
-            if len(self.required_fields) != 2:
+            if len(self.required_fields) < 2:
                 raise ValueError('2 fields are required for 2D distribution')
-            mat1 = variations[self.required_fields[0]]
-            mat2 = variations[self.required_fields[1]]
+            mat1 = variations[self.required_fields[0]][:]
+            mat2 = variations[self.required_fields[1]][:]
         else:
             mat1, mat2 = variations
         if self.weights_field is not None:
-            weights = variations[self.weights_field]
+            weights = variations[self.weights_field][:]
+            weights[numpy.isnan(weights)] = 0
         else:
             weights = None
         mat1[mat1 == MISSING_VALUES[int]] = self.fillna
@@ -314,9 +327,11 @@ class _IntDistribution2DCalculator():
         if self.mask_function is not None:
             if self.mask_field is None:
                 raise ValueError('A field is required for mask function')
-            mask = self.mask_function(variations[self.mask_field])
+            mask = self.mask_function(variations[self.mask_field][:])
             mat1 = mat1[mask]
             mat2 = mat2[mask]
+            if weights is not None:
+                weights = weights[mask]
         else:
             mat1 = mat1.reshape((mat1.shape[0]*mat1.shape[1],))
             mat2 = mat2.reshape((mat2.shape[0]*mat2.shape[1],))
@@ -361,6 +376,7 @@ def calc_allele_obs_gq_distrib_2D(variations, max_values=[None, None],
     for i, field in enumerate(required_fields):
         if max_values[i] is None:
             _, max_values[i] = calc_min_max(variations[field])
+    required_fields.append('/calls/GQ')
     transform_func = [None, lambda x: numpy.max(x, axis=2)]
     calc_distr = _IntDistribution2DCalculator(max_values=max_values,
                                               fields=required_fields,
@@ -399,7 +415,7 @@ def calc_depth_cumulative_distribution_per_sample(variations, max_depth=None,
                                        by_chunk=by_chunk,
                                        mask_function=mask_function,
                                        mask_field=mask_field)
-    dp_cumulative_distr = numpy.cumsum(distributions, axis=1)
+    dp_cumulative_distr = _calc_cum_distrib(distributions)
     return distributions, dp_cumulative_distr
 
 
@@ -419,11 +435,11 @@ def calc_called_gts_distrib_per_depth(variations, depths, by_chunk=True):
             distributions = numpy.copy(called_gt_per_snp_distrib)
         else:
             append_matrix(distributions, called_gt_per_snp_distrib)
-    dp_cumulative_distr = numpy.cumsum(distributions, axis=1)
+    dp_cumulative_distr = _calc_cum_distrib(distributions)
     return distributions, dp_cumulative_distr
 
 
-def calc_quality_by_depth(variations, depths, by_chunk=True):
+def calc_quality_by_depth_distrib(variations, depths, by_chunk=True):
     distributions, gq_cumulative_distrs = None, None
     _, max_value = calc_min_max(_remove_nans(variations['/calls/GQ']))
     calculate_distribution = _IntDistributionCalculator(max_value=max_value,
@@ -434,7 +450,7 @@ def calc_quality_by_depth(variations, depths, by_chunk=True):
         distribution = _calc_stat(variations, calc_gq_by_dp_distrib,
                                   reduce_funct=numpy.add,
                                   by_chunk=by_chunk)
-        gq_cumulative_distr = numpy.cumsum(distribution, axis=1)
+        gq_cumulative_distr = _calc_cum_distrib(distribution)
         if distributions is None:
             distributions = numpy.copy(distribution)
             gq_cumulative_distrs = numpy.copy(gq_cumulative_distr)
@@ -456,7 +472,7 @@ def calc_gq_cumulative_distribution_per_sample(variations, by_chunk=True,
                                        max_value=max_gq, by_chunk=by_chunk,
                                        mask_function=mask_function,
                                        mask_field=mask_field)
-    gq_cumulative_distr = numpy.cumsum(distributions, axis=1)
+    gq_cumulative_distr = _calc_cum_distrib(distributions)
     return distributions, gq_cumulative_distr
 
 
@@ -471,7 +487,7 @@ def calc_hq_cumulative_distribution_per_sample(variations, by_chunk=True,
                                        max_value=max_hq,
                                        by_chunk=by_chunk,
                                        mask_function=mask_function)
-    hq_cumulative_distr = numpy.cumsum(distributions, axis=1)
+    hq_cumulative_distr = _calc_cum_distrib(distributions)
     return distributions, hq_cumulative_distr
 
 
@@ -482,6 +498,7 @@ def calc_snv_density_distribution(variations, window):
 
 
 def calculate_maf_depth_distribution(variations, by_chunk=True):
+    # TODO: calcular la distribucion dentro de calc_stat
     maf_depths = _calc_stat(variations, _MafDepthCalculator(),
                             by_chunk=by_chunk)
     calc_distribution = _IntDistributionCalculator(max_value=100)

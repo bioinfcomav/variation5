@@ -36,7 +36,8 @@ from variation.variations.stats import (_remove_nans,
                                         calculate_maf_depth_distribution,
                                         calculate_maf_distribution,
                                         calc_allele_obs_distrib_2D,
-                                        calc_allele_obs_gq_distrib_2D)
+                                        calc_allele_obs_gq_distrib_2D,
+    _is_hom_ref, _is_hom_alt)
 
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
@@ -284,13 +285,29 @@ class VarMatricesStatsTest(unittest.TestCase):
         variations = {'/calls/AO': numpy.array([[[0, 0], [5, 0], [-1, -1],
                                                  [0, -1], [0, 0], [0, 10],
                                                  [20, 0], [25, 0], [20, 20],
-                                                 [0, 0]]]),
+                                                 [0, 0], [20, 0]]]),
                       '/calls/RO': numpy.array([[10], [5], [15], [7], [10],
-                                                [0], [0], [25], [20], [10]])}
+                                                [0], [0], [25], [20], [10],
+                                                [0]])}
         calc_maf = _MafDepthCalculator()
         assert numpy.all(calc_maf(variations) == numpy.array([1, 0.5, 1, 1, 1,
                                                               1, 1, 0.5, 1/3,
-                                                              1]))
+                                                              1, 1]))
+
+    def test_calculate_maf_depth_dist(self):
+        variations = {'/calls/AO': numpy.array([[[0, 0]], [[5, 0]], [[-1, -1]],
+                                                 [[0, -1]], [[0, 0]], [[0, 10]],
+                                                 [[20, 0]], [[25, 0]], [[20, 20]],
+                                                 [[0, 0]], [[20, 0]], [[-1, -1]]]),
+                      '/calls/RO': numpy.array([[10, 5, 15, 7, 10,
+                                                0, 0, 25, 20, 10, 0, -1]])}
+        result = calculate_maf_depth_distribution(variations, by_chunk=False)
+        print(result)
+        expected = numpy.zeros((1, 101))
+        expected[0, -1] = 8
+        expected[0, 50] = 2
+        expected[0, 33] = 1
+        assert numpy.all(result == expected)
 
     def test_calc_allele_obs_distrib_2D(self):
         variations = {'/calls/AO': numpy.array([[[0, 0], [5, 0], [-1, -1],
@@ -313,6 +330,24 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert gq_distrib_2D[25, 25] == 35
         assert gq_distrib_2D[10, 0] == 40/3
 
+    def test_is_gt(self):
+        variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
+                                                 [0, 0], [0, 1], [0, 0],
+                                                 [0, 0], [0, 1], [1, 1],
+                                                 [0, 0]]])}
+        is_hom = _is_hom(variations['/calls/GT'])
+        assert numpy.all(is_hom == numpy.array([True, False, False, True,
+                                                False, True, True, False,
+                                                True, True]))
+        is_hom_ref = _is_hom_ref(variations['/calls/GT'])
+        assert numpy.all(is_hom_ref == numpy.array([True, False, False, True,
+                                                    False, True, True, False,
+                                                    False, True]))
+        is_hom_alt = _is_hom_alt(variations['/calls/GT'])
+        assert numpy.all(is_hom_alt == numpy.array([False, False, False, False,
+                                                    False, False, False, False,
+                                                    True, False]))
+
     def test_calc_hdf5_stats_bin(self):
         bin_ = join(BIN_DIR, 'calculate_h5_stats.py')
         cmd = [sys.executable, bin_, join(TEST_DATA_DIR, 'ril.hdf5'), '-o',
@@ -321,5 +356,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_hdf5_stats_bin']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calculate_maf_depth_dist']
     unittest.main()

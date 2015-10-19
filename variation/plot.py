@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from pandas.core.frame import DataFrame
+import pandas
+from matplotlib.pyplot import colorbar, hist2d, sci
 plt.style.use('ggplot')
 
 
@@ -46,7 +48,7 @@ def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None,
     return result
 
 
-def calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
+def _calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
     cum_distribs = numpy.cumsum(distribs, axis=1)
     cum_distribs_norm = cum_distribs / cum_distribs[:, -1][:, None]
     series_stats = []
@@ -86,7 +88,7 @@ def plot_boxplot(mat, by_row=True, make_bins=False, fhand=None, axes=None,
     else:
         if not by_row:
             mat = mat.transpose()
-        bxp_stats = calc_boxplot_stats(mat)
+        bxp_stats = _calc_boxplot_stats(mat)
         result = axes.bxp(bxp_stats)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
@@ -133,6 +135,7 @@ def plot_hexabinplot(matrix, columns, fpath=None, axes=None,
     x = list(range(0, matrix.shape[0]))*matrix.shape[1]
     z = matrix.reshape((matrix.shape[0]*matrix.shape[1],))
     df = DataFrame(numpy.array([x, y, z]).transpose(), columns=['x', 'y', 'z'])
+    numpy.set_printoptions(threshold=numpy.nan)
     axes = df.plot(kind='hexbin', x='x', y='y', C='z', axes=axes)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
@@ -148,3 +151,36 @@ def plot_hist(hist, bins):
     center = (bins[:-1] + bins[1:]) / 2
     plt.bar(center, hist, align='center', width=width)
     plt.show()
+
+
+class AxesMod():
+    def __init__(self, axes):
+        self.axes = axes
+
+    def hist2d(self, matrix):
+        y = numpy.arange(matrix.shape[1])
+        x = numpy.arange(matrix.shape[0])
+        pc = self.axes.pcolorfast(x, y, matrix)
+        self.axes.set_xlim(x[0], x[-1])
+        self.axes.set_ylim(y[0], y[-1])
+        return matrix, x, y, pc
+
+
+def plot_hist2d(matrix, fhand=None, axes=None, fig=None,
+                no_interactive_win=False, figsize=None,
+                mpl_params={}, colorbar_label='', **kwargs):
+    print_figure = False
+    if axes is None:
+        print_figure = True
+        fig = Figure(figsize=figsize)
+        canvas = FigureCanvas(fig)
+        axes = fig.add_subplot(111)
+    axesmod = AxesMod(axes)
+    result = axesmod.hist2d(matrix)
+    fig.colorbar(result[3], ax=axes, label=colorbar_label)
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result

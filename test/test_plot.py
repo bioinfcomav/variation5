@@ -11,7 +11,7 @@ from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.plot import plot_histogram, calc_boxplot_stats, plot_boxplot
+from variation.plot import plot_histogram, _calc_boxplot_stats, plot_boxplot
 from os.path import join
 from test.test_utils import TEST_DATA_DIR
 from variation.variations.vars_matrices import VariationsH5
@@ -41,7 +41,7 @@ class PlotTest(unittest.TestCase):
 
     def test_calc_boxplot_stats(self):
         data = numpy.ones((1, 100))
-        stats = calc_boxplot_stats(data)[0]
+        stats = _calc_boxplot_stats(data)[0]
         assert stats['med'] == 50
         assert stats['q1'] == 25
         assert stats['q3'] == 75
@@ -114,5 +114,5 @@ class PlotTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'PlotTest.test_plot_hexbin']
+    import sys;sys.argv = ['', 'PlotTest.test_plot_hexbin']
     unittest.main()

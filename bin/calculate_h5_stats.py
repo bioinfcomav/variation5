@@ -62,6 +62,8 @@ def _setup_argparse(**kwargs):
     help_msg = help_msg.format(MAX_N_ALLELES)
     parser.add_argument('-ma', '--max_num_alleles', default=MAX_N_ALLELES,
                         help=help_msg)
+    help_msg = 'Max GQ value for distributions (Speeds up calculations)'
+    parser.add_argument('-mq', '--max_gq', default=None, help=help_msg, type=int)
     return parser
 
 
@@ -81,6 +83,7 @@ def _parse_args(parser):
     args['window_size'] = parsed_args.window_size
     args['min_num_genotypes'] = parsed_args.min_n_gts
     args['max_num_alleles'] = parsed_args.max_num_alleles
+    args['max_gq'] = parsed_args.max_gq
     return args
 
 
@@ -101,14 +104,17 @@ def create_plots():
     plot_snp_dens_distrib(h5, by_chunk, args['window_size'], args['max_depth'],
                           data_dir)
     plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
-    plot_gq_distrib_per_sample(h5, by_chunk, data_dir)
-    plot_gq_distrib_all_sample(h5, by_chunk, data_dir)
+    plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
+                               max_value=args['max_gq'])
+    plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
+                               max_value=args['max_gq'])
     plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
-    plot_gq_distrib_per_gt(h5, by_chunk, data_dir)
+    plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
     plot_gt_stats_per_sample(h5, by_chunk, data_dir)
     plot_gt_stats_per_sample(h5, by_chunk, data_dir)
     plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
-    plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir)
+    plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
+                           max_value=args['max_gq'])
     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
     plot_allele_obs_distrib_2D_gq(h5, by_chunk, data_dir)
     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
@@ -259,10 +265,11 @@ def plot_dp_distrib_all_sample(h5, by_chunk, max_depth, data_dir):
     canvas.print_figure(fhand)
 
 
-def plot_gq_distrib_per_sample(h5, by_chunk, data_dir):
+def plot_gq_distrib_per_sample(h5, by_chunk, data_dir, max_value):
         # GQ distribution per sample
-    distrib_gq, cum_gq = calc_gq_cumulative_distribution_per_sample(h5,
-                                                                    by_chunk=by_chunk)
+    distrib_gq, _ = calc_gq_cumulative_distribution_per_sample(h5,
+                                                               by_chunk=by_chunk,
+                                                               max_value=max_value)
     fpath = join(data_dir, 'gq_distribution_per_sample.png')
     title = 'Genotype Quality (QG) distribution per sample'
     mpl_params = {'set_xlabel': {'args': ['Samples'], 'kwargs': {}},
@@ -277,10 +284,11 @@ def plot_gq_distrib_per_sample(h5, by_chunk, data_dir):
     _save(fpath.strip('.png') + '.csv', df_distrib_gq)
 
 
-def plot_gq_distrib_all_sample(h5, by_chunk, data_dir):
+def plot_gq_distrib_all_sample(h5, by_chunk, data_dir, max_value):
 
     distrib_gq, cum_gq = calc_gq_cumulative_distribution_per_sample(h5,
-                                                                by_chunk=by_chunk)
+                                                                by_chunk=by_chunk,
+                                                                max_value=max_value)
     distrib_gq_all = numpy.sum(distrib_gq, axis=0)
     cum_gq = numpy.sum(cum_gq, axis=0)
     fpath = join(data_dir, 'gq_distribution.png')
@@ -337,7 +345,7 @@ def plot_dp_distrib_per_gt(h5, by_chunk, max_depth, data_dir):
     canvas.print_figure(fhand)
 
 
-def plot_gq_distrib_per_gt(h5, by_chunk, data_dir):
+def plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=None):
 
     # GQ distribution per genotype
     fpath = join(data_dir, 'gq_distribution_per_gt.png')
@@ -350,8 +358,9 @@ def plot_gq_distrib_per_gt(h5, by_chunk, data_dir):
         result = calc_gq_cumulative_distribution_per_sample(h5,
                                                             mask_function=mask,
                                                             mask_field='/calls/GT',
-                                                            by_chunk=by_chunk)
-        distrib_gq, cum_gq = result
+                                                            by_chunk=by_chunk,
+                                                            max_value=max_value)
+        distrib_gq, _ = result
         distrib_gq = numpy.sum(distrib_gq, axis=0)
         title = 'Genotype Quality (GQ) distribution {}'.format(name)
         axes = fig.add_subplot(211+i)
@@ -409,10 +418,11 @@ def plot_ditrib_num_samples_hi_dp(h5, by_chunk, depths, data_dir):
     _save(fpath.strip('.png') + '.csv', df_distrib)
 
 
-def plot_gq_distrib_per_dp(h5, by_chunk, depths, data_dir):
+def plot_gq_distrib_per_dp(h5, by_chunk, depths, data_dir, max_value):
         # GQ distribution per depth
     fpath = join(data_dir, 'gq_distrig_per_snp.png')
-    distrib_gq, cum_gq = calc_quality_by_depth_distrib(h5, depths=depths)
+    distrib_gq, cum_gq = calc_quality_by_depth_distrib(h5, depths=depths,
+                                                       max_value=max_value)
     title = 'Genotype Quality (GQ) distribution per depth'
     mpl_params = {'set_xlabel': {'args': ['Depth'], 'kwargs': {}},
                   'set_ylabel': {'args': ['GQ'], 'kwargs': {}},

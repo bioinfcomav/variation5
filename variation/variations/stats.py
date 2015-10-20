@@ -453,9 +453,11 @@ def calc_called_gts_distrib_per_depth(variations, depths, by_chunk=True):
     return distributions, dp_cumulative_distr
 
 
-def calc_quality_by_depth_distrib(variations, depths, by_chunk=True):
+def calc_quality_by_depth_distrib(variations, depths, by_chunk=True,
+                                  max_value=None):
     distributions, gq_cumulative_distrs = None, None
-    _, max_value = calc_min_max(_remove_nans(variations['/calls/GQ']))
+    if max_value is None:
+        _, max_value = calc_min_max(_remove_nans(variations['/calls/GQ']))
     calculate_distribution = _IntDistributionCalculator(max_value=max_value,
                                                         per_sample=False)
     for depth in depths:
@@ -488,11 +490,13 @@ def calc_maf_depth_distrib(variations, by_chunk=True):
 
 def calc_gq_cumulative_distribution_per_sample(variations, by_chunk=True,
                                                mask_function=None,
-                                               mask_field=None):
-    _, max_gq = calc_min_max(_remove_nans(variations['/calls/GQ']))
+                                               mask_field=None,
+                                               max_value=None):
+    if max_value is None:
+        _, max_value = calc_min_max(_remove_nans(variations['/calls/GQ']))
     distributions = _calc_distribution(variations, fields=['/calls/GQ',
                                                            '/calls/GT'],
-                                       max_value=max_gq, by_chunk=by_chunk,
+                                       max_value=max_value, by_chunk=by_chunk,
                                        mask_function=mask_function,
                                        mask_field=mask_field)
     gq_cumulative_distr = _calc_cum_distrib(distributions)
@@ -500,14 +504,16 @@ def calc_gq_cumulative_distribution_per_sample(variations, by_chunk=True,
 
 
 def calc_hq_cumulative_distribution_per_sample(variations, by_chunk=True,
-                                               mask_function=None):
-    try:
-        _, max_hq = calc_min_max(_remove_nans(variations['/calls/HQ']))
-    except KeyError:
-        return None
+                                               mask_function=None,
+                                               max_value=None):
+    if max_value is None:
+        try:
+            _, max_value = calc_min_max(_remove_nans(variations['/calls/HQ']))
+        except KeyError:
+            return None
     distributions = _calc_distribution(variations, fields=['/calls/HQ',
                                                            '/calls/GT'],
-                                       max_value=max_hq,
+                                       max_value=max_value,
                                        by_chunk=by_chunk,
                                        mask_function=mask_function)
     hq_cumulative_distr = _calc_cum_distrib(distributions)

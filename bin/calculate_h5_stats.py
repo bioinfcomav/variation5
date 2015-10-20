@@ -116,7 +116,6 @@ def create_plots():
     plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
                            max_value=args['max_gq'])
     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
-    plot_allele_obs_distrib_2D_gq(h5, by_chunk, data_dir)
     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
 
 
@@ -479,31 +478,6 @@ def plot_allele_obs_distrib_2D(h5, by_chunk, data_dir):
             df_allele_distrib_gq_2D = DataFrame(allele_distrib_gq_2D)
             _save(fpath, df_allele_distrib_gq_2D)
         canvas.print_figure(fhand)
-    else:
-        print('Allele distribution 2D could not be calculated\n')
-
-
-def plot_allele_obs_distrib_2D_gq(h5, by_chunk, data_dir):
-    # Allele observation distribution 2D
-    if '/calls/AO' in h5.keys() and '/calls/RO' in h5.keys():
-        masks = [_is_het, _is_hom_alt, _is_hom_ref]
-        names = ['Heterozygous', 'Alt Homozygous', 'Ref Homozygous']
-        for mask_func, name in zip(masks, names):
-            fpath = join(data_dir, 'allele_obs_gq_distrib_{}.png'.format(name))
-            fhand = open(fpath, 'w')
-            allele_distrib_gq_2D = calc_allele_obs_gq_distrib_2D(h5,
-                                                                 by_chunk=False,
-                                                                 mask_function=mask_func,
-                                                                 mask_field='/calls/GT')
-            title = 'Allele counts GQ distribution 2D {}'.format(name)
-            plot_hist2d(allele_distrib_gq_2D, fhand=fhand,
-                        mpl_params={'set_xlabel': {'args': ['Alt allele counts'],
-                                                   'kwargs': {}},
-                                    'set_ylabel': {'args': ['Ref allele counts'],
-                                                   'kwargs': {}},
-                                    'set_title': {'args': [title], 'kwargs': {}}},
-                        colorbar_label='Genotype Quality (GQ)')
-
     else:
         print('Allele distribution 2D could not be calculated\n')
 

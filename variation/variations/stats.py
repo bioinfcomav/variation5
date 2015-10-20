@@ -4,11 +4,10 @@ import numpy
 from functools import reduce
 import operator
 
-from variation import MISSING_VALUES
+from variation import MISSING_VALUES, MAX_N_ALLELES
 from variation.matrix.stats import counts_by_row, row_value_counter_fact
 from variation.matrix.methods import append_matrix, calc_min_max, fill_array
 from variation.variations.index import PosIndex
-import pandas
 
 CHUNK_SIZE = 200
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -131,8 +130,8 @@ def _missing_gt_counts(chunk):
 
 class _ObsHetCalculator:
     def __call__(self, variations):
-        #TODO: min_num_genotypes
-        gts = variations['/calls/GT']
+        # TODO: min_num_genotypes
+        gts = variations['/calls/GT'][:]
         is_het = _is_het(gts)
         missing_gts = _is_missing(gts)
         called_gts = numpy.sum(missing_gts == 0, axis=self.axis)
@@ -268,6 +267,8 @@ class _IntDistributionCalculator():
 
 def _calc_counts_matrix(mat, variations, max_value, mask_function=None,
                         per_sample=True, fillna=None, mask_field=None):
+    if mat.size == 0:
+        return numpy.zeros((1, max_value+1))
     mask = None
     if 'float' in str(mat.dtype):
             is_nan = numpy.isnan(mat)
@@ -583,14 +584,43 @@ class _AlleleFreqCalculator:
         self.required_fields = ['/calls/GT']
         self.max_num_allele = max_num_allele
 
-    def __call__(self, chunk):
-        gts = chunk['/calls/GT']
+    def __call__(self, variations):
+        gts = variations['/calls/GT']
         allele_counts = counts_by_row(gts, MISSING_VALUES[int])
         total_counts = numpy.sum(allele_counts, axis=1)
         allele_freq = allele_counts/total_counts[:, None]
         if allele_freq.shape[1] < self.max_num_allele:
             allele_freq = fill_array(allele_freq, self.max_num_allele, dim=1)
         return allele_freq
+
+
+class _InbreedingCoeficientCalculator:
+    def __init__(self, max_num_allele):
+        self.required_fields = ['/calls/GT']
+        self.max_num_allele = max_num_allele
+
+    def __call__(self, variations):
+        calc_obs_het = _ObsHetCalculatorBySnps()
+        calc_allele_freq = _AlleleFreqCalculator(self.max_num_allele)
+        obs_het = calc_obs_het(variations)
+        allele_freq = calc_allele_freq(variations)
+        exp_het = calc_expected_het(allele_freq)
+        return 1 - (obs_het / exp_het)
+
+
+class _InbreedingCoeficientDistribCalculator:
+    def __init__(self, max_num_allele, calc_distrib):
+        self.required_fields = ['/calls/GT']
+        self.max_num_allele = max_num_allele
+        self.calc_distrib = calc_distrib
+
+    def __call__(self, variations):
+        calc_IC = _InbreedingCoeficientCalculator(self.max_num_allele)
+        ic = calc_IC(variations)
+        distrib = self.calc_distrib(numpy.array([ic[ic < 0] * -100]))[::-1]
+        distrib_pos = self.calc_distrib(numpy.array([ic[ic >= 0] * 100]))
+        distrib = numpy.append(distrib, distrib_pos, axis=1)
+        return numpy.delete(distrib, [101])
 
 
 def calc_expected_het(alleles_freq):
@@ -603,5 +633,20 @@ def calc_expected_het(alleles_freq):
     return exp_het
 
 
-def calc_inbreeding_coeficient(obs_het, exp_het):
-    return 1 - (obs_het / exp_het)
+def calc_inbreeding_coeficient(variations, max_num_allele=MAX_N_ALLELES,
+                               by_chunk=True):
+    calc_IC = _InbreedingCoeficientCalculator(max_num_allele)
+    return _calc_stat(variations, calc_IC, by_chunk=by_chunk)
+
+
+def calc_inbreeding_coeficient_distrib(variations, max_num_allele=MAX_N_ALLELES,
+                                       by_chunk=True):
+    calculate_distrib = _IntDistributionCalculator(max_value=100,
+                                                   per_sample=False)
+    calc_IC = _InbreedingCoeficientDistribCalculator(max_num_allele,
+                                                     calc_distrib=calculate_distrib)
+    return _calc_stat(variations, calc_IC, by_chunk=by_chunk,
+                      reduce_funct=numpy.add)
+
+
+

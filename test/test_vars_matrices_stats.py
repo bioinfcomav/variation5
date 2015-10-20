@@ -9,7 +9,6 @@ import unittest
 import sys
 import inspect
 from os.path import dirname, abspath, join
-import os
 import numpy
 
 from variation.variations import VariationsH5, VariationsArrays
@@ -37,7 +36,9 @@ from variation.variations.stats import (_remove_nans,
                                         calculate_maf_distribution,
                                         calc_allele_obs_distrib_2D,
                                         calc_allele_obs_gq_distrib_2D,
-                                        _is_hom_ref, _is_hom_alt)
+                                        _is_hom_ref, _is_hom_alt,
+                                        _InbreedingCoeficientCalculator,
+                                        calc_inbreeding_coeficient_distrib)
 
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
@@ -177,7 +178,31 @@ class VarMatricesStatsTest(unittest.TestCase):
                                  _AlleleFreqCalculator(max_num_allele=4),
                                  by_chunk=True)
         exp_het = calc_expected_het(allele_freq)
-        inbreeding_coef = calc_inbreeding_coeficient(obs_het, exp_het)
+        expected = 1 - (obs_het/exp_het)
+        result = calc_inbreeding_coeficient(hdf5, max_num_allele=4,
+                                            by_chunk=True)
+        result = _remove_nans(result)
+        expected = _remove_nans(expected)
+        assert numpy.all(result == expected)
+
+        variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
+                                                 [0, 0], [0, 1], [0, 0],
+                                                 [0, 0], [0, 1], [1, 1],
+                                                 [0, 0]]])}
+        result = calc_inbreeding_coeficient(variations, max_num_allele=4,
+                                            by_chunk=False)
+        assert result[0] == 1-(0.4/0.42)
+
+    def test_calc_inbreeding_coef_distrib(self):
+        variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
+                                                 [0, 0], [0, 1], [0, 0],
+                                                 [0, 0], [0, 1], [1, 1],
+                                                 [0, 0]]])}
+        result = calc_inbreeding_coeficient_distrib(variations, by_chunk=False)
+        assert result[104] == 1
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        result = calc_inbreeding_coeficient_distrib(hdf5, by_chunk=False)
+        assert(result[-1] == 330)
 
     def test_calc_depth_all_samples(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -356,5 +381,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_maf_depth_distrib']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_inbreeding_coef_distrib']
     unittest.main()

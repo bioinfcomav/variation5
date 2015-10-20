@@ -23,7 +23,8 @@ from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         calc_allele_obs_distrib_2D,
                                         _remove_nans, _is_hom_ref, _is_hom_alt,
                                         calc_allele_obs_gq_distrib_2D,
-    _MafCalculator)
+                                        _MafCalculator,
+    calc_inbreeding_coeficient_distrib)
 from variation.plot import (plot_histogram, plot_pandas_barplot,
                             plot_boxplot, plot_barplot, plot_hist2d)
 from matplotlib.figure import Figure
@@ -110,6 +111,7 @@ def create_plots():
     plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir)
     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
     plot_allele_obs_distrib_2D_gq(h5, by_chunk, data_dir)
+    plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
 
 
 def plot_maf(h5, by_chunk, data_dir):
@@ -218,7 +220,8 @@ def plot_snp_dens_distrib(h5, by_chunk, window_size, max_depth, data_dir):
                   'set_ylabel': {'args': ['Depth'], 'kwargs': {}},
                   'set_title': {'args': [title], 'kwargs': {}}}
     if h5.samples is not None:
-        mpl_params['set_xticklabels'] = {'args': [h5.samples], 'kwargs': {}}
+        mpl_params['set_xticklabels'] = {'args': [h5.samples], 'kwargs':
+                                         {'rotation':90}}
     plot_boxplot(distrib_dp, fhand=open(fpath, 'w'), figsize=(40, 10),
                  mpl_params=mpl_params)
     df_distrib_dp = DataFrame(distrib_dp)
@@ -266,7 +269,8 @@ def plot_gq_distrib_per_sample(h5, by_chunk, data_dir):
                   'set_ylabel': {'args': ['GQ'], 'kwargs': {}},
                   'set_title': {'args': [title], 'kwargs': {}}}
     if h5.samples is not None:
-        mpl_params['set_xticklabels'] = {'args': [h5.samples], 'kwargs': {}}
+        mpl_params['set_xticklabels'] = {'args': [h5.samples],
+                                         'kwargs': {'rotation': 90}}
     plot_boxplot(distrib_gq, fhand=open(fpath, 'w'), figsize=(40, 10),
                  mpl_params=mpl_params)
     df_distrib_gq = DataFrame(distrib_gq)
@@ -396,7 +400,8 @@ def plot_ditrib_num_samples_hi_dp(h5, by_chunk, depths, data_dir):
     mpl_params = {'set_xlabel': {'args': ['Depth'], 'kwargs': {}},
                   'set_ylabel': {'args': ['Number of samples'], 'kwargs': {}},
                   'set_title': {'args': [title], 'kwargs': {}},
-                  'set_xticklabels': {'args': [depths], 'kwargs': {}}}
+                  'set_xticklabels': {'args': [depths],
+                                      'kwargs': {'rotation': 90}}}
 
     plot_boxplot(distrib, fhand=open(fpath, 'w'), figsize=(15, 10),
                  mpl_params=mpl_params)
@@ -412,7 +417,8 @@ def plot_gq_distrib_per_dp(h5, by_chunk, depths, data_dir):
     mpl_params = {'set_xlabel': {'args': ['Depth'], 'kwargs': {}},
                   'set_ylabel': {'args': ['GQ'], 'kwargs': {}},
                   'set_title': {'args': [title], 'kwargs': {}},
-                  'set_xticklabels': {'args': [depths], 'kwargs': {}}}
+                  'set_xticklabels': {'args': [depths],
+                                      'kwargs': {'rotation': 90}}}
     plot_boxplot(distrib_gq, fhand=open(fpath, 'w'), figsize=(15, 10),
                  mpl_params=mpl_params)
     df_cum_gq = DataFrame(cum_gq)
@@ -492,7 +498,21 @@ def plot_allele_obs_distrib_2D_gq(h5, by_chunk, data_dir):
         print('Allele distribution 2D could not be calculated\n')
 
 
-# Pandas dataframe(data, index, columns, dtype, copy)
+def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):
+    distrib = calc_inbreeding_coeficient_distrib(h5,
+                                                 max_num_allele=max_num_allele,
+                                                 by_chunk=by_chunk)
+    fpath = join(data_dir, 'inbreeding_coef_distribution.png')
+    fhand = open(fpath, 'w')
+    title = 'Inbreeding coefficient distribution all samples'
+    x = numpy.arange(-100, 101)/100
+    plot_barplot(x, distrib, width=0.01,
+                 mpl_params={'set_xlabel': {'args': ['Inbreeding coefficient'],
+                                            'kwargs': {}},
+                             'set_ylabel': {'args': ['Counts'], 'kwargs': {}},
+                             'set_title': {'args': [title], 'kwargs': {}}},
+                 fhand=fhand)
+
 
 def _save(path, dataframe):
     file = open(path, mode='w')

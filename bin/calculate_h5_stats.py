@@ -49,21 +49,22 @@ def _setup_argparse(**kwargs):
     parser.add_argument('-d', '--depths', default=STATS_DEPTHS, help=help_msg)
     help_msg = 'Max depth for depth distributions ({})'.format(MAX_DEPTH)
     parser.add_argument('-md', '--max_depth', default=MAX_DEPTH,
-                        help=help_msg)
+                        help=help_msg, type=int)
     help_msg = 'Window size to calculate SNP density ({})'
     help_msg = help_msg.format(SNP_DENSITY_WINDOW_SIZE)
     parser.add_argument('-w', '--window_size', default=SNP_DENSITY_WINDOW_SIZE,
-                        help=help_msg)
+                        help=help_msg, type=int)
     help_msg = 'Min number of called genotypes to calculate stats ({})'
     help_msg = help_msg.format(MIN_N_GENOTYPES)
     parser.add_argument('-m', '--min_n_gts', default=MIN_N_GENOTYPES,
-                        help=help_msg)
+                        help=help_msg, type=int)
     help_msg = 'Max num alleles to calculate allele frequency ({})'
     help_msg = help_msg.format(MAX_N_ALLELES)
     parser.add_argument('-ma', '--max_num_alleles', default=MAX_N_ALLELES,
-                        help=help_msg)
+                        help=help_msg, type=int)
     help_msg = 'Max GQ value for distributions (Speeds up calculations)'
-    parser.add_argument('-mq', '--max_gq', default=None, help=help_msg, type=int)
+    parser.add_argument('-mq', '--max_gq', default=None, help=help_msg,
+                        type=int)
     return parser
 
 
@@ -97,26 +98,25 @@ def create_plots():
     h5 = VariationsH5(args['in_fpath'], mode='r',
                       vars_in_chunk=args['chunk_size'])
     by_chunk = args['by_chunk']
-    plot_maf(h5, by_chunk, data_dir)
-    plot_maf_dp(h5, by_chunk, data_dir)
-    plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
-    plot_het_obs_distrib(h5, by_chunk, data_dir)
-    plot_snp_dens_distrib(h5, by_chunk, args['window_size'], args['max_depth'],
-                          data_dir)
-    plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
-    plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
-                               max_value=args['max_gq'])
-    plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
-                               max_value=args['max_gq'])
-    plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
-    plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
+#     plot_maf(h5, by_chunk, data_dir)
+#     plot_maf_dp(h5, by_chunk, data_dir)
+#     plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
+#     plot_het_obs_distrib(h5, by_chunk, data_dir)
+#     plot_snp_dens_distrib(h5, by_chunk, args['window_size'], args['max_depth'],
+#                           data_dir)
+#     plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
+#     plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
+#                                max_value=args['max_gq'])
+#     plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
+#                                max_value=args['max_gq'])
+#     plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
+#     plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
     plot_gt_stats_per_sample(h5, by_chunk, data_dir)
-    plot_gt_stats_per_sample(h5, by_chunk, data_dir)
-    plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
-    plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
-                           max_value=args['max_gq'])
-    plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
-    plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
+#     plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
+#     plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
+#                            max_value=args['max_gq'])
+#     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
+#     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
 
 
 def plot_maf(h5, by_chunk, data_dir):
@@ -376,9 +376,8 @@ def plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=None):
 
 
 def plot_gt_stats_per_sample(h5, by_chunk, data_dir):
-
-    # GT stats per sample
-    fpath = join(data_dir, 'genotype_basic_stats.png')
+    # GT counts per sample
+    fpath = join(data_dir, 'genotype_counts_per_sample.png')
     gt_stats = _calc_stat(h5, GenotypeStatsCalculator(), reduce_funct=numpy.add,
                           by_chunk=by_chunk)
     gt_stats = gt_stats.transpose()
@@ -394,6 +393,39 @@ def plot_gt_stats_per_sample(h5, by_chunk, data_dir):
                         color=['darkslategrey', 'c', 'paleturquoise',
                                'cadetblue'],
                         fpath=fpath, stacked=True)
+    
+    # Missing per sample
+    fpath = join(data_dir, 'missing_per_sample.png')
+    title = 'Missing genotypes counts per sample'
+    mpl_params['set_ylabel'] = {'args': ['Missing Genotypes Number'],
+                                 'kwargs': {}}
+    mpl_params['set_title'] = {'args': [title], 'kwargs': {}}
+    plot_pandas_barplot(gt_stats[:, -1], ['Missing GT'],
+                        mpl_params=mpl_params,
+                        fpath=fpath, stacked=True)
+    
+    # Heterozygous per sample
+    fpath = join(data_dir, 'het_per_sample.png')
+    title = 'Heterozygous counts per sample'
+    mpl_params['set_ylabel'] = {'args': ['Heterozygous Number'],
+                                 'kwargs': {}}
+    mpl_params['set_title'] = {'args': [title], 'kwargs': {}}
+    plot_pandas_barplot(gt_stats[:, 1], ['Heterozygous'],
+                        mpl_params=mpl_params,
+                        fpath=fpath, stacked=True)
+    
+    # GT percentage without missing values
+    fpath = join(data_dir, 'gt_perc_per_sample.png')
+    title = 'Genotypes percentage per sample'
+    mpl_params['set_ylabel'] = {'args': ['% Genotypes'],
+                                 'kwargs': {}}
+    mpl_params['set_title'] = {'args': [title], 'kwargs': {}}
+    gt_perc = gt_stats[:, :-1] / gt_stats[:, :-1].sum(axis=1,
+                                                      keepdims=True) * 100
+    plot_pandas_barplot(gt_perc, ['Ref Homozygous', 'Heterozygous',
+                                   'Alt Homozygous'],
+                        mpl_params=mpl_params, fpath=fpath)
+    
     df_gt_stats = DataFrame(gt_stats)
     _save(fpath.strip('.png') + '.csv', df_gt_stats)
 

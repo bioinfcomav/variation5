@@ -11,7 +11,8 @@ from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.plot import plot_histogram, _calc_boxplot_stats, plot_boxplot
+from variation.plot import plot_histogram, _calc_boxplot_stats, plot_boxplot,\
+    qqplot
 from os.path import join
 from test.test_utils import TEST_DATA_DIR
 from variation.variations.vars_matrices import VariationsH5
@@ -23,8 +24,8 @@ from variation.variations.stats import (_MissingGTCalculator,
                                         calc_snv_density_distribution,
                                         calc_quality_by_depth_distrib,
                                         GenotypeStatsCalculator,
-    calc_allele_obs_distrib_2D)
-from plot import plot_barplot, plot_pandas_barplot, plot_hexabinplot
+    calc_allele_obs_distrib_2D, HWECalcualtor, _remove_nans)
+from variation.plot import plot_barplot, plot_pandas_barplot, plot_hexabinplot
 from pandas.core.frame import DataFrame
 
 
@@ -112,7 +113,14 @@ class PlotTest(unittest.TestCase):
         path = join(TEST_DATA_DIR, 'hexbin.png')
         plot_hexabinplot(allele_distrib_2D, ['x', 'y', 'z'], path)
 
-
+    def test_qqplot(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        hwe_test = _calc_stat(hdf5, HWECalcualtor(2, 2))
+        hwe_chi2 = _remove_nans(hwe_test[:, 0])
+        fhand = open(join(TEST_DATA_DIR, 'hwe_qqplot.png'), 'w')
+        qqplot(hwe_chi2, distrib='chi2', distrib_params=(3,), fhand=fhand)
+    
+    
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'PlotTest.test_plot_hexbin']
+    import sys;sys.argv = ['', 'PlotTest.test_qqplot']
     unittest.main()

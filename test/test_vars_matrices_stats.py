@@ -44,6 +44,8 @@ from variation.variations.stats import (_remove_nans,
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
 from subprocess import check_output
+from scipy.stats.morestats import probplot
+from matplotlib import pyplot
 
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                         'test_data'))
@@ -390,7 +392,7 @@ class VarMatricesStatsTest(unittest.TestCase):
         for res, exp in zip(result, expected_result):
             for x, y in zip(res, exp):
                 assert abs(x - y) < 0.000000001
-
+        
     def test_calc_hdf5_stats_bin(self):
         bin_ = join(BIN_DIR, 'calculate_h5_stats.py')
         cmd = [sys.executable, bin_, join(TEST_DATA_DIR, 'ril.hdf5'), '-o',

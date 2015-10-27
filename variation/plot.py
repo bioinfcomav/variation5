@@ -6,6 +6,7 @@ from matplotlib.figure import Figure
 from pandas.core.frame import DataFrame
 import pandas
 from matplotlib.pyplot import colorbar, hist2d, sci
+from scipy.stats.morestats import probplot
 plt.style.use('ggplot')
 
 
@@ -178,6 +179,21 @@ def plot_hist2d(matrix, fhand=None, axes=None, fig=None,
     axesmod = AxesMod(axes)
     result = axesmod.hist2d(matrix)
     fig.colorbar(result[3], ax=axes, label=colorbar_label)
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
+           no_interactive_win=False, figsize=None, fhand=None):
+    print_figure = False
+    if axes is None:
+        print_figure = True
+        axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    result = probplot(x, dist=distrib, sparams=distrib_params, plot=axes)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])

@@ -38,7 +38,8 @@ from variation.variations.stats import (_remove_nans,
                                         calc_allele_obs_gq_distrib_2D,
                                         _is_hom_ref, _is_hom_alt,
                                         _InbreedingCoeficientCalculator,
-                                        calc_inbreeding_coeficient_distrib)
+                                        calc_inbreeding_coeficient_distrib,
+    HWECalcualtor)
 
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
@@ -372,6 +373,23 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert numpy.all(is_hom_alt == numpy.array([False, False, False, False,
                                                     False, False, False, False,
                                                     True, False]))
+    
+    def test_calculate_hwe(self):
+        variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
+                                                 [0, 0], [0, 1], [0, 0],
+                                                 [0, 0], [0, 1], [1, 1],
+                                                 [0, 0]],
+                                                [[0, 0], [0, 1], [0, 1],
+                                                 [0, 0], [0, 1], [0, 0],
+                                                 [0, 0], [0, 1], [1, 1],
+                                                 [0, 0]]])}
+        calc_hwe_chi2 = HWECalcualtor(2, ploidy=2)
+        expected_result = numpy.array([[0.0226757369615, 0.988726162928],
+                                       [0.0226757369615, 0.988726162928]])
+        result = calc_hwe_chi2(variations)
+        for res, exp in zip(result, expected_result):
+            for x, y in zip(res, exp):
+                assert abs(x - y) < 0.000000001
 
     def test_calc_hdf5_stats_bin(self):
         bin_ = join(BIN_DIR, 'calculate_h5_stats.py')
@@ -381,5 +399,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_inbreeding_coef_distrib']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calculate_hwe']
     unittest.main()

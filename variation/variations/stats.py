@@ -1,4 +1,4 @@
-from itertools import combinations
+from itertools import combinations, permutations, combinations_with_replacement
 
 import numpy
 from functools import reduce
@@ -8,6 +8,8 @@ from variation import MISSING_VALUES, MAX_N_ALLELES
 from variation.matrix.stats import counts_by_row, row_value_counter_fact
 from variation.matrix.methods import append_matrix, calc_min_max, fill_array
 from variation.variations.index import PosIndex
+from scipy.stats.stats import chisquare
+
 
 CHUNK_SIZE = 200
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -655,4 +657,34 @@ def calc_inbreeding_coeficient_distrib(variations, max_num_allele=MAX_N_ALLELES,
                       reduce_funct=numpy.add)
 
 
+class HWECalcualtor:
+    def __init__(self, max_num_allele, ploidy=2):
+        self.required_fields = ['/calls/GT']
+        self.max_num_allele = max_num_allele
+        self.ploidy = ploidy
 
+    def __call__(self, variations):
+        gts = variations['/calls/GT']
+        allele_counts = numpy.zeros((gts.shape[0], self.max_num_allele))
+        for allele in range(self.max_num_allele):
+            allele_counts[:, allele] = numpy.sum(gts == allele, axis=2).sum(axis=1)
+        total_counts = allele_counts.sum(axis=1)
+        genotypes = list(combinations_with_replacement(range(self.max_num_allele),
+                                      self.ploidy))
+        gts_counts = numpy.zeros((gts.shape[0], len(genotypes))) 
+        exp_gts_counts = numpy.ones((gts.shape[0], len(genotypes)))
+        for i, genotype in enumerate(genotypes):
+            mask = None
+            for allele in range(self.ploidy):
+                if mask is None:
+                    mask = gts[:, :, allele] == genotype[allele]
+                else:
+                    mask = numpy.logical_and(mask,
+                                     gts[:, :, allele] == genotype[allele])
+                exp_gts_counts[:, i] *= allele_counts[:, genotype[allele]] / total_counts
+            exp_gts_counts[:, i] *= len(set(permutations(genotype)))
+            gts_counts[:, i] = numpy.sum(mask, axis=1)
+        total_gt_counts = numpy.sum(gts_counts, axis=1)
+        exp_gts_counts = (exp_gts_counts.T * total_gt_counts).T
+        chi2, pvalue = chisquare(gts_counts, f_exp=exp_gts_counts, axis=1)
+        return numpy.array([chi2, pvalue]).T

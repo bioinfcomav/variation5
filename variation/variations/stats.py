@@ -688,3 +688,46 @@ class HWECalcualtor:
         exp_gts_counts = (exp_gts_counts.T * total_gt_counts).T
         chi2, pvalue = chisquare(gts_counts, f_exp=exp_gts_counts, axis=1)
         return numpy.array([chi2, pvalue]).T
+
+
+class PositionalStatsCalculator:
+    def __init__(self, hdf5):
+        self.hdf5 = hdf5
+        self.chrom = hdf5['/variations/chrom']
+        self.pos = hdf5['/variations/pos']
+        self.chrom_names = numpy.unique(self.chrom)
+    
+    def _get_track_definition(self, name, description, **kwargs):
+        track_line = 'track type=wiggle_0 name="{}" description="{}"'
+        track_line = track_line.format(name, description)
+        for key, value in kwargs:
+            track_line += ' {}={}'.format(key, value)
+        return track_line
+    
+    def to_wig(self, stat, track_name, track_description, **kwargs):
+        if stat.shape[0] != self.pos.shape[0]:
+            raise ValueError('Stat does not have the same size as pos')
+        track_line = self._get_track_definition(track_name, track_description,
+                                                **kwargs)
+        yield track_line
+        for chrom in self.chrom_names:
+            mask = self.chrom == chrom
+            yield 'variableStep chrom={}'.format(chrom)
+            for pos, value in zip(self.pos[mask], stat[mask]):
+                yield '{} {}'.format(pos, value)
+    
+    def write_wigfile(self, fhand, stat, track_name, track_description,
+                      buffer_size=1000, **kwargs):
+        buffer = ''
+        lines = 0
+        for line in self.to_wig(stat, track_name, track_description, **kwargs):
+            lines += 1
+            buffer += line + '\n'
+            if lines == buffer_size:
+                fhand.write(buffer)
+                buffer = ''
+                lines = 0 
+        if lines != buffer_size:
+            fhand.write(buffer)
+        fhand.flush()
+            

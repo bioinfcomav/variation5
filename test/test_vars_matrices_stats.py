@@ -39,7 +39,7 @@ from variation.variations.stats import (_remove_nans,
                                         _is_hom_ref, _is_hom_alt,
                                         _InbreedingCoeficientCalculator,
                                         calc_inbreeding_coeficient_distrib,
-    HWECalcualtor)
+    HWECalcualtor, PositionalStatsCalculator)
 
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
@@ -392,6 +392,19 @@ class VarMatricesStatsTest(unittest.TestCase):
         for res, exp in zip(result, expected_result):
             for x, y in zip(res, exp):
                 assert abs(x - y) < 0.000000001
+    
+    def test_to_wigfile(self):
+        chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3'])
+        pos = numpy.array([10, 5, 20, 30, 40])
+        variations = {'/variations/chrom': chrom, '/variations/pos': pos}
+        stat = numpy.array([1, 2, 3, 4, 5])
+        pos_stats = PositionalStatsCalculator(variations)
+        wiglines = ['track type=wiggle_0 name="track1" description="description"',
+                    'variableStep chrom=chr1', '10 1', 'variableStep chrom=chr2',
+                    '5 2', '20 3', 'variableStep chrom=chr3', '30 4', '40 5']
+        for line, exp in zip(pos_stats.to_wig(stat, 'track1', 'description'),
+                             wiglines):
+            assert line.strip() == exp 
         
     def test_calc_hdf5_stats_bin(self):
         bin_ = join(BIN_DIR, 'calculate_h5_stats.py')
@@ -401,5 +414,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calculate_hwe']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_to_wigfile']
     unittest.main()

@@ -7,6 +7,8 @@ from pandas.core.frame import DataFrame
 import pandas
 from matplotlib.pyplot import colorbar, hist2d, sci
 from scipy.stats.morestats import probplot
+from itertools import cycle
+from numpy.core.defchararray import decode
 plt.style.use('ggplot')
 
 
@@ -194,6 +196,48 @@ def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
         print_figure = True
         axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
     result = probplot(x, dist=distrib, sparams=distrib_params, plot=axes)
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
+           no_interactive_win=False, figsize=None, fhand=None,
+           colors='bk', yfunc=lambda x:x):
+    mask = numpy.logical_not(numpy.isnan(values))
+    chrom = chrom[mask]
+    pos = pos[mask]
+    values = values[mask]
+    
+    print_figure = False
+    if axes is None:
+        print_figure = True
+        axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    
+    x = numpy.array([])
+    y = numpy.array([])
+    col = numpy.array([])
+    chrom_names = numpy.unique(chrom)
+    last_pos = 0
+    colors = cycle(colors)
+    xticks = []
+    for chrom_name, color in zip(chrom_names, colors):
+        mask = chrom == chrom_name
+        chrom_pos = pos[mask]
+        col = numpy.append(col, numpy.repeat(color, chrom_pos.shape[0]))
+        xs = chrom_pos + last_pos
+        x = numpy.append(x, xs)
+        xticks.append((xs[0] + xs[-1]) / 2)
+        y = numpy.append(y, yfunc(values[mask]))
+        last_pos = xs[-1]
+    result = axes.scatter(x, y, c=col, alpha=0.8, edgecolors='none')
+    axes.set_xticks(xticks)
+    axes.set_xticklabels(decode(chrom_names), rotation=-90)
+    axes.set_xlim(0, x[-1])
+    axes.set_ylim(0)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])

@@ -12,7 +12,7 @@ from tempfile import NamedTemporaryFile
 import numpy
 
 from variation.plot import plot_histogram, _calc_boxplot_stats, plot_boxplot,\
-    qqplot
+    qqplot, manhattan_plot
 from os.path import join
 from test.test_utils import TEST_DATA_DIR
 from variation.variations.vars_matrices import VariationsH5
@@ -120,7 +120,16 @@ class PlotTest(unittest.TestCase):
         fhand = open(join(TEST_DATA_DIR, 'hwe_qqplot.png'), 'w')
         qqplot(hwe_chi2, distrib='chi2', distrib_params=(3,), fhand=fhand)
     
+    def test_manhattan_plot(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'), mode='r')
+        hwe_test = _calc_stat(hdf5, HWECalcualtor(2, 2))
+        hwe_pvalues = hwe_test[:, 1]
+        fhand = open(join(TEST_DATA_DIR, 'hwe_manhattan.png'), 'w')
+        manhattan_plot(hdf5['/variations/chrom'], hdf5['/variations/pos'],
+                       hwe_pvalues, fhand=fhand, yfunc=lambda x: -numpy.log10(x),
+                       figsize=(20, 10))
+        
     
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'PlotTest.test_qqplot']
+    import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
     unittest.main()

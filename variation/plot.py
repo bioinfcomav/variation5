@@ -206,8 +206,8 @@ def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
 
 def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
            no_interactive_win=False, figsize=None, fhand=None,
-           colors='bk', yfunc=lambda x:x, ylim=0, yline=None,
-           remove_nans=True, show_chroms=True):
+           colors=['darkorchid', 'darkturquoise'], yfunc=lambda x:x, ylim=0,
+           yline=None, remove_nans=True, show_chroms=True):
     if remove_nans:
         mask = numpy.logical_not(numpy.isnan(values))
         chrom = chrom[mask]

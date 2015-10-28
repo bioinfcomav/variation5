@@ -25,7 +25,7 @@ from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         calc_allele_obs_gq_distrib_2D,
                                         _MafCalculator,
     calc_inbreeding_coeficient_distrib, HWECalcualtor,
-    PositionalStatsCalculator)
+    PositionalStatsCalculator, calc_inbreeding_coeficient)
 from variation.plot import (plot_histogram, plot_pandas_barplot,
                             plot_boxplot, plot_barplot, plot_hist2d, qqplot,
     manhattan_plot)
@@ -102,26 +102,26 @@ def create_plots():
     h5 = VariationsH5(args['in_fpath'], mode='r',
                       vars_in_chunk=args['chunk_size'])
     by_chunk = args['by_chunk']
-    plot_maf(h5, by_chunk, data_dir)
-    plot_maf_dp(h5, by_chunk, data_dir)
-    plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
-    plot_het_obs_distrib(h5, by_chunk, data_dir)
-    plot_snp_dens_distrib(h5, by_chunk, args['window_size'], args['max_depth'],
-                          data_dir)
-    plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
-    plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
-                               max_value=args['max_gq'])
-    plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
-                               max_value=args['max_gq'])
-    plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
-    plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
-    plot_gt_stats_per_sample(h5, by_chunk, data_dir)
-    plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
-    plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
-                           max_value=args['max_gq'])
-    plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
+#     plot_maf(h5, by_chunk, data_dir)
+#     plot_maf_dp(h5, by_chunk, data_dir)
+#     plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
+#     plot_het_obs_distrib(h5, by_chunk, data_dir)
+#     plot_snp_dens_distrib(h5, by_chunk, args['window_size'], args['max_depth'],
+#                           data_dir)
+#     plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
+#     plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
+#                                max_value=args['max_gq'])
+#     plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
+#                                max_value=args['max_gq'])
+#     plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
+#     plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
+#     plot_gt_stats_per_sample(h5, by_chunk, data_dir)
+#     plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
+#     plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
+#                            max_value=args['max_gq'])
+#     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
-    plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
+#     plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
 
 
 def plot_maf(h5, by_chunk, data_dir):
@@ -553,19 +553,33 @@ def plot_allele_obs_distrib_2D(h5, by_chunk, data_dir):
 
 
 def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):
-    distrib = calc_inbreeding_coeficient_distrib(h5,
-                                                 max_num_allele=max_num_allele,
-                                                 by_chunk=by_chunk)
+    ic = calc_inbreeding_coeficient(h5, max_num_allele=max_num_allele,
+                                    by_chunk=by_chunk)
     fpath = join(data_dir, 'inbreeding_coef_distribution.png')
     fhand = open(fpath, 'w')
     title = 'Inbreeding coefficient distribution all samples'
-    x = numpy.arange(-100, 101)/100
-    plot_barplot(x, distrib, width=0.01,
+    plot_histogram(_remove_nans(ic),
                  mpl_params={'set_xlabel': {'args': ['Inbreeding coefficient'],
                                             'kwargs': {}},
-                             'set_ylabel': {'args': ['Counts'], 'kwargs': {}},
-                             'set_title': {'args': [title], 'kwargs': {}}},
+                             'set_ylabel': {'args': ['Number of SNPs'],
+                                            'kwargs': {}},
+                             'set_title': {'args': [title], 'kwargs': {}},
+                             'set_xlim': {'args': [-1, 1], 'kwargs': {}}},
                  fhand=fhand)
+    fpath = join(data_dir, 'ic_manhattan.png')
+    fhand = open(fpath, 'w')
+    title = 'Inbreeding coefficient (IC) along the genome'
+    manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], ic,
+                   mpl_params={'set_xlabel': {'args': ['Chromosome'],
+                                            'kwargs': {}},
+                             'set_ylabel': {'args': ['IC'],
+                                            'kwargs': {}},
+                             'set_title': {'args': [title], 'kwargs': {}}},
+                   fhand=fhand, figsize=(15, 7.5), ylim=-1)
+    bg_fhand = open(join(data_dir, 'ic.bg'), 'w')
+    pos_hwe_hwe = PositionalStatsCalculator(h5)
+    pos_hwe_hwe.write(bg_fhand, ic, 'IC', 'Inbreeding coefficient',
+                      track_type='bedgraph')
 
 
 def plot_hwe(h5, max_num_allele, by_chunk, data_dir,
@@ -599,7 +613,6 @@ def plot_hwe(h5, max_num_allele, by_chunk, data_dir,
     x = numpy.linspace(0, max(hwe_chi2), 1000)
     axes.plot(x, rv.pdf(x), color='b', lw=2, label='Expected Chi2')
     axes.set_ylabel('Expected Chi2 density')
-    # TODO: add expected chi2 distribution density
     canvas.print_figure(fhand)
     
     # Manhattan plot for HWE pvalue

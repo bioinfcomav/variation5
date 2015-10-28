@@ -127,7 +127,7 @@ class PlotTest(unittest.TestCase):
         fhand = open(join(TEST_DATA_DIR, 'hwe_manhattan.png'), 'w')
         manhattan_plot(hdf5['/variations/chrom'], hdf5['/variations/pos'],
                        hwe_pvalues, fhand=fhand, yfunc=lambda x: -numpy.log10(x),
-                       figsize=(20, 10))
+                       figsize=(20, 10), ylim=0)
         
     
 if __name__ == "__main__":

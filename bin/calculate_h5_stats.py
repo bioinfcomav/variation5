@@ -24,13 +24,16 @@ from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         _remove_nans, _is_hom_ref, _is_hom_alt,
                                         calc_allele_obs_gq_distrib_2D,
                                         _MafCalculator,
-    calc_inbreeding_coeficient_distrib, HWECalcualtor)
+    calc_inbreeding_coeficient_distrib, HWECalcualtor,
+    PositionalStatsCalculator)
 from variation.plot import (plot_histogram, plot_pandas_barplot,
-                            plot_boxplot, plot_barplot, plot_hist2d, qqplot)
+                            plot_boxplot, plot_barplot, plot_hist2d, qqplot,
+    manhattan_plot)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvas
 import sys
 from itertools import combinations_with_replacement
+from scipy.stats._continuous_distns import chi2
 
 
 def _setup_argparse(**kwargs):
@@ -118,8 +121,7 @@ def create_plots():
                            max_value=args['max_gq'])
     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
-    plot_hwe_chi2_qqplot(h5, args['max_num_alleles'], by_chunk, data_dir,
-                         ploidy=2)
+    plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
 
 
 def plot_maf(h5, by_chunk, data_dir):
@@ -133,7 +135,22 @@ def plot_maf(h5, by_chunk, data_dir):
                    range_=(0, 1))
     df_mafs = DataFrame(mafs)
     _save(fpath.strip('.png') + '.csv', df_mafs)
-
+    # Manhattan plot for SNP density
+    fpath = join(data_dir, 'maf_manhattan.png')
+    fhand = open(fpath, 'w')
+    title = 'Max Allele Freq (MAF) along the genome'
+    manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], mafs,
+                   mpl_params={'set_xlabel': {'args': ['Chromosome'],
+                                            'kwargs': {}},
+                             'set_ylabel': {'args': ['MAF'],
+                                            'kwargs': {}},
+                             'set_title': {'args': [title], 'kwargs': {}}},
+                   fhand=fhand, figsize=(15, 7.5))
+    bg_fhand = open(join(data_dir, 'maf.bg'), 'w')
+    pos_hwe_hwe = PositionalStatsCalculator(h5)
+    pos_hwe_hwe.write(bg_fhand, mafs, 'MAF', 'Maximum allele frequency',
+                      track_type='bedgraph')
+    
 
 def plot_maf_dp(h5, by_chunk, data_dir):
     try:
@@ -207,7 +224,7 @@ def plot_het_obs_distrib(h5, by_chunk, data_dir):
 def plot_snp_dens_distrib(h5, by_chunk, window_size, max_depth, data_dir):
         # SNP density distribution
     density = calc_snp_density(h5, window_size)
-    fpath = join(data_dir, 'snps_density.csv')
+    fpath = join(data_dir, 'snps_density.png')
     title = 'SNP density distribution per {} bp windows'
     title = title.format(window_size)
     plot_histogram(density, bins=50, fhand=open(fpath, 'w'), color='c',
@@ -217,6 +234,19 @@ def plot_snp_dens_distrib(h5, by_chunk, window_size, max_depth, data_dir):
                                'set_title': {'args': [title], 'kwargs': {}}})
     df_dens = DataFrame(density)
     _save(fpath.strip('.png') + '.csv', df_dens)
+    
+    # Manhattan plot for SNP density
+    fpath = join(data_dir, 'snps_density_manhattan.png')
+    fhand = open(fpath, 'w')
+    title = 'SNP denisity along the genome'
+    manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], density,
+                   mpl_params={'set_xlabel': {'args': ['Chromosome'],
+                                            'kwargs': {}},
+                             'set_ylabel': {'args': ['SNP per {} bp'.format(window_size)],
+                                            'kwargs': {}},
+                             'set_title': {'args': [title], 'kwargs': {}},
+                             'set_yscale':{'args': ['log'], 'kwargs': {}}},
+                   fhand=fhand, figsize=(15, 7.5), ylim=1)
 
     # DP distribution per sample
     distrib_dp, cum_dp = calc_depth_cumulative_distribution_per_sample(h5,
@@ -234,6 +264,11 @@ def plot_snp_dens_distrib(h5, by_chunk, window_size, max_depth, data_dir):
                  mpl_params=mpl_params)
     df_distrib_dp = DataFrame(distrib_dp)
     _save(fpath.strip('.png') + '.csv', df_distrib_dp)
+    bg_fhand = open(join(data_dir, 'snp_density.bg'), 'w')
+    pos_hwe_hwe = PositionalStatsCalculator(h5)
+    pos_hwe_hwe.write(bg_fhand, density, 'snp_density',
+                      'SNP number in {} bp around'.format(window_size),
+                      track_type='bedgraph')
 
 
 def plot_dp_distrib_all_sample(h5, by_chunk, max_depth, data_dir):
@@ -533,12 +568,12 @@ def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):
                  fhand=fhand)
 
 
-def plot_hwe_chi2_qqplot(h5, max_num_allele, by_chunk, data_dir,
+def plot_hwe(h5, max_num_allele, by_chunk, data_dir,
                          ploidy=2):
     fpath = join(data_dir, 'hwe_chi2_qqplot.png')
     fhand = open(fpath, 'w')
     df = len(list(combinations_with_replacement(range(max_num_allele),
-                                                ploidy)))
+                                                ploidy))) - max_num_allele
     hwe_test = _calc_stat(h5, HWECalcualtor(max_num_allele, ploidy),
                           by_chunk=by_chunk)
     hwe_chi2 = _remove_nans(hwe_test[:, 0])
@@ -559,9 +594,48 @@ def plot_hwe_chi2_qqplot(h5, max_num_allele, by_chunk, data_dir,
                              'set_ylabel': {'args': ['SNP number'],
                                             'kwargs': {}},
                              'set_title': {'args': [title], 'kwargs': {}}})
+    axes = axes.twinx()
+    rv = chi2(df)
+    x = numpy.linspace(0, max(hwe_chi2), 1000)
+    axes.plot(x, rv.pdf(x), color='b', lw=2, label='Expected Chi2')
+    axes.set_ylabel('Expected Chi2 density')
     # TODO: add expected chi2 distribution density
     canvas.print_figure(fhand)
     
+    # Manhattan plot for HWE pvalue
+    fpath = join(data_dir, 'hwe_pvalue_manhattan.png')
+    fhand = open(fpath, 'w')
+    hwe_pvalues = hwe_test[:, 1]
+    title = 'Chi2 test for HWE df={} along the genome'.format(df)
+    fig = Figure(figsize=(10, 10))
+    canvas = FigureCanvas(fig)
+    axes = fig.add_subplot(211)
+    manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_test[:, 0],
+                   mpl_params={'set_ylabel': {'args': ['Chi2 statistic'],
+                                            'kwargs': {}},
+                             'set_title': {'args': [title], 'kwargs': {}}},
+                   axes=axes, figsize=(15, 7.5), ylim=0, show_chroms=False)
+    axes = fig.add_subplot(212)
+    manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_pvalues,
+                   mpl_params={'set_xlabel': {'args': ['Chromosome'],
+                                            'kwargs': {}},
+                             'set_ylabel': {'args': ['1 / p-value'],
+                                            'kwargs': {}},
+                             'set_yscale': {'args': ['log'], 'kwargs': {}}},
+                   axes=axes, figsize=(15, 7.5), ylim=1, yfunc=lambda x: 1/x,
+                   yline=hwe_pvalues.shape[0]/0.05)
+    canvas.print_figure(fhand)
+    bg_fhand = open(join(data_dir, 'hwe_pvalue.bg'), 'w')
+    pos_hwe_pval = PositionalStatsCalculator(h5)
+    pos_hwe_pval.write(bg_fhand, hwe_pvalues, 'hwe_pvalue',
+                       'HWE test chi2 df={} test p-value'.format(df),
+                       track_type='bedgraph')
+    bg_fhand = open(join(data_dir, 'hwe_chi2.bg'), 'w')
+    pos_hwe_hwe = PositionalStatsCalculator(h5)
+    pos_hwe_hwe.write(bg_fhand, hwe_test[:, 0], 'hwe_chi2',
+                      'HWE test chi2 df={} statistic'.format(df),
+                      track_type='bedgraph')
+
 
 def _save(path, dataframe):
     file = open(path, mode='w')

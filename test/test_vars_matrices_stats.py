@@ -393,7 +393,7 @@ class VarMatricesStatsTest(unittest.TestCase):
             for x, y in zip(res, exp):
                 assert abs(x - y) < 0.000000001
     
-    def test_to_wigfile(self):
+    def test_to_positional_stats(self):
         chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3'])
         pos = numpy.array([10, 5, 20, 30, 40])
         variations = {'/variations/chrom': chrom, '/variations/pos': pos}
@@ -402,8 +402,13 @@ class VarMatricesStatsTest(unittest.TestCase):
         wiglines = ['track type=wiggle_0 name="track1" description="description"',
                     'variableStep chrom=chr1', '10 1', 'variableStep chrom=chr2',
                     '5 2', '20 3', 'variableStep chrom=chr3', '30 4', '40 5']
-        for line, exp in zip(pos_stats.to_wig(stat, 'track1', 'description'),
-                             wiglines):
+        for line, exp in zip(pos_stats.to_wig(stat), wiglines[1:]):
+            assert line.strip() == exp
+        
+        bg_lines = ['track type=bedGraph name="track1" description="description"',
+                    'chr1 10 11 1', 'chr2 5 6 2', 'chr2 20 21 3',
+                    'chr3 30 31 4', 'chr3 40 41 5']
+        for line, exp in zip(pos_stats.to_bedGraph(stat), bg_lines[1:]):
             assert line.strip() == exp 
         
     def test_calc_hdf5_stats_bin(self):
@@ -414,5 +419,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_to_wigfile']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_to_positional_stats']
     unittest.main()

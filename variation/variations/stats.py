@@ -692,35 +692,54 @@ class HWECalcualtor:
 
 class PositionalStatsCalculator:
     def __init__(self, hdf5):
-        self.hdf5 = hdf5
-        self.chrom = hdf5['/variations/chrom']
-        self.pos = hdf5['/variations/pos']
+        self.chrom = hdf5['/variations/chrom'][:]
+        self.pos = hdf5['/variations/pos'][:]
         self.chrom_names = numpy.unique(self.chrom)
     
-    def _get_track_definition(self, name, description, **kwargs):
-        track_line = 'track type=wiggle_0 name="{}" description="{}"'
-        track_line = track_line.format(name, description)
+    def _get_track_definition(self, track_type, name, description, **kwargs):
+        types = {'wig': 'wiggle_0', 'bedgraph': 'bedGraph'}
+        track_line = 'track type={} name="{}" description="{}"'
+        track_line = track_line.format(types[track_type], name, description)
         for key, value in kwargs:
             track_line += ' {}={}'.format(key, value)
         return track_line
     
-    def to_wig(self, stat, track_name, track_description, **kwargs):
-        if stat.shape[0] != self.pos.shape[0]:
+    def to_wig(self, stat):
+        if stat.shape[0] != self.pos.shape[0] or stat.shape[0] != self.chrom.shape[0]:
             raise ValueError('Stat does not have the same size as pos')
-        track_line = self._get_track_definition(track_name, track_description,
-                                                **kwargs)
-        yield track_line
-        for chrom in self.chrom_names:
-            mask = self.chrom == chrom
-            yield 'variableStep chrom={}'.format(chrom)
-            for pos, value in zip(self.pos[mask], stat[mask]):
-                yield '{} {}'.format(pos, value)
+        for chrom_name in self.chrom_names:
+            mask = numpy.logical_and(self.chrom == chrom_name,
+                                   numpy.logical_not(numpy.isnan(stat)))
+            yield 'variableStep chrom={}'.format(chrom_name)
+            values = stat[mask]
+            pos = self.pos[mask]
+            if values.shape != () and pos.shape != ():
+                for pos, value in zip(pos, values):
+                    yield '{} {}'.format(pos, value)
+            else:
+                yield '{} {}'.format(pos, values)
     
-    def write_wigfile(self, fhand, stat, track_name, track_description,
-                      buffer_size=1000, **kwargs):
-        buffer = ''
-        lines = 0
-        for line in self.to_wig(stat, track_name, track_description, **kwargs):
+    def to_bedGraph(self, stat):
+        if stat.shape[0] != self.pos.shape[0] or stat.shape[0] != self.chrom.shape[0]:
+            raise ValueError('Stat does not have the same size as pos')
+        for chrom_name in self.chrom_names:
+            mask = numpy.logical_and(self.chrom == chrom_name,
+                                   numpy.logical_not(numpy.isnan(stat)))
+            values = stat[mask]
+            pos = self.pos[mask]
+            if values.shape != () and pos.shape != ():
+                for pos, value in zip(pos, values):
+                    yield '{} {} {} {}'.format(chrom_name, pos, pos+1, value)
+            else:
+                yield '{} {} {} {}'.format(chrom_name, pos, pos+1, value)
+    
+    def write(self, fhand, stat, track_name, track_description,
+              buffer_size=1000, track_type='bedgraph', **kwargs):
+        get_lines = {'wig': self.to_wig, 'bedgraph': self.to_bedGraph}
+        buffer = self._get_track_definition(track_type, track_name,
+                                            track_description, **kwargs)
+        lines = 1
+        for line in get_lines[track_type](stat):
             lines += 1
             buffer += line + '\n'
             if lines == buffer_size:

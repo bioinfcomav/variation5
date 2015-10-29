@@ -25,7 +25,7 @@ from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         calc_allele_obs_gq_distrib_2D,
                                         _MafCalculator,
     calc_inbreeding_coeficient_distrib, HWECalcualtor,
-    PositionalStatsCalculator, calc_inbreeding_coeficient)
+    PositionalStatsCalculator, calc_inbreeding_coeficient, calc_exp_het)
 from variation.plot import (plot_histogram, plot_pandas_barplot,
                             plot_boxplot, plot_barplot, plot_hist2d, qqplot,
     manhattan_plot)
@@ -121,7 +121,9 @@ def create_plots():
 #                            max_value=args['max_gq'])
 #     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
-#     plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
+    plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
+    plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
+                                       args['window_size'], data_dir, by_chunk)
 
 
 def plot_maf(h5, by_chunk, data_dir):
@@ -147,8 +149,9 @@ def plot_maf(h5, by_chunk, data_dir):
                              'set_title': {'args': [title], 'kwargs': {}}},
                    fhand=fhand, figsize=(15, 7.5))
     bg_fhand = open(join(data_dir, 'maf.bg'), 'w')
-    pos_hwe_hwe = PositionalStatsCalculator(h5)
-    pos_hwe_hwe.write(bg_fhand, mafs, 'MAF', 'Maximum allele frequency',
+    pos_maf = PositionalStatsCalculator(h5['/variations/chrom'],
+                                            h5['/variations/pos'], mafs)
+    pos_maf.write(bg_fhand, 'MAF', 'Maximum allele frequency',
                       track_type='bedgraph')
     
 
@@ -265,10 +268,11 @@ def plot_snp_dens_distrib(h5, by_chunk, window_size, max_depth, data_dir):
     df_distrib_dp = DataFrame(distrib_dp)
     _save(fpath.strip('.png') + '.csv', df_distrib_dp)
     bg_fhand = open(join(data_dir, 'snp_density.bg'), 'w')
-    pos_hwe_hwe = PositionalStatsCalculator(h5)
-    pos_hwe_hwe.write(bg_fhand, density, 'snp_density',
-                      'SNP number in {} bp around'.format(window_size),
-                      track_type='bedgraph')
+    pos_dens = PositionalStatsCalculator(h5['/variations/chrom'],
+                                         h5['/variations/pos'], density)
+    pos_dens.write(bg_fhand, 'snp_density',
+                   'SNP number in {} bp around'.format(window_size),
+                   track_type='bedgraph')
 
 
 def plot_dp_distrib_all_sample(h5, by_chunk, max_depth, data_dir):
@@ -577,8 +581,9 @@ def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):
                              'set_title': {'args': [title], 'kwargs': {}}},
                    fhand=fhand, figsize=(15, 7.5), ylim=-1)
     bg_fhand = open(join(data_dir, 'ic.bg'), 'w')
-    pos_hwe_hwe = PositionalStatsCalculator(h5)
-    pos_hwe_hwe.write(bg_fhand, ic, 'IC', 'Inbreeding coefficient',
+    pos_ic = PositionalStatsCalculator(h5['/variations/chrom'],
+                                       h5['/variations/pos'], ic)
+    pos_ic.write(bg_fhand, ic, 'IC', 'Inbreeding coefficient',
                       track_type='bedgraph')
 
 
@@ -639,15 +644,85 @@ def plot_hwe(h5, max_num_allele, by_chunk, data_dir,
                    yline=hwe_pvalues.shape[0]/0.05)
     canvas.print_figure(fhand)
     bg_fhand = open(join(data_dir, 'hwe_pvalue.bg'), 'w')
-    pos_hwe_pval = PositionalStatsCalculator(h5)
-    pos_hwe_pval.write(bg_fhand, hwe_pvalues, 'hwe_pvalue',
+    pos_hwe_pval = PositionalStatsCalculator(h5['/variations/chrom'],
+                                             h5['/variations/pos'], hwe_pvalues)
+    pos_hwe_pval.write(bg_fhand, 'hwe_pvalue',
                        'HWE test chi2 df={} test p-value'.format(df),
                        track_type='bedgraph')
     bg_fhand = open(join(data_dir, 'hwe_chi2.bg'), 'w')
-    pos_hwe_hwe = PositionalStatsCalculator(h5)
-    pos_hwe_hwe.write(bg_fhand, hwe_test[:, 0], 'hwe_chi2',
+    pos_hwe_chi2 = PositionalStatsCalculator(h5['/variations/chrom'],
+                                            h5['/variations/pos'],
+                                            hwe_test[:, 0])
+    pos_hwe_chi2.write(bg_fhand, 'hwe_chi2',
                       'HWE test chi2 df={} statistic'.format(df),
                       track_type='bedgraph')
+
+
+def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,
+                                       data_dir, by_chunk):
+    fig = Figure(figsize=(20, 20))
+    canvas = FigureCanvas(fig)
+    marker = 'k'
+    
+    # Number of variable positions per bp
+    chrom, pos = hdf5['/variations/chrom'][:], hdf5['/variations/pos'][:]
+    snp_density = PositionalStatsCalculator(chrom, pos,
+                                            numpy.ones(hdf5['/variations/pos'].shape),
+                                            window_size=window_size,
+                                            step=window_size)
+    snp_density = snp_density.calc_window_stat()
+    bg_fhand = open(join(data_dir, 'diversity_s.bg'), 'w')
+    snp_density.write(bg_fhand, 's',
+                      'SNP density in windows of {} bp'.format(window_size),
+                      track_type='bedgraph')
+    axes = fig.add_subplot(311)
+    title = 'Nucleotide diversity measures averaged in windows of {} bp'.format(window_size)
+    manhattan_plot(snp_density.chrom, snp_density.pos, snp_density.stat,
+                   mpl_params={'set_title': {'args': [title],
+                                              'kwargs': {}},
+                               'set_ylabel': {'args': ['SNPs number / bp'],
+                                              'kwargs': {}},
+                               'set_ylim': {'args': [0, 1.2*numpy.max(snp_density.stat)],
+                                              'kwargs': {}}},
+                   axes=axes, ylim=0, show_chroms=False, marker=marker)
+    
+    # Watterson estimator of nucleotide diversity
+    
+    n_seqs = hdf5['/calls/GT'].shape[1] * hdf5['/calls/GT'].shape[2]
+    correction_factor = numpy.sum(1 / numpy.arange(1, n_seqs))
+    watterson = snp_density
+    watterson.stat = watterson.stat / correction_factor
+    bg_fhand = open(join(data_dir, 'diversity_s.bg'), 'w')
+    watterson.write(bg_fhand, 's',
+                    'SNP density in windows of {} bp'.format(window_size),
+                    track_type='bedgraph')
+    axes = fig.add_subplot(312)
+    manhattan_plot(watterson.chrom, watterson.pos, watterson.stat,
+                   mpl_params={'set_ylabel': {'args': ['Watterson estimator'],
+                                              'kwargs': {}},
+                               'set_ylim': {'args': [0, 1.2*numpy.max(watterson.stat)],
+                                              'kwargs': {}}},
+                   axes=axes, ylim=0, show_chroms=False, marker=marker)
+    
+    # Expected heterozygosity
+    exp_het = calc_exp_het(hdf5, max_num_allele=max_num_alleles,
+                           by_chunk=by_chunk)
+    pi = PositionalStatsCalculator(chrom, pos, exp_het,
+                                   window_size=window_size, step=window_size)
+    pi = pi.calc_window_stat()
+    bg_fhand = open(join(data_dir, 'diversity_pi.bg'), 'w')
+    pi.write(bg_fhand, 's',
+                      'Pi in windows of {} bp'.format(window_size),
+                      track_type='bedgraph')
+    axes = fig.add_subplot(313)
+    manhattan_plot(pi.chrom, pi.pos, pi.stat, axes=axes, ylim=0, marker=marker,
+                   mpl_params={'set_xlabel': {'args': ['Chromosome'],
+                                              'kwargs': {}},
+                               'set_ylabel': {'args': ['Pi'],
+                                              'kwargs': {}},
+                               'set_ylim': {'args': [0, 1.2*numpy.max(pi.stat)],
+                                              'kwargs': {}}})
+    canvas.print_figure(open(join(data_dir, 'nucleotide_diversity.png'), 'w'))
 
 
 def _save(path, dataframe):

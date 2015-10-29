@@ -24,7 +24,6 @@ from variation.variations.stats import (_remove_nans,
                                         calc_gq_cumulative_distribution_per_sample,
                                         calc_hq_cumulative_distribution_per_sample,
                                         _calc_stat, _AlleleFreqCalculator,
-                                        calc_expected_het,
                                         calc_inbreeding_coeficient, _is_het,
                                         _is_hom,
                                         calc_snv_density_distribution,
@@ -39,7 +38,7 @@ from variation.variations.stats import (_remove_nans,
                                         _is_hom_ref, _is_hom_alt,
                                         _InbreedingCoeficientCalculator,
                                         calc_inbreeding_coeficient_distrib,
-    HWECalcualtor, PositionalStatsCalculator)
+    HWECalcualtor, PositionalStatsCalculator, _ExpectedHetCalculator)
 
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
@@ -169,18 +168,19 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert result[-2, 0] == 0.95
 
     def test_calc_expected_het(self):
-        allele_freq = numpy.array([[0.5, 0.5, 0., 0.],
-                                  [0.25, 0.25, 0.5, 0.]])
-        exp_het = calc_expected_het(allele_freq)
-        assert numpy.all(exp_het == numpy.array([0.5, 0.625]))
+        variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
+                                                 [0, 0], [0, 1], [0, 0],
+                                                 [0, 0], [0, 1], [1, 1],
+                                                 [0, 0]]])}
+        calc_expected_het = _ExpectedHetCalculator(max_num_allele=2)
+        exp_het = calc_expected_het(variations)
+        assert exp_het[0] - 0.42 < 0.001 
 
     def test_calc_inbreeding_coeficient(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         obs_het = _calc_stat(hdf5, _ObsHetCalculatorBySnps())
-        allele_freq = _calc_stat(hdf5,
-                                 _AlleleFreqCalculator(max_num_allele=4),
-                                 by_chunk=True)
-        exp_het = calc_expected_het(allele_freq)
+        calc_expected_het = _ExpectedHetCalculator(max_num_allele=4)
+        exp_het = calc_expected_het(hdf5)
         expected = 1 - (obs_het/exp_het)
         result = calc_inbreeding_coeficient(hdf5, max_num_allele=4,
                                             by_chunk=True)
@@ -194,7 +194,7 @@ class VarMatricesStatsTest(unittest.TestCase):
                                                  [0, 0]]])}
         result = calc_inbreeding_coeficient(variations, max_num_allele=4,
                                             by_chunk=False)
-        assert result[0] == 1-(0.4/0.42)
+        assert result[0] - 1-(0.4/0.42) < 0.0000001
 
     def test_calc_inbreeding_coef_distrib(self):
         variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
@@ -394,19 +394,19 @@ class VarMatricesStatsTest(unittest.TestCase):
                 assert abs(x - y) < 0.000000001
     
     def test_to_positional_stats(self):
-        chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3'])
-        pos = numpy.array([10, 5, 20, 30, 40])
-        stat = numpy.array([1, 2, 3, 4, 5])
+        chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3', 'chr4'])
+        pos = numpy.array([10, 5, 20, 30, 40, 50])
+        stat = numpy.array([1, 2, 3, 4, 5, numpy.nan])
         pos_stats = PositionalStatsCalculator(chrom, pos, stat)
         wiglines = ['track type=wiggle_0 name="track1" description="description"',
-                    'variableStep chrom=chr1', '10 1', 'variableStep chrom=chr2',
-                    '5 2', '20 3', 'variableStep chrom=chr3', '30 4', '40 5']
+                    'variableStep chrom=chr1', '10 1.0', 'variableStep chrom=chr2',
+                    '5 2.0', '20 3.0', 'variableStep chrom=chr3', '30 4.0', '40 5.0']
         for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
             assert line.strip() == exp
         
         bg_lines = ['track type=bedGraph name="track1" description="description"',
-                    'chr1 10 11 1', 'chr2 5 6 2', 'chr2 20 21 3',
-                    'chr3 30 31 4', 'chr3 40 41 5']
+                    'chr1 10 11 1.0', 'chr2 5 6 2.0', 'chr2 20 21 3.0',
+                    'chr3 30 31 4.0', 'chr3 40 41 5.0']
         for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
             assert line.strip() == exp
         
@@ -442,5 +442,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_to_positional_stats']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_hdf5_stats_bin']
     unittest.main()

@@ -609,11 +609,22 @@ class _InbreedingCoeficientCalculator:
 
     def __call__(self, variations):
         calc_obs_het = _ObsHetCalculatorBySnps()
-        calc_allele_freq = _AlleleFreqCalculator(self.max_num_allele)
+        calc_expected_het = _ExpectedHetCalculator(self.max_num_allele) 
         obs_het = calc_obs_het(variations)
-        allele_freq = calc_allele_freq(variations)
-        exp_het = calc_expected_het(allele_freq)
+        exp_het = calc_expected_het(variations)
         return 1 - (obs_het / exp_het)
+
+
+class _ExpectedHetCalculator:
+    def __init__(self, max_num_allele):
+        self.required_fields = ['/calls/GT']
+        self.max_num_allele = max_num_allele
+
+    def __call__(self, variations):
+        calc_allele_freq = _AlleleFreqCalculator(self.max_num_allele)
+        allele_freq = calc_allele_freq(variations)
+        ploidy = variations['/calls/GT'].shape[2]
+        return 1 - numpy.sum(allele_freq ** ploidy, axis=1) 
 
 
 class _InbreedingCoeficientDistribCalculator:
@@ -631,20 +642,15 @@ class _InbreedingCoeficientDistribCalculator:
         return numpy.delete(distrib, [101])
 
 
-def calc_expected_het(alleles_freq):
-    exp_het = None
-    for index_1, index_2 in combinations(range(alleles_freq.shape[1]), 2):
-        if exp_het is None:
-            exp_het = 2 * alleles_freq[:, index_1] * alleles_freq[:, index_2]
-        else:
-            exp_het += 2 * alleles_freq[:, index_1] * alleles_freq[:, index_2]
-    return exp_het
-
-
 def calc_inbreeding_coeficient(variations, max_num_allele=MAX_N_ALLELES,
                                by_chunk=True):
     calc_IC = _InbreedingCoeficientCalculator(max_num_allele)
     return _calc_stat(variations, calc_IC, by_chunk=by_chunk)
+
+
+def calc_exp_het(variations, max_num_allele=MAX_N_ALLELES, by_chunk=True):
+    calc_exp_het = _ExpectedHetCalculator(max_num_allele)
+    return _calc_stat(variations, calc_exp_het, by_chunk=by_chunk)
 
 
 def calc_inbreeding_coeficient_distrib(variations, max_num_allele=MAX_N_ALLELES,
@@ -731,7 +737,8 @@ class PositionalStatsCalculator:
                                    numpy.logical_not(numpy.isnan(self.stat)))
             values = self.stat[mask]
             pos = self.pos[mask]
-            yield chrom_name, pos, values
+            if values.shape != () and values.shape != (0,):
+                yield chrom_name, pos, values
         
     def _get_track_definition(self, track_type, name, description, **kwargs):
         types = {'wig': 'wiggle_0', 'bedgraph': 'bedGraph'}

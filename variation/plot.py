@@ -207,7 +207,7 @@ def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
 def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
            no_interactive_win=False, figsize=None, fhand=None,
            colors=['darkorchid', 'darkturquoise'], yfunc=lambda x:x, ylim=0,
-           yline=None, remove_nans=True, show_chroms=True):
+           yline=None, remove_nans=True, show_chroms=True, marker='o'):
     if remove_nans:
         mask = numpy.logical_not(numpy.isnan(values))
         chrom = chrom[mask]
@@ -233,9 +233,13 @@ def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
         xs = chrom_pos + last_pos
         x = numpy.append(x, xs)
         xticks.append((xs[0] + xs[-1]) / 2)
-        y = numpy.append(y, yfunc(values[mask]))
+        ys = yfunc(values[mask])
+        y = numpy.append(y, ys)
         last_pos = xs[-1]
-    result = axes.scatter(x, y, c=col, alpha=0.8, edgecolors='none')
+        if marker != 'o':
+            result = axes.plot(xs, ys, marker, c=color)
+    if marker == 'o':
+        result = axes.scatter(x, y, c=col, marker=marker, alpha=0.8, edgecolors='none')
     axes.set_xticks(xticks)
     if show_chroms:
         axes.set_xticklabels(decode(chrom_names), rotation=-90, size='small')

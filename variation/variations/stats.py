@@ -691,11 +691,48 @@ class HWECalcualtor:
 
 
 class PositionalStatsCalculator:
-    def __init__(self, hdf5):
-        self.chrom = hdf5['/variations/chrom'][:]
-        self.pos = hdf5['/variations/pos'][:]
+    def __init__(self, chrom, pos, stat, window_size=None, step=1,
+                 take_windows=True):
+        self.chrom = chrom
+        self.pos = pos
+        self.stat = stat
         self.chrom_names = numpy.unique(self.chrom)
+        self.window_size = window_size
+        self.step = step
+        self.take_windows = take_windows
     
+    def _calc_chrom_window_stat(self, pos, values):
+        # TODO: take into account unknown positions in the genome (N) fastafile?
+        if self.window_size and self.take_windows:
+            for i in range(pos[0], pos[-1], self.step):
+                window = numpy.logical_and(pos >= i, pos < i + self.window_size)
+                yield i, numpy.sum(values[window]) / self.window_size
+        else:
+            for x, y in zip(pos, values):
+                yield x, y
+    
+    def calc_window_stat(self):
+        w_chroms, w_pos, w_stat = [], [], []
+        for chrom_name, pos, values in self._iterate_chroms():
+            for chrom_pos, value in self._calc_chrom_window_stat(pos, values):
+                w_chroms.append(chrom_name)
+                w_pos.append(chrom_pos)
+                w_stat.append(value)
+        chrom = numpy.array(w_chroms)
+        pos = numpy.array(w_pos)
+        stat = numpy.array(w_stat)
+        
+        return PositionalStatsCalculator(chrom, pos, stat, self.window_size,
+                                         self.step, False)
+    
+    def _iterate_chroms(self):
+        for chrom_name in self.chrom_names:
+            mask = numpy.logical_and(self.chrom == chrom_name,
+                                   numpy.logical_not(numpy.isnan(self.stat)))
+            values = self.stat[mask]
+            pos = self.pos[mask]
+            yield chrom_name, pos, values
+        
     def _get_track_definition(self, track_type, name, description, **kwargs):
         types = {'wig': 'wiggle_0', 'bedgraph': 'bedGraph'}
         track_line = 'track type={} name="{}" description="{}"'
@@ -704,42 +741,57 @@ class PositionalStatsCalculator:
             track_line += ' {}={}'.format(key, value)
         return track_line
     
-    def to_wig(self, stat):
+    def to_wig(self):
+        stat = self.stat
+        span = self.window_size
         if stat.shape[0] != self.pos.shape[0] or stat.shape[0] != self.chrom.shape[0]:
             raise ValueError('Stat does not have the same size as pos')
-        for chrom_name in self.chrom_names:
-            mask = numpy.logical_and(self.chrom == chrom_name,
-                                   numpy.logical_not(numpy.isnan(stat)))
-            yield 'variableStep chrom={}'.format(chrom_name)
-            values = stat[mask]
-            pos = self.pos[mask]
+        for chrom_name, pos, values in self._iterate_chroms():
+            chrom_line = 'variableStep chrom={}'.format(chrom_name)
+            variable_step = True
+            if span is not None:
+                chrom_line = 'fixedStep chrom={} start={} span={} step={}'
+                chrom_line = chrom_line.format(chrom_name, pos[0], span,
+                                               self.step)
+                variable_step = False
+            yield chrom_line
+            # When containing only one value, it is not iterable
             if values.shape != () and pos.shape != ():
-                for pos, value in zip(pos, values):
+                for pos, value in self._calc_chrom_window_stat(pos, values):
+                    if variable_step:
+                        yield '{} {}'.format(pos, value)
+                    else:
+                        yield str(value)
+            else:
+                if variable_step:
                     yield '{} {}'.format(pos, value)
-            else:
-                yield '{} {}'.format(pos, values)
+                else:
+                    yield str(value)
     
-    def to_bedGraph(self, stat):
+    def to_bedGraph(self):
+        window_size = self.window_size
+        stat = self.stat
+        if window_size is None:
+            window_size = 1
         if stat.shape[0] != self.pos.shape[0] or stat.shape[0] != self.chrom.shape[0]:
             raise ValueError('Stat does not have the same size as pos')
-        for chrom_name in self.chrom_names:
-            mask = numpy.logical_and(self.chrom == chrom_name,
-                                   numpy.logical_not(numpy.isnan(stat)))
-            values = stat[mask]
-            pos = self.pos[mask]
+        for chrom_name, pos, values in self._iterate_chroms():
+            # When containing only one value, it is not iterable
             if values.shape != () and pos.shape != ():
-                for pos, value in zip(pos, values):
-                    yield '{} {} {} {}'.format(chrom_name, pos, pos+1, value)
+                for pos, value in self._calc_chrom_window_stat(pos, values):
+                    yield '{} {} {} {}'.format(chrom_name, pos,
+                                               pos+window_size, value)
             else:
-                yield '{} {} {} {}'.format(chrom_name, pos, pos+1, value)
+                yield '{} {} {} {}'.format(chrom_name, pos,
+                                           pos+window_size, value)
     
-    def write(self, fhand, stat, track_name, track_description,
+    def write(self, fhand, track_name, track_description,
               buffer_size=1000, track_type='bedgraph', **kwargs):
         get_lines = {'wig': self.to_wig, 'bedgraph': self.to_bedGraph}
         buffer = self._get_track_definition(track_type, track_name,
                                             track_description, **kwargs)
         lines = 1
-        for line in get_lines[track_type](stat):
+        for line in get_lines[track_type]():
             lines += 1
             buffer += line + '\n'
             if lines == buffer_size:

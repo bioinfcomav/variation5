@@ -396,20 +396,43 @@ class VarMatricesStatsTest(unittest.TestCase):
     def test_to_positional_stats(self):
         chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3'])
         pos = numpy.array([10, 5, 20, 30, 40])
-        variations = {'/variations/chrom': chrom, '/variations/pos': pos}
         stat = numpy.array([1, 2, 3, 4, 5])
-        pos_stats = PositionalStatsCalculator(variations)
+        pos_stats = PositionalStatsCalculator(chrom, pos, stat)
         wiglines = ['track type=wiggle_0 name="track1" description="description"',
                     'variableStep chrom=chr1', '10 1', 'variableStep chrom=chr2',
                     '5 2', '20 3', 'variableStep chrom=chr3', '30 4', '40 5']
-        for line, exp in zip(pos_stats.to_wig(stat), wiglines[1:]):
+        for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
             assert line.strip() == exp
         
         bg_lines = ['track type=bedGraph name="track1" description="description"',
                     'chr1 10 11 1', 'chr2 5 6 2', 'chr2 20 21 3',
                     'chr3 30 31 4', 'chr3 40 41 5']
-        for line, exp in zip(pos_stats.to_bedGraph(stat), bg_lines[1:]):
-            assert line.strip() == exp 
+        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
+            assert line.strip() == exp
+        
+        # Taking windows
+        chrom = numpy.repeat('chr1', 5)
+        pos = numpy.array([10, 20, 30, 40, 50])
+        stat = numpy.array([1, 2, 3, 4, 5])
+        pos_stats = PositionalStatsCalculator(chrom, pos, stat, window_size=25,
+                                              step=25)
+        wiglines = ['track type=wiggle_0 name="track1" description="description"',
+                    'fixedStep chrom=chr1 start=10 span=25 step=25',
+                    str(6/25), str(9/25)]
+        for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
+            assert line.strip() == exp
+        
+        bg_lines = ['track type=bedGraph name="track1" description="description"',
+                    'chr1 10 35 {}'.format(6/25), 'chr1 35 60 {}'.format(9/25)]
+        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
+            assert line.strip() == exp
+        
+        # Pre-calculating the windows
+        pos_stats = pos_stats.calc_window_stat()
+        bg_lines = ['track type=bedGraph name="track1" description="description"',
+                    'chr1 10 35 {}'.format(6/25), 'chr1 35 60 {}'.format(9/25)]
+        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
+            assert line.strip() == exp
         
     def test_calc_hdf5_stats_bin(self):
         bin_ = join(BIN_DIR, 'calculate_h5_stats.py')

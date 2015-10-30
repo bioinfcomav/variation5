@@ -247,7 +247,7 @@ class _IntDistributionCalculator():
     def __init__(self, max_value, fields=None, fillna=None, per_sample=True,
                  mask_function=None, mask_field=None):
         self.required_fields = fields
-        self.max_value = max_value
+        self.max_value = int(max_value)
         self.fillna = fillna
         self.per_sample = per_sample
         self.mask_function = mask_function

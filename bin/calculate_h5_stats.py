@@ -102,24 +102,24 @@ def create_plots():
     h5 = VariationsH5(args['in_fpath'], mode='r',
                       vars_in_chunk=args['chunk_size'])
     by_chunk = args['by_chunk']
-#     plot_maf(h5, by_chunk, data_dir)
-#     plot_maf_dp(h5, by_chunk, data_dir)
-#     plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
-#     plot_het_obs_distrib(h5, by_chunk, data_dir)
-#     plot_snp_dens_distrib(h5, by_chunk, args['window_size'], args['max_depth'],
-#                           data_dir)
-#     plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
-#     plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
-#                                max_value=args['max_gq'])
-#     plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
-#                                max_value=args['max_gq'])
-#     plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
-#     plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
-#     plot_gt_stats_per_sample(h5, by_chunk, data_dir)
-#     plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
-#     plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
-#                            max_value=args['max_gq'])
-#     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
+    plot_maf(h5, by_chunk, data_dir)
+    plot_maf_dp(h5, by_chunk, data_dir)
+    plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
+    plot_het_obs_distrib(h5, by_chunk, data_dir)
+    plot_snp_dens_distrib(h5, by_chunk, args['window_size'], args['max_depth'],
+                          data_dir)
+    plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
+    plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
+                               max_value=args['max_gq'])
+    plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
+                               max_value=args['max_gq'])
+    plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
+    plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
+    plot_gt_stats_per_sample(h5, by_chunk, data_dir)
+    plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
+    plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
+                           max_value=args['max_gq'])
+    plot_allele_obs_distrib_2D(h5, by_chunk, data_dir)
     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
     plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
     plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
@@ -587,75 +587,78 @@ def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):
                       track_type='bedgraph')
 
 
-def plot_hwe(h5, max_num_allele, by_chunk, data_dir,
+def plot_hwe(h5, max_num_alleles, by_chunk, data_dir,
                          ploidy=2):
-    fpath = join(data_dir, 'hwe_chi2_qqplot.png')
-    fhand = open(fpath, 'w')
-    df = len(list(combinations_with_replacement(range(max_num_allele),
-                                                ploidy))) - max_num_allele
-    hwe_test = _calc_stat(h5, HWECalcualtor(max_num_allele, ploidy),
-                          by_chunk=by_chunk)
-    hwe_chi2 = _remove_nans(hwe_test[:, 0])
-    
-    fig = Figure(figsize=(10, 20))
-    canvas = FigureCanvas(fig)
-    axes = fig.add_subplot(211)
-    title = 'QQplot for chi2 with df={} using {} alleles'.format(df,
-                                                                 max_num_allele)
-    qqplot(hwe_chi2, distrib='chi2', distrib_params=(df,), axes=axes,
-           mpl_params={'set_title': {'args': [title], 'kwargs': {}}})
-    
-    title = 'Chi2 df={} statistic values distribution'.format(df)
-    axes = fig.add_subplot(212)
-    plot_histogram(hwe_chi2, bins=50, axes=axes,
-                   mpl_params={'set_xlabel': {'args': ['Chi2 statistic'],
-                                            'kwargs': {}},
-                             'set_ylabel': {'args': ['SNP number'],
-                                            'kwargs': {}},
-                             'set_title': {'args': [title], 'kwargs': {}}})
-    axes = axes.twinx()
-    rv = chi2(df)
-    x = numpy.linspace(0, max(hwe_chi2), 1000)
-    axes.plot(x, rv.pdf(x), color='b', lw=2, label='Expected Chi2')
-    axes.set_ylabel('Expected Chi2 density')
-    canvas.print_figure(fhand)
-    
-    # Manhattan plot for HWE pvalue
-    fpath = join(data_dir, 'hwe_pvalue_manhattan.png')
-    fhand = open(fpath, 'w')
-    hwe_pvalues = hwe_test[:, 1]
-    title = 'Chi2 test for HWE df={} along the genome'.format(df)
-    fig = Figure(figsize=(10, 10))
-    canvas = FigureCanvas(fig)
-    axes = fig.add_subplot(211)
-    manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_test[:, 0],
-                   mpl_params={'set_ylabel': {'args': ['Chi2 statistic'],
-                                            'kwargs': {}},
-                             'set_title': {'args': [title], 'kwargs': {}}},
-                   axes=axes, figsize=(15, 7.5), ylim=0, show_chroms=False)
-    axes = fig.add_subplot(212)
-    manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_pvalues,
-                   mpl_params={'set_xlabel': {'args': ['Chromosome'],
-                                            'kwargs': {}},
-                             'set_ylabel': {'args': ['1 / p-value'],
-                                            'kwargs': {}},
-                             'set_yscale': {'args': ['log'], 'kwargs': {}}},
-                   axes=axes, figsize=(15, 7.5), ylim=1, yfunc=lambda x: 1/x,
-                   yline=hwe_pvalues.shape[0]/0.05)
-    canvas.print_figure(fhand)
-    bg_fhand = open(join(data_dir, 'hwe_pvalue.bg'), 'w')
-    pos_hwe_pval = PositionalStatsCalculator(h5['/variations/chrom'],
-                                             h5['/variations/pos'], hwe_pvalues)
-    pos_hwe_pval.write(bg_fhand, 'hwe_pvalue',
-                       'HWE test chi2 df={} test p-value'.format(df),
-                       track_type='bedgraph')
-    bg_fhand = open(join(data_dir, 'hwe_chi2.bg'), 'w')
-    pos_hwe_chi2 = PositionalStatsCalculator(h5['/variations/chrom'],
-                                            h5['/variations/pos'],
-                                            hwe_test[:, 0])
-    pos_hwe_chi2.write(bg_fhand, 'hwe_chi2',
-                      'HWE test chi2 df={} statistic'.format(df),
-                      track_type='bedgraph')
+    for max_num_allele in range(2, max_num_alleles):
+        fpath = join(data_dir, 'hwe_chi2_qqplot_{}_alleles.png'.format(max_num_allele))
+        fhand = open(fpath, 'w')
+        df = len(list(combinations_with_replacement(range(max_num_allele),
+                                                    ploidy))) - max_num_allele
+        hwe_test = _calc_stat(h5, HWECalcualtor(max_num_allele, ploidy),
+                              by_chunk=by_chunk)
+        hwe_chi2 = _remove_nans(hwe_test[:, 0])
+        
+        fig = Figure(figsize=(10, 20))
+        canvas = FigureCanvas(fig)
+        axes = fig.add_subplot(211)
+        title = 'QQplot for chi2 with df={} using {} alleles'.format(df,
+                                                                     max_num_allele)
+        qqplot(hwe_chi2, distrib='chi2', distrib_params=(df,), axes=axes,
+               mpl_params={'set_title': {'args': [title], 'kwargs': {}}})
+        
+        title = 'Chi2 df={} statistic values distribution'.format(df)
+        axes = fig.add_subplot(212)
+        plot_histogram(hwe_chi2, bins=50, axes=axes,
+                       mpl_params={'set_xlabel': {'args': ['Chi2 statistic'],
+                                                'kwargs': {}},
+                                 'set_ylabel': {'args': ['SNP number'],
+                                                'kwargs': {}},
+                                 'set_title': {'args': [title], 'kwargs': {}}})
+        axes = axes.twinx()
+        rv = chi2(df)
+        x = numpy.linspace(0, max(hwe_chi2), 1000)
+        axes.plot(x, rv.pdf(x), color='b', lw=2, label='Expected Chi2')
+        axes.set_ylabel('Expected Chi2 density')
+        canvas.print_figure(fhand)
+        
+        # Manhattan plot for HWE pvalue
+        fpath = join(data_dir, 'hwe_pvalue_manhattan_{}_alleles.bg'.format(max_num_allele))
+        fhand = open(fpath, 'w')
+        hwe_pvalues = hwe_test[:, 1]
+        title = 'Chi2 test for HWE df={} along the genome'.format(df)
+        fig = Figure(figsize=(10, 10))
+        canvas = FigureCanvas(fig)
+        axes = fig.add_subplot(211)
+        manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_test[:, 0],
+                       mpl_params={'set_ylabel': {'args': ['Chi2 statistic'],
+                                                'kwargs': {}},
+                                 'set_title': {'args': [title], 'kwargs': {}}},
+                       axes=axes, figsize=(15, 7.5), ylim=0, show_chroms=False)
+        axes = fig.add_subplot(212)
+        manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_pvalues,
+                       mpl_params={'set_xlabel': {'args': ['Chromosome'],
+                                                'kwargs': {}},
+                                 'set_ylabel': {'args': ['1 / p-value'],
+                                                'kwargs': {}},
+                                 'set_yscale': {'args': ['log'], 'kwargs': {}}},
+                       axes=axes, figsize=(15, 7.5), ylim=1, yfunc=lambda x: 1/x,
+                       yline=hwe_pvalues.shape[0]/0.05)
+        canvas.print_figure(fhand)
+        
+        # Write bedgraph files
+        bg_fhand = open(join(data_dir, 'hwe_pvalue_{}_alleles.bg'.format(max_num_allele)), 'w')
+        pos_hwe_pval = PositionalStatsCalculator(h5['/variations/chrom'],
+                                                 h5['/variations/pos'], hwe_pvalues)
+        pos_hwe_pval.write(bg_fhand, 'hwe_pvalue',
+                           'HWE test chi2 df={} test p-value'.format(df),
+                           track_type='bedgraph')
+        bg_fhand = open(join(data_dir, 'hwe_chi2_{}_alleles.bg'.format(max_num_allele)), 'w')
+        pos_hwe_chi2 = PositionalStatsCalculator(h5['/variations/chrom'],
+                                                h5['/variations/pos'],
+                                                hwe_test[:, 0])
+        pos_hwe_chi2.write(bg_fhand, 'hwe_chi2',
+                          'HWE test chi2 df={} statistic'.format(df),
+                          track_type='bedgraph')
 
 
 def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,

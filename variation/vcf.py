@@ -91,19 +91,23 @@ class VCFParser():
 
         self._empty_gt = [MISSING_VALUES[int]] * self.ploidy
         self._parse_header()
-
         if max_field_lens is None:
             user_max_field_lens = {}
         else:
             user_max_field_lens = max_field_lens
-        max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
-        max_field_lens.update(user_max_field_lens)
-        self.max_field_lens = max_field_lens
-
+        self.max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
         self.max_field_str_lens = {'FILTER': 0, 'INFO': {}, 'chrom': 0,
                                    'alt': 0}
         self._init_max_field_lens()
-
+        for key1, value1 in user_max_field_lens.items():
+            if isinstance(value1, dict):
+                for key2, value2 in value1.items():
+                    self.max_field_lens[key1][key2] = value2
+            else:
+                self.max_field_lens[key1] = value1
+        
+#         self.max_field_lens.update(user_max_field_lens)
+        
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
 

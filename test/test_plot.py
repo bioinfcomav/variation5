@@ -26,7 +26,6 @@ from variation.variations.stats import (_MissingGTCalculator,
                                         GenotypeStatsCalculator,
     calc_allele_obs_distrib_2D, HWECalcualtor, _remove_nans)
 from variation.plot import plot_barplot, plot_pandas_barplot, plot_hexabinplot
-from pandas.core.frame import DataFrame
 
 
 class PlotTest(unittest.TestCase):
@@ -72,22 +71,28 @@ class PlotTest(unittest.TestCase):
     def test_plot_histogram(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         mafs = _calc_stat(hdf5, _MafCalculator())
-        plot_histogram(mafs, range_=(0, 1), color='c', label='Mafs')
+        plot_histogram(mafs, range_=(0, 1), color='c', label='Mafs',
+                       fhand=NamedTemporaryFile(suffix='.png'))
         rates = _calc_stat(hdf5, _MissingGTCalculator())
-        plot_histogram(rates, color='c', label='Missing GT')
+        plot_histogram(rates, color='c', label='Missing GT',
+                       fhand=NamedTemporaryFile(suffix='.png'))
         density_h5 = calc_snp_density(hdf5, 100000)
-        plot_histogram(density_h5, color='c', label='Density')
+        plot_histogram(density_h5, color='c', label='Density',
+                       fhand=NamedTemporaryFile(suffix='.png'))
 
     def test_plot_barplot(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         dist_gq, _ = calc_gq_cumulative_distribution_per_sample(hdf5,
                                                                 by_chunk=True)
         height_ = numpy.sum(dist_gq, axis=0)
-        plot_barplot(numpy.arange(0, 161), height_)
-
+        plot_barplot(numpy.arange(0, 161), height_,
+                     fhand=NamedTemporaryFile(suffix='.png'))
+        
+        fhand = NamedTemporaryFile(suffix='.png')
         dist_snv_density = calc_snv_density_distribution(hdf5, 100000)
         plot_barplot(numpy.arange(0, dist_snv_density.shape[0]),
-                     dist_snv_density)
+                     dist_snv_density,
+                     fhand=NamedTemporaryFile(suffix='.png'))
 
     def test_plot_pandas_barplot(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -131,5 +136,5 @@ class PlotTest(unittest.TestCase):
         
     
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
+#     import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
     unittest.main()

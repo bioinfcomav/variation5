@@ -14,7 +14,6 @@ from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import (append_matrix, is_dataset, resize_matrix)
-
 # Missing docstring
 # pylint: disable=C0111
 
@@ -152,8 +151,8 @@ def _create_matrix(var_matrices, path, **kwargs):
         fillvalue = MISSING_VALUES[dtype]
         shape = kwargs['shape']
         matrix = var_matrices._create_matrix(path, dtype=dtype,
-                                            fillvalue=fillvalue,
-                                            shape=shape)
+                                             fillvalue=fillvalue,
+                                             shape=shape)
     return matrix
 
 
@@ -283,7 +282,6 @@ def _size_recur(size, item):
         is_list = True
     else:
         is_list = False
-
     if is_list:
         size.append(len(item))
         _size_recur(size, item[0])
@@ -329,6 +327,176 @@ def _prepare_metadata(vcf_metadata):
             path = posixpath.join(dir_, _to_str(field))
             meta[path] = field_meta
     return meta
+
+
+def _prepare_gt_dataset(csv, hdf5, vars_in_chunk):
+    n_samples = len(csv.samples)
+    ploidy = csv.ploidy
+    field = 'GT'
+    dtype = numpy.int8
+    size = [vars_in_chunk, n_samples, ploidy]
+    maxshape = (None, n_samples, ploidy)
+    chunks = (vars_in_chunk, n_samples, ploidy)
+    # If the last dimension only has one of len we can work with only
+    # two dimensions (variations x samples)
+    if size[-1] == 1:
+        size = size[:-1]
+        maxshape = maxshape[:-1]
+        chunks = chunks[:-1]
+
+    kwargs = DEF_DSET_PARAMS.copy()
+    kwargs['shape'] = size
+    kwargs['dtype'] = dtype
+    kwargs['maxshape'] = maxshape
+    kwargs['chunks'] = chunks
+    path = posixpath.join('/calls', field)
+    matrix = _create_matrix(hdf5, path, **kwargs)
+    return {path: matrix}
+
+
+def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
+    var_grp_name = '/variations'
+    one_item_fields = csv.snp_fieldnames_final
+    multi_item_fields = []
+    if csv.alt_field in one_item_fields:
+        one_item_fields.remove(csv.alt_field)
+        multi_item_fields = [csv.alt_field]
+    fields = one_item_fields + multi_item_fields
+    var_matrices = OrderedDict()
+    for field in fields:
+        if field in one_item_fields:
+            size = [vars_in_chunk]
+            maxshape = (None,)  # is resizable, we can add SNPs
+            chunks = (vars_in_chunk,)
+        else:
+            y_axes_size = csv.max_alt_allele
+            if not y_axes_size:
+                msg = 'No max size for field. Try prereading some SNPs: '
+                msg += field
+                raise RuntimeError(msg)
+            size = [vars_in_chunk, y_axes_size]
+            maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
+            chunks = (vars_in_chunk,  y_axes_size)
+
+        dtype = _numpy_dtype('str', field, {field: 20})
+        kwargs = DEF_DSET_PARAMS.copy()
+        kwargs['shape'] = size
+        kwargs['dtype'] = dtype
+        kwargs['maxshape'] = maxshape
+        kwargs['chunks'] = chunks
+        path = posixpath.join(var_grp_name, field)
+        matrix = _create_matrix(hdf5, path, **kwargs)
+        var_matrices[path] = matrix
+    return var_matrices
+
+
+def put_vars_from_csv(csv, hdf5, vars_in_chunk):
+
+    ignore_alt = csv.ignore_alt
+    log = {'data_no_fit': {},
+           'variations_processed': 0,
+           'alt_max_detected': 0,
+           'num_alt_item_descarted': 0}
+
+    fmt_matrices = _prepare_gt_dataset(csv, hdf5, vars_in_chunk)
+    var_matrices = _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk)
+
+    paths = list(var_matrices.keys())
+    paths.extend(fmt_matrices.keys())
+
+    snp_chunks = _grouper(csv, vars_in_chunk)
+    for chunk_i, chunk in enumerate(snp_chunks):
+        chunk = list(chunk)
+        first_field = True
+        for path in paths:
+            if path in var_matrices:
+                grp = 'VARIATIONS'
+            else:
+                grp = 'CALLS'
+            matrix = hdf5[path]
+            # resize the dataset to fit the new chunk
+            size = matrix.shape
+            new_size = list(size)
+            new_size[0] = vars_in_chunk * (chunk_i + 1)
+
+            resize_matrix(matrix, new_size)
+
+            field = posixpath.basename(path)
+
+            # We store the information
+            for snp_i, snp in enumerate(chunk):
+                if snp is None:
+                    break
+                if first_field:
+                    log['variations_processed'] += 1
+                #snp_n es el indice que se moverá en cada array
+                snp_n = snp_i + chunk_i * vars_in_chunk
+                if grp == 'VARIATIONS':
+                    item = snp[field]
+                    if item is not None:
+                        try:
+                            slice_ = _create_slice(snp_n, item)
+                            if isinstance(item, list):
+                                item = [x.encode('utf-8') for x in item]
+                            else:
+                                item = item.encode('utf-8')
+                            matrix[slice_] = item
+                        except TypeError as error:
+                            if 'broadcast' in str(error) and field == 'alt':
+                                if not ignore_alt:
+                                    msg = 'More alt alleles than expected.'
+                                    msg2 = 'Expected, present: {}, {}'
+                                    msg2 = msg2.format(size[1], len(item))
+                                    msg += msg2
+                                    msg = '\nYou might fix it prereading more'
+                                    msg += ' SNPs, or passing: '
+                                    msg += 'max_field_lens={'
+                                    msg += '"alt":{}'.format(len(item))
+                                    msg += '}\nto VCF reader'
+                                    raise TypeError(msg)
+                                else:
+                                    log['num_alt_item_descarted'] += 1
+                                    if log['alt_max_detected'] < len(item):
+                                        log['alt_max_detected'] = len(item)
+                                    continue
+                elif grp == 'CALLS':
+                    # store the calldata
+                    try:
+                        gts = snp['gts']
+                    except TypeError:
+                    # SNP is None
+                        break
+                    if gts is not None:
+
+                        try:
+                            slice_ = _create_slice(snp_n, gts)
+                            matrix[slice_] = gts
+                        except TypeError as error:
+                            if 'broadcast' in str(error):
+                                if field not in log['data_no_fit']:
+                                    log['data_no_fit'][field] = 0
+                                log['data_no_fit'][field] += 1
+                        except:
+                            print('snp_id', snp_i)
+                            print('field', field)
+                            print('failed data', gts)
+                            raise
+            first_field = False
+    # we have to remove the empty snps from the last chunk
+
+    for path in paths:
+        matrix = hdf5[path]
+        size = matrix.shape
+        new_size = list(size)
+        snp_n = snp_i + chunk_i * vars_in_chunk
+        new_size[0] = snp_n
+
+        resize_matrix(matrix, new_size)
+    hdf5._set_samples(csv.samples)
+
+    if hasattr(hdf5, 'flush'):
+        hdf5.flush()
+    return log
 
 
 def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,

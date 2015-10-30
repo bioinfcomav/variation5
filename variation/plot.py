@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from pandas.core.frame import DataFrame
-import pandas
-from matplotlib.pyplot import colorbar, hist2d, sci
+from variation.variations.stats import _remove_nans
 plt.style.use('ggplot')
 
 
@@ -33,6 +32,7 @@ def _print_figure(canvas, fhand, no_interactive_win):
 def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None,
                    no_interactive_win=False, color=None, label=None,
                    canvas=None, mpl_params={}, figsize=None):
+    mat = _remove_nans(mat)
     print_figure = False
     if axes is None:
         print_figure = True
@@ -178,6 +178,22 @@ def plot_hist2d(matrix, fhand=None, axes=None, fig=None,
     axesmod = AxesMod(axes)
     result = axesmod.hist2d(matrix)
     fig.colorbar(result[3], ax=axes, label=colorbar_label)
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def plot_lines(x, y, fhand=None, axes=None,
+               no_interactive_win=False, figsize=None,
+               mpl_params={}, **kwargs):
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    result = axes.plot(x, y, **kwargs)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])

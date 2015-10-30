@@ -145,7 +145,8 @@ class VarMatricesStatsTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks())
-        result = calc_gq_cumulative_distribution_per_sample(hdf5, by_chunk=True)
+        result = calc_gq_cumulative_distribution_per_sample(hdf5, by_chunk=True,
+                                                            max_value=161.0)
         distribution, cum_dist = result
         assert distribution[0, 25] == 15
         assert cum_dist[-1, 0] == 537
@@ -442,5 +443,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_hdf5_stats_bin']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_gq_distribution']
     unittest.main()

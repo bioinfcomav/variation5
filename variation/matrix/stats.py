@@ -10,7 +10,6 @@ import numpy
 from variation.matrix.methods import iterate_matrix_chunks
 from variation.matrix.methods import calc_min_max
 from numpy import histogram
-from variation.plot import plot_hist
 
 
 def _row_value_counter_array(array, value, axes):

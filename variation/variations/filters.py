@@ -55,7 +55,7 @@ def _filter_quality_GT(chunk, selected_rows):
         array = matrix.data
     except:
         array = matrix
-    flt_data = numpy.extract(selected_rows,array)
+    flt_data = numpy.extract(selected_rows, array)
     print(flt_data.shape)
     chunk['calls/GT'].data = flt_data
     print(len(chunk['calls/GT']))
@@ -186,10 +186,10 @@ def _biallelic_filter(chunk, keep_monomorphic):
     b = numpy.zeros_like(gts)
     c = numpy.ones_like(gts)
     numpy.put(b, ind, c.flat[ind])
-    c = numpy.sum(b, axis=(2,1))
+    c = numpy.sum(b, axis=(2, 1))
 
     # we remove the missing values from the count
-    rows_with_missing = numpy.any(gts == -1, axis=(1,2))
+    rows_with_missing = numpy.any(gts == -1, axis=(1, 2))
     c -= rows_with_missing
 
     if keep_monomorphic:

@@ -136,5 +136,5 @@ class PlotTest(unittest.TestCase):
         
     
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
+    import sys;sys.argv = ['', 'PlotTest.test_plot_pandas_barplot']
     unittest.main()

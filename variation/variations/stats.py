@@ -10,7 +10,6 @@ from variation.matrix.methods import append_matrix, calc_min_max, fill_array
 from variation.variations.index import PosIndex
 from scipy.stats.stats import chisquare
 
-
 CHUNK_SIZE = 200
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
 
@@ -30,13 +29,6 @@ def _calc_items_in_row(mat):
 
 def _calc_cum_distrib(distrib):
     return numpy.fliplr(numpy.cumsum(numpy.fliplr(distrib), axis=1))
-
-
-# def plot_hist_mafs(var_mat, fhand=None, no_interactive_win=False):
-#     mafs = calc_mafs(var_mat)
-#     mafs = _remove_nans(mafs)
-#     return plot_histogram(mafs, fhand=fhand,
-#                           no_interactive_win=no_interactive_win)
 
 
 def calc_stat_by_chunk(var_matrices, function, reduce_funct=None,
@@ -99,6 +91,8 @@ class _MafDepthCalculator:
     def __call__(self, variations):
         ro = variations['/calls/RO']
         ao = variations['/calls/AO']
+        if len(ro.shape) == len(ao.shape):
+            ao = ao.reshape((ao.shape[0], ao.shape[1], 1))
         read_counts = numpy.append(ro.reshape((ao.shape[0], ao.shape[1],
                                                1)), ao, axis=2)
         read_counts[read_counts == MISSING_VALUES[int]] = 0
@@ -236,11 +230,17 @@ class _ObsHetCalculatorBySnps(_ObsHetCalculator):
         self.min_num_genotypes = min_num_genotypes
 
 
-class _ObsHetCalculatorBySample(_ObsHetCalculator):
+class _ObsHetCalculatorBySample:
     def __init__(self,  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
         self.axis = 0
         self.required_fields = ['/calls/GT']
         self.min_num_genotypes = min_num_genotypes
+
+    def __call__(self, variations):
+        gts = variations['/calls/GT'][:]
+        is_het = _is_het(gts)
+        het = numpy.sum(is_het, axis=self.axis)
+        return het
 
 
 class _IntDistributionCalculator():
@@ -367,6 +367,116 @@ class _IntDistribution2DCalculator():
         return distrib
 
 
+
+class GenotypeStatsCalculator:
+    def __init__(self):
+        self.required_fields = ['/calls/GT']
+
+    def __call__(self, variations):
+        gts = variations['/calls/GT']
+        het = numpy.sum(_is_het(gts), axis=0)
+        missing = numpy.sum(_is_missing(gts), axis=0)
+        gts_alt = numpy.copy(gts)
+        gts_alt[gts_alt == 0] = -1
+        alt_hom = numpy.sum(_is_hom(gts_alt), axis=0)
+        ref_hom = numpy.sum(_is_hom(gts), axis=0) - alt_hom
+        return numpy.array([ref_hom, het, alt_hom, missing])
+
+
+class _CalledGTCalculator:
+    def __init__(self, rate=True, axis=1):
+        self.required_fields = ['/calls/GT']
+        self.rate = rate
+        self.axis = axis
+
+    def __call__(self, chunk):
+        gts = chunk['/calls/GT']
+        called_gts = numpy.sum(_is_called(gts), axis=self.axis)
+        total_gts = gts.shape[self.axis]
+        if self.rate:
+            gt_result = numpy.divide(called_gts, total_gts)
+        else:
+            gt_result = called_gts
+        return gt_result
+
+
+def _called_gt_counts(gts):
+    return _calc_items_in_row(gts) - _missing_gt_counts(gts)
+
+
+def calc_snp_density(variations, window):
+    dens = []
+    index_right = 0
+    dic_index = PosIndex(variations)
+    n_snps = variations['/variations/chrom'].shape
+    for i in range(n_snps[0]):
+        chrom = variations['/variations/chrom'][i]
+        pos = variations['/variations/pos'][i]
+        pos_right = window + pos
+        pos_left = pos - window
+        if pos_right > variations['/variations/pos'][0]:
+            index_right = dic_index.index_pos(chrom, pos_right)
+        index_left = dic_index.index_pos(chrom, pos_left)
+        dens.append(index_right - index_left + 1)
+    return numpy.array(dens)
+
+
+class _AlleleFreqCalculator:
+    def __init__(self, max_num_allele):
+        self.required_fields = ['/calls/GT']
+        self.max_num_allele = max_num_allele
+
+    def __call__(self, variations):
+        gts = variations['/calls/GT']
+        allele_counts = counts_by_row(gts, MISSING_VALUES[int])
+        total_counts = numpy.sum(allele_counts, axis=1)
+        allele_freq = allele_counts/total_counts[:, None]
+        if allele_freq.shape[1] < self.max_num_allele:
+            allele_freq = fill_array(allele_freq, self.max_num_allele, dim=1)
+        return allele_freq
+
+
+class _InbreedingCoeficientDistribCalculator:
+    def __init__(self, max_num_allele, calc_distrib):
+        self.required_fields = ['/calls/GT']
+        self.max_num_allele = max_num_allele
+        self.calc_distrib = calc_distrib
+
+    def __call__(self, variations):
+        calc_IC = _InbreedingCoeficientCalculator(self.max_num_allele)
+        ic = calc_IC(variations)
+        distrib = self.calc_distrib(numpy.array([ic[ic < 0] * -100]))[::-1]
+        distrib_pos = self.calc_distrib(numpy.array([ic[ic >= 0] * 100]))
+        distrib = numpy.append(distrib, distrib_pos, axis=1)
+        return numpy.delete(distrib, [101])
+
+
+def calc_expected_het(alleles_freq):
+    exp_het = None
+    for index_1, index_2 in combinations(range(alleles_freq.shape[1]), 2):
+        if exp_het is None:
+            exp_het = 2 * alleles_freq[:, index_1] * alleles_freq[:, index_2]
+        else:
+            exp_het += 2 * alleles_freq[:, index_1] * alleles_freq[:, index_2]
+    return exp_het
+
+
+def calc_inbreeding_coeficient(variations, max_num_allele=MAX_N_ALLELES,
+                               by_chunk=True):
+    calc_IC = _InbreedingCoeficientCalculator(max_num_allele)
+    return _calc_stat(variations, calc_IC, by_chunk=by_chunk)
+
+
+def calc_inbreeding_coeficient_distrib(variations, max_num_allele=MAX_N_ALLELES,
+                                       by_chunk=True):
+    calculate_distrib = _IntDistributionCalculator(max_value=100,
+                                                   per_sample=False)
+    calc_IC = _InbreedingCoeficientDistribCalculator(max_num_allele,
+                                                     calc_distrib=calculate_distrib)
+    return _calc_stat(variations, calc_IC, by_chunk=by_chunk,
+                      reduce_funct=numpy.add)
+
+
 def calc_allele_obs_distrib_2D(variations, max_values=[None, None],
                                by_chunk=True, mask_function=None,
                                mask_field=None):
@@ -374,7 +484,10 @@ def calc_allele_obs_distrib_2D(variations, max_values=[None, None],
     for i, field in enumerate(required_fields):
         if max_values[i] is None:
             _, max_values[i] = calc_min_max(variations[field])
-    transform_func = [None, lambda x: numpy.max(x, axis=2)]
+    if len(variations['/calls/RO'].shape) != len(variations['/calls/AO'].shape):
+        transform_func = [None, lambda x: numpy.max(x, axis=2)]
+    else:
+        transform_func = [None, None]
     calc_distr = _IntDistribution2DCalculator(max_values=max_values,
                                               fields=required_fields,
                                               transform_func=transform_func,
@@ -393,7 +506,10 @@ def calc_allele_obs_gq_distrib_2D(variations, max_values=[None, None],
         if max_values[i] is None:
             _, max_values[i] = calc_min_max(variations[field])
     required_fields.append('/calls/GQ')
-    transform_func = [None, lambda x: numpy.max(x, axis=2)]
+    if len(variations['/calls/RO'].shape) != len(variations['/calls/AO'].shape):
+        transform_func = [None, lambda x: numpy.max(x, axis=2)]
+    else:
+        transform_func = [None, None]
     calc_distr = _IntDistribution2DCalculator(max_values=max_values,
                                               fields=required_fields,
                                               transform_func=transform_func,
@@ -481,15 +597,6 @@ def calc_quality_by_depth_distrib(variations, depths, by_chunk=True,
     return distributions, gq_cumulative_distrs
 
 
-def calc_maf_depth_distrib(variations, by_chunk=True):
-    calculate_distribution = _IntDistributionCalculator(max_value=100)
-    calc_maf_dp_distrib = MafDepthDistribCalculator(calc_distrib=calculate_distribution)
-    distrib = _calc_stat(variations, calc_maf_dp_distrib,
-                         reduce_funct=numpy.add,
-                         by_chunk=by_chunk)
-    return distrib
-
-
 def calc_gq_cumulative_distribution_per_sample(variations, by_chunk=True,
                                                mask_function=None,
                                                mask_field=None,
@@ -535,73 +642,6 @@ def calculate_maf_distribution(variations, by_chunk=True):
     return maf
 
 
-class GenotypeStatsCalculator:
-    def __init__(self):
-        self.required_fields = ['/calls/GT']
-
-    def __call__(self, variations):
-        gts = variations['/calls/GT']
-        het = numpy.sum(_is_het(gts), axis=0)
-        missing = numpy.sum(_is_missing(gts), axis=0)
-        gts_alt = numpy.copy(gts)
-        gts_alt[gts_alt == 0] = -1
-        alt_hom = numpy.sum(_is_hom(gts_alt), axis=0)
-        ref_hom = numpy.sum(_is_hom(gts), axis=0) - alt_hom
-        return numpy.array([ref_hom, het, alt_hom, missing])
-
-
-class _CalledGTCalculator:
-    def __init__(self, rate=True):
-        self.required_fields = ['/calls/GT']
-        self.rate = rate
-
-    def __call__(self, chunk):
-        gts = chunk['/calls/GT']
-        gt_counts = _called_gt_counts(gts)
-        gt = numpy.sum(gt_counts)
-        if self.rate:
-            gt_result = numpy.divide(gt_counts, gt)
-        else:
-            gt_result = gt_counts
-        return gt_result
-
-
-def _called_gt_counts(gts):
-    return _calc_items_in_row(gts) - _missing_gt_counts(gts)
-
-
-def calc_snp_density(variations, window):
-    dens = []
-    index_right = 0
-    dic_index = PosIndex(variations)
-    n_snps = variations['/variations/chrom'].shape
-    for i in range(n_snps[0]):
-        chrom = variations['/variations/chrom'][i]
-        pos = variations['/variations/pos'][i]
-        pos_right = pos - window
-        pos_left = window + pos
-        if pos_right > variations['/variations/pos'][0]:
-            index_right = dic_index.index_pos(chrom, pos_right)
-        index_left = dic_index.index_pos(chrom, pos_left)
-        dens.append(index_left - index_right + 1)
-    return numpy.array(dens)
-
-
-class _AlleleFreqCalculator:
-    def __init__(self, max_num_allele):
-        self.required_fields = ['/calls/GT']
-        self.max_num_allele = max_num_allele
-
-    def __call__(self, variations):
-        gts = variations['/calls/GT']
-        allele_counts = counts_by_row(gts, MISSING_VALUES[int])
-        total_counts = numpy.sum(allele_counts, axis=1)
-        allele_freq = allele_counts/total_counts[:, None]
-        if allele_freq.shape[1] < self.max_num_allele:
-            allele_freq = fill_array(allele_freq, self.max_num_allele, dim=1)
-        return allele_freq
-
-
 class _InbreedingCoeficientCalculator:
     def __init__(self, max_num_allele):
         self.required_fields = ['/calls/GT']
@@ -627,40 +667,9 @@ class _ExpectedHetCalculator:
         return 1 - numpy.sum(allele_freq ** ploidy, axis=1) 
 
 
-class _InbreedingCoeficientDistribCalculator:
-    def __init__(self, max_num_allele, calc_distrib):
-        self.required_fields = ['/calls/GT']
-        self.max_num_allele = max_num_allele
-        self.calc_distrib = calc_distrib
-
-    def __call__(self, variations):
-        calc_IC = _InbreedingCoeficientCalculator(self.max_num_allele)
-        ic = calc_IC(variations)
-        distrib = self.calc_distrib(numpy.array([ic[ic < 0] * -100]))[::-1]
-        distrib_pos = self.calc_distrib(numpy.array([ic[ic >= 0] * 100]))
-        distrib = numpy.append(distrib, distrib_pos, axis=1)
-        return numpy.delete(distrib, [101])
-
-
-def calc_inbreeding_coeficient(variations, max_num_allele=MAX_N_ALLELES,
-                               by_chunk=True):
-    calc_IC = _InbreedingCoeficientCalculator(max_num_allele)
-    return _calc_stat(variations, calc_IC, by_chunk=by_chunk)
-
-
 def calc_exp_het(variations, max_num_allele=MAX_N_ALLELES, by_chunk=True):
     calc_exp_het = _ExpectedHetCalculator(max_num_allele)
     return _calc_stat(variations, calc_exp_het, by_chunk=by_chunk)
-
-
-def calc_inbreeding_coeficient_distrib(variations, max_num_allele=MAX_N_ALLELES,
-                                       by_chunk=True):
-    calculate_distrib = _IntDistributionCalculator(max_value=100,
-                                                   per_sample=False)
-    calc_IC = _InbreedingCoeficientDistribCalculator(max_num_allele,
-                                                     calc_distrib=calculate_distrib)
-    return _calc_stat(variations, calc_IC, by_chunk=by_chunk,
-                      reduce_funct=numpy.add)
 
 
 class HWECalcualtor:
@@ -809,3 +818,11 @@ class PositionalStatsCalculator:
             fhand.write(buffer)
         fhand.flush()
             
+
+def calc_maf_depth_distrib(variations, by_chunk=True):
+    calc_distribu = _IntDistributionCalculator(max_value=100)
+    calc_maf_dp_distrib = MafDepthDistribCalculator(calc_distrib=calc_distribu)
+    distrib = _calc_stat(variations, calc_maf_dp_distrib,
+                         reduce_funct=numpy.add,
+                         by_chunk=by_chunk)
+    return distrib

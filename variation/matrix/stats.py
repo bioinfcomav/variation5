@@ -5,12 +5,11 @@ from functools import reduce, partial
 import operator
 
 import numpy
-
+import matplotlib.pyplot as plt
 
 from variation.matrix.methods import iterate_matrix_chunks
 from variation.matrix.methods import calc_min_max
 from numpy import histogram
-from variation.plot import plot_hist
 
 
 def _row_value_counter_array(array, value, axes):
@@ -86,6 +85,13 @@ def counts_by_row(mat, missing_value=None):
             allele_counts = numpy.column_stack((allele_counts, counts))
 
     return allele_counts
+
+
+def plot_hist(hist, bins):
+    width = 0.7 * (bins[1] - bins[0])
+    center = (bins[:-1] + bins[1:]) / 2
+    plt.bar(center, hist, align='center', width=width)
+    plt.show()
 
 
 def histogram(matrix, nbins, low_mem=False):

@@ -20,7 +20,7 @@ def _setup_argparse(**kwargs):
     help_msg = 'Ignore SNPs with a number of alleles higher than --alt_gt_num'
     parser.add_argument('-i', '--ignore_alt', action='store_true',
                         default=False, help=help_msg)
-    parser.add_argument('-a', '--alt_gt_num', default=None, type=int,
+    parser.add_argument('-a', '--alt_gt_num', required=True, type=int,
                         help='Max number of alternative genotypes per variant')
     parser.add_argument('-p', '--pre_read_max_size', default=PRE_READ_MAX_SIZE,
                         help='Max number of records to get alt_gt_num',

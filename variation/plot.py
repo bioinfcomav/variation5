@@ -4,11 +4,10 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from pandas.core.frame import DataFrame
-import pandas
-from matplotlib.pyplot import colorbar, hist2d, sci
 from scipy.stats.morestats import probplot
 from itertools import cycle
 from numpy.core.defchararray import decode
+from variation.variations.stats import _remove_nans
 plt.style.use('ggplot')
 
 
@@ -36,6 +35,7 @@ def _print_figure(canvas, fhand, no_interactive_win):
 def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None,
                    no_interactive_win=False, color=None, label=None,
                    canvas=None, mpl_params={}, figsize=None):
+    mat = _remove_nans(mat)
     print_figure = False
     if axes is None:
         print_figure = True
@@ -149,13 +149,6 @@ def plot_hexabinplot(matrix, columns, fpath=None, axes=None,
     return axes
 
 
-def plot_hist(hist, bins):
-    width = 0.7 * (bins[1] - bins[0])
-    center = (bins[:-1] + bins[1:]) / 2
-    plt.bar(center, hist, align='center', width=width)
-    plt.show()
-
-
 class AxesMod():
     def __init__(self, axes):
         self.axes = axes
@@ -249,6 +242,22 @@ def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
     axes.set_ylim(ylim)
     if yline is not None:
         axes.axhline(y=yline, color='0.5', linewidth=2)
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def plot_lines(x, y, fhand=None, axes=None,
+               no_interactive_win=False, figsize=None,
+               mpl_params={}, **kwargs):
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    result = axes.plot(x, y, **kwargs)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])

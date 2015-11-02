@@ -70,7 +70,7 @@ class RowValueCounterTest(unittest.TestCase):
 
         counts = counts_by_row(matrix, missing_value=-1)
 
-    def test_low_mem_histogram(self):
+    def xtest_low_mem_histogram(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
         genotypes = chunk['/calls/GT']

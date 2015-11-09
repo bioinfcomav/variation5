@@ -147,7 +147,7 @@ def create_plots():
                                        args['window_size'], data_dir, by_chunk)
     print('plot_allele_obs_distrib_2D')
     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir,
-                                args['max_allele_counts'])
+                               args['max_allele_counts'])
     print('plot_inbreeding_coeficient')
     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
 
@@ -170,17 +170,17 @@ def plot_maf(h5, by_chunk, data_dir):
     title = 'Max Allele Freq (MAF) along the genome'
     manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], mafs,
                    mpl_params={'set_xlabel': {'args': ['Chromosome'],
-                                            'kwargs': {}},
-                             'set_ylabel': {'args': ['MAF'],
-                                            'kwargs': {}},
-                             'set_title': {'args': [title], 'kwargs': {}}},
+                                              'kwargs': {}},
+                               'set_ylabel': {'args': ['MAF'],
+                                              'kwargs': {}},
+                               'set_title': {'args': [title], 'kwargs': {}}},
                    fhand=fhand, figsize=(15, 7.5))
     bg_fhand = open(join(data_dir, 'maf.bg'), 'w')
     pos_maf = PositionalStatsCalculator(h5['/variations/chrom'],
-                                            h5['/variations/pos'], mafs)
+                                        h5['/variations/pos'], mafs)
     pos_maf.write(bg_fhand, 'MAF', 'Maximum allele frequency',
-                      track_type='bedgraph')
-    
+                  track_type='bedgraph')
+
 
 def plot_maf_dp(h5, by_chunk, data_dir):
     try:
@@ -272,7 +272,7 @@ def plot_snp_dens_distrib(h5, by_chunk, window_size, data_dir):
                                'set_yscale': {'args': ['log'], 'kwargs': {}}})
     df_dens = DataFrame(density)
     _save(fpath.strip('.png') + '.csv', df_dens)
-    
+
     # Manhattan plot for SNP density
     fpath = join(data_dir, 'snps_density_manhattan.png')
     fhand = open(fpath, 'w')
@@ -310,7 +310,7 @@ def plot_dp_distrib_per_sample(h5, by_chunk, max_depth, data_dir):
                  mpl_params=mpl_params)
     df_distrib_dp = DataFrame(distrib_dp)
     _save(fpath.strip('.png') + '.csv', df_distrib_dp)
-    
+
 
 
 def plot_dp_distrib_all_sample(h5, by_chunk, max_depth, data_dir):
@@ -497,7 +497,7 @@ def plot_gt_stats_per_sample(h5, by_chunk, data_dir):
                         color=['darkslategrey', 'c', 'paleturquoise',
                                'cadetblue'],
                         fpath=fpath, stacked=True)
-    
+
     # Missing per sample
     fpath = join(data_dir, 'missing_per_sample.png')
     title = 'Missing genotypes counts per sample'
@@ -507,7 +507,7 @@ def plot_gt_stats_per_sample(h5, by_chunk, data_dir):
     plot_pandas_barplot(gt_stats[:, -1], ['Missing GT'],
                         mpl_params=mpl_params,
                         fpath=fpath, stacked=True)
-    
+
     # Heterozygous per sample
     fpath = join(data_dir, 'het_per_sample.png')
     title = 'Heterozygous counts per sample'
@@ -517,7 +517,7 @@ def plot_gt_stats_per_sample(h5, by_chunk, data_dir):
     plot_pandas_barplot(gt_stats[:, 1], ['Heterozygous'],
                         mpl_params=mpl_params,
                         fpath=fpath, stacked=True)
-    
+
     # GT percentage without missing values
     fpath = join(data_dir, 'gt_perc_per_sample.png')
     title = 'Genotypes percentage per sample'
@@ -529,7 +529,7 @@ def plot_gt_stats_per_sample(h5, by_chunk, data_dir):
     plot_pandas_barplot(gt_perc, ['Ref Homozygous', 'Heterozygous',
                                    'Alt Homozygous'],
                         mpl_params=mpl_params, fpath=fpath)
-    
+
     df_gt_stats = DataFrame(gt_stats)
     _save(fpath.strip('.png') + '.csv', df_gt_stats)
 
@@ -670,17 +670,17 @@ def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):
                       track_type='bedgraph')
 
 
-def plot_hwe(h5, max_num_alleles, by_chunk, data_dir,
-                         ploidy=2):
+def plot_hwe(h5, max_num_alleles, by_chunk, data_dir, ploidy=2):
     for max_num_allele in range(2, max_num_alleles):
-        fpath = join(data_dir, 'hwe_chi2_qqplot_{}_alleles.png'.format(max_num_allele))
+        fpath = join(data_dir,
+                     'hwe_chi2_qqplot_{}_alleles.png'.format(max_num_allele))
         fhand = open(fpath, 'w')
         df = len(list(combinations_with_replacement(range(max_num_allele),
                                                     ploidy))) - max_num_allele
         hwe_test = _calc_stat(h5, HWECalcualtor(max_num_allele, ploidy),
                               by_chunk=by_chunk)
         hwe_chi2 = _remove_nans(hwe_test[:, 0])
-        
+
         fig = Figure(figsize=(10, 20))
         canvas = FigureCanvas(fig)
         axes = fig.add_subplot(211)
@@ -688,60 +688,71 @@ def plot_hwe(h5, max_num_alleles, by_chunk, data_dir,
                                                                      max_num_allele)
         qqplot(hwe_chi2, distrib='chi2', distrib_params=(df,), axes=axes,
                mpl_params={'set_title': {'args': [title], 'kwargs': {}}})
-        
+
         title = 'Chi2 df={} statistic values distribution'.format(df)
         axes = fig.add_subplot(212)
         plot_histogram(hwe_chi2, bins=50, axes=axes,
                        mpl_params={'set_xlabel': {'args': ['Chi2 statistic'],
-                                                'kwargs': {}},
-                                 'set_ylabel': {'args': ['SNP number'],
-                                                'kwargs': {}},
-                                 'set_title': {'args': [title], 'kwargs': {}}})
+                                                  'kwargs': {}},
+                                   'set_ylabel': {'args': ['SNP number'],
+                                                  'kwargs': {}},
+                                   'set_title': {'args': [title],
+                                                 'kwargs': {}}})
         axes = axes.twinx()
         rv = chi2(df)
         x = numpy.linspace(0, max(hwe_chi2), 1000)
         axes.plot(x, rv.pdf(x), color='b', lw=2, label='Expected Chi2')
         axes.set_ylabel('Expected Chi2 density')
         canvas.print_figure(fhand)
-        
+
         # Manhattan plot for HWE pvalue
-        fpath = join(data_dir, 'hwe_pvalue_manhattan_{}_alleles.bg'.format(max_num_allele))
+        fpath = join(data_dir,
+                     'hwe_pvalue_manhattan_{}_alleles.bg'.format(max_num_allele))
         fhand = open(fpath, 'w')
         hwe_pvalues = hwe_test[:, 1]
         title = 'Chi2 test for HWE df={} along the genome'.format(df)
         fig = Figure(figsize=(10, 10))
         canvas = FigureCanvas(fig)
         axes = fig.add_subplot(211)
-        manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_test[:, 0],
+        manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'],
+                       hwe_test[:, 0],
                        mpl_params={'set_ylabel': {'args': ['Chi2 statistic'],
-                                                'kwargs': {}},
-                                 'set_title': {'args': [title], 'kwargs': {}}},
+                                                  'kwargs': {}},
+                                   'set_title': {'args': [title],
+                                                 'kwargs': {}}},
                        axes=axes, figsize=(15, 7.5), ylim=0, show_chroms=False)
         axes = fig.add_subplot(212)
         manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], hwe_pvalues,
                        mpl_params={'set_xlabel': {'args': ['Chromosome'],
-                                                'kwargs': {}},
-                                 'set_ylabel': {'args': ['1 / p-value'],
-                                                'kwargs': {}},
-                                 'set_yscale': {'args': ['log'], 'kwargs': {}}},
-                       axes=axes, figsize=(15, 7.5), ylim=1, yfunc=lambda x: 1/x,
+                                                  'kwargs': {}},
+                                   'set_ylabel': {'args': ['1 / p-value'],
+                                                  'kwargs': {}},
+                                   'set_yscale': {'args': ['log'],
+                                                  'kwargs': {}}},
+                       axes=axes, figsize=(15, 7.5), ylim=1,
+                       yfunc=lambda x: 1/x,
                        yline=hwe_pvalues.shape[0]/0.05)
         canvas.print_figure(fhand)
-        
+
         # Write bedgraph files
-        bg_fhand = open(join(data_dir, 'hwe_pvalue_{}_alleles.bg'.format(max_num_allele)), 'w')
+        bg_fhand = open(join(data_dir,
+                             'hwe_pvalue_{}_alleles.bg'.format(max_num_allele)),
+                        'w')
         pos_hwe_pval = PositionalStatsCalculator(h5['/variations/chrom'],
-                                                 h5['/variations/pos'], hwe_pvalues)
+                                                 h5['/variations/pos'],
+                                                 hwe_pvalues)
         pos_hwe_pval.write(bg_fhand, 'hwe_pvalue',
                            'HWE test chi2 df={} test p-value'.format(df),
                            track_type='bedgraph')
-        bg_fhand = open(join(data_dir, 'hwe_chi2_{}_alleles.bg'.format(max_num_allele)), 'w')
+        bg_fhand = open(join(data_dir,
+                             'hwe_chi2_{}_alleles.bg'.format(max_num_allele)),
+                        'w')
         pos_hwe_chi2 = PositionalStatsCalculator(h5['/variations/chrom'],
-                                                h5['/variations/pos'],
-                                                hwe_test[:, 0])
+                                                 h5['/variations/pos'],
+                                                 hwe_test[:, 0])
         pos_hwe_chi2.write(bg_fhand, 'hwe_chi2',
-                          'HWE test chi2 df={} statistic'.format(df),
-                          track_type='bedgraph')
+                           'HWE test chi2 df={} statistic'.format(df),
+                           track_type='bedgraph')
 
 
 def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,
@@ -749,7 +760,7 @@ def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,
     fig = Figure(figsize=(20, 20))
     canvas = FigureCanvas(fig)
     marker = 'k'
-    
+
     # Number of variable positions per bp
     chrom, pos = hdf5['/variations/chrom'][:], hdf5['/variations/pos'][:]
     snp_density = PositionalStatsCalculator(chrom, pos,
@@ -765,15 +776,15 @@ def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,
     title = 'Nucleotide diversity measures averaged in windows of {} bp'.format(window_size)
     manhattan_plot(snp_density.chrom, snp_density.pos, snp_density.stat,
                    mpl_params={'set_title': {'args': [title],
-                                              'kwargs': {}},
+                                             'kwargs': {}},
                                'set_ylabel': {'args': ['SNPs number / bp'],
                                               'kwargs': {}},
                                'set_ylim': {'args': [0, 1.2*numpy.max(snp_density.stat)],
-                                              'kwargs': {}}},
+                                            'kwargs': {}}},
                    axes=axes, ylim=0, show_chroms=False, marker=marker)
-    
+
     # Watterson estimator of nucleotide diversity
-    
+
     n_seqs = hdf5['/calls/GT'].shape[1] * hdf5['/calls/GT'].shape[2]
     correction_factor = numpy.sum(1 / numpy.arange(1, n_seqs))
     watterson = snp_density
@@ -787,9 +798,9 @@ def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,
                    mpl_params={'set_ylabel': {'args': ['Watterson estimator'],
                                               'kwargs': {}},
                                'set_ylim': {'args': [0, 1.2*numpy.max(watterson.stat)],
-                                              'kwargs': {}}},
+                                            'kwargs': {}}},
                    axes=axes, ylim=0, show_chroms=False, marker=marker)
-    
+
     # Expected heterozygosity
     exp_het = calc_exp_het(hdf5, max_num_allele=max_num_alleles,
                            by_chunk=by_chunk)
@@ -798,8 +809,8 @@ def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,
     pi = pi.calc_window_stat()
     bg_fhand = open(join(data_dir, 'diversity_pi.bg'), 'w')
     pi.write(bg_fhand, 's',
-                      'Pi in windows of {} bp'.format(window_size),
-                      track_type='bedgraph')
+             'Pi in windows of {} bp'.format(window_size),
+             track_type='bedgraph')
     axes = fig.add_subplot(313)
     manhattan_plot(pi.chrom, pi.pos, pi.stat, axes=axes, ylim=0, marker=marker,
                    mpl_params={'set_xlabel': {'args': ['Chromosome'],
@@ -807,7 +818,7 @@ def plot_nucleotide_diversity_measures(hdf5, max_num_alleles, window_size,
                                'set_ylabel': {'args': ['Pi'],
                                               'kwargs': {}},
                                'set_ylim': {'args': [0, 1.2*numpy.max(pi.stat)],
-                                              'kwargs': {}}})
+                                            'kwargs': {}}})
     canvas.print_figure(open(join(data_dir, 'nucleotide_diversity.png'), 'w'))
 
 

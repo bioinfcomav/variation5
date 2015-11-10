@@ -5,10 +5,11 @@ from tempfile import NamedTemporaryFile
 from posixpath import join
 import shutil
 
-from variation.matrix.methods import append_matrix, extend_matrix
-from variation.variations import VariationsH5
-
+from variation.matrix.methods import append_matrix, extend_matrix,\
+    append_different_size
+from variation.variations.vars_matrices import VariationsH5
 from test.test_utils import TEST_DATA_DIR
+
 # Method could be a function
 # pylint: disable=R0201
 # Too many public methods
@@ -76,7 +77,15 @@ class ArrayTest(unittest.TestCase):
         append_matrix(orig_array, array)
         assert numpy.all(orig_array == expected)
 
+    def test_append_different_size(self):
+        matrix1 = numpy.array([[1, 1, 1], [2, 2, 2]])
+        matrix2 = numpy.array([[1, 1, 1, 1]])
+        matrix = append_different_size(matrix1, matrix2)
+        assert numpy.all(matrix == numpy.array([[1, 1, 1, -1],
+                                                [2, 2, 2, -1],
+                                                [1, 1, 1, 1]]))
+
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'Test.test_vcf_parsing']
+#     import sys;sys.argv = ['', 'ArrayTest.test_append_different_size']
     unittest.main()

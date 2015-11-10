@@ -14,8 +14,7 @@ import gzip
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
 from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5)
-from variation.vcf import VCFParser
-
+from vcf import VCFParser
 import numpy
 import h5py
 import sys
@@ -52,7 +51,7 @@ class VcfH5Test(unittest.TestCase):
             assert h5f._h5file.filename
 
     def test_put_vars_hdf5_from_vcf(self):
-        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+        vcf_fhand = gzip.open(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
                         max_field_lens={'alt': 3})
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
@@ -297,5 +296,5 @@ class VcfTests(unittest.TestCase):
         assert '/variations/qual' not in metadata2.keys()
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5_bin']
+    import sys; sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
     unittest.main()

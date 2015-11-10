@@ -200,9 +200,21 @@ def _biallelic_filter(chunk, keep_monomorphic):
     return _filter_chunk2(chunk, selected_rows)
 
 
-def biallelic_and_polymorphic_filter(chunk):
+def filter_biallelic_and_polymorphic(chunk):
     return _biallelic_filter(chunk, keep_monomorphic=False)
 
 
-def biallelic_filter(chunk):
+def filter_biallelic(chunk):
     return _biallelic_filter(chunk, keep_monomorphic=True)
+
+
+def filter_gt_no_data(chunk, n_snps_check=None):
+    ref = chunk['/variations/ref'][:n_snps_check]
+    alt = chunk['/variations/alt'][:n_snps_check]
+    alleles = numpy.append(alt, ref.reshape(ref.shape[0], 1), axis=1)
+    is_at = numpy.logical_and(alleles != b"A", alleles != b"T")
+    at = numpy.sum(is_at, axis=1)
+    is_cg = numpy.logical_and(alleles != b"C", alleles != b"G")
+    cg = numpy.sum(is_cg, axis=1)
+    selected_rows = numpy.logical_and(at > 1, cg > 1)
+    return _filter_chunk2(chunk, selected_rows)

@@ -649,7 +649,7 @@ class _InbreedingCoeficientCalculator:
 
     def __call__(self, variations):
         calc_obs_het = _ObsHetCalculatorBySnps()
-        calc_expected_het = _ExpectedHetCalculator(self.max_num_allele) 
+        calc_expected_het = _ExpectedHetCalculator(self.max_num_allele)
         obs_het = calc_obs_het(variations)
         exp_het = calc_expected_het(variations)
         return 1 - (obs_het / exp_het)
@@ -664,7 +664,7 @@ class _ExpectedHetCalculator:
         calc_allele_freq = _AlleleFreqCalculator(self.max_num_allele)
         allele_freq = calc_allele_freq(variations)
         ploidy = variations['/calls/GT'].shape[2]
-        return 1 - numpy.sum(allele_freq ** ploidy, axis=1) 
+        return 1 - numpy.sum(allele_freq ** ploidy, axis=1)
 
 
 def calc_exp_het(variations, max_num_allele=MAX_N_ALLELES, by_chunk=True):
@@ -686,7 +686,7 @@ class HWECalcualtor:
         total_counts = allele_counts.sum(axis=1)
         genotypes = list(combinations_with_replacement(range(self.max_num_allele),
                                       self.ploidy))
-        gts_counts = numpy.zeros((gts.shape[0], len(genotypes))) 
+        gts_counts = numpy.zeros((gts.shape[0], len(genotypes)))
         exp_gts_counts = numpy.ones((gts.shape[0], len(genotypes)))
         for i, genotype in enumerate(genotypes):
             mask = None
@@ -715,7 +715,7 @@ class PositionalStatsCalculator:
         self.window_size = window_size
         self.step = step
         self.take_windows = take_windows
-    
+
     def _calc_chrom_window_stat(self, pos, values):
         # TODO: take into account unknown positions in the genome (N) fastafile?
         if self.window_size and self.take_windows:
@@ -725,7 +725,7 @@ class PositionalStatsCalculator:
         else:
             for x, y in zip(pos, values):
                 yield x, y
-    
+
     def calc_window_stat(self):
         w_chroms, w_pos, w_stat = [], [], []
         for chrom_name, pos, values in self._iterate_chroms():
@@ -736,10 +736,10 @@ class PositionalStatsCalculator:
         chrom = numpy.array(w_chroms)
         pos = numpy.array(w_pos)
         stat = numpy.array(w_stat)
-        
+
         return PositionalStatsCalculator(chrom, pos, stat, self.window_size,
                                          self.step, False)
-    
+
     def _iterate_chroms(self):
         for chrom_name in self.chrom_names:
             mask = numpy.logical_and(self.chrom == chrom_name,
@@ -748,7 +748,7 @@ class PositionalStatsCalculator:
             pos = self.pos[mask]
             if values.shape != () and values.shape != (0,):
                 yield chrom_name, pos, values
-        
+
     def _get_track_definition(self, track_type, name, description, **kwargs):
         types = {'wig': 'wiggle_0', 'bedgraph': 'bedGraph'}
         track_line = 'track type={} name="{}" description="{}"'
@@ -756,7 +756,7 @@ class PositionalStatsCalculator:
         for key, value in kwargs:
             track_line += ' {}={}'.format(key, value)
         return track_line
-    
+
     def to_wig(self):
         stat = self.stat
         span = self.window_size
@@ -783,7 +783,7 @@ class PositionalStatsCalculator:
                     yield '{} {}'.format(pos, value)
                 else:
                     yield str(value)
-    
+
     def to_bedGraph(self):
         window_size = self.window_size
         stat = self.stat
@@ -800,7 +800,7 @@ class PositionalStatsCalculator:
             else:
                 yield '{} {} {} {}'.format(chrom_name, pos,
                                            pos+window_size, value)
-    
+
     def write(self, fhand, track_name, track_description,
               buffer_size=1000, track_type='bedgraph', **kwargs):
         get_lines = {'wig': self.to_wig, 'bedgraph': self.to_bedGraph}
@@ -813,11 +813,11 @@ class PositionalStatsCalculator:
             if lines == buffer_size:
                 fhand.write(buffer)
                 buffer = ''
-                lines = 0 
+                lines = 0
         if lines != buffer_size:
             fhand.write(buffer)
         fhand.flush()
-            
+
 
 def calc_maf_depth_distrib(variations, by_chunk=True):
     calc_distribu = _IntDistributionCalculator(max_value=100)

@@ -87,8 +87,6 @@ class PlotTest(unittest.TestCase):
         height_ = numpy.sum(dist_gq, axis=0)
         plot_barplot(numpy.arange(0, 161), height_,
                      fhand=NamedTemporaryFile(suffix='.png'))
-        
-        fhand = NamedTemporaryFile(suffix='.png')
         dist_snv_density = calc_snv_density_distribution(hdf5, 100000)
         plot_barplot(numpy.arange(0, dist_snv_density.shape[0]),
                      dist_snv_density,
@@ -124,7 +122,7 @@ class PlotTest(unittest.TestCase):
         hwe_chi2 = _remove_nans(hwe_test[:, 0])
         fhand = open(join(TEST_DATA_DIR, 'hwe_qqplot.png'), 'w')
         qqplot(hwe_chi2, distrib='chi2', distrib_params=(3,), fhand=fhand)
-    
+
     def test_manhattan_plot(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'), mode='r')
         hwe_test = _calc_stat(hdf5, HWECalcualtor(2, 2))
@@ -133,8 +131,8 @@ class PlotTest(unittest.TestCase):
         manhattan_plot(hdf5['/variations/chrom'], hdf5['/variations/pos'],
                        hwe_pvalues, fhand=fhand, yfunc=lambda x: -numpy.log10(x),
                        figsize=(20, 10), ylim=0)
-        
-    
+
+
 if __name__ == "__main__":
     import sys;sys.argv = ['', 'PlotTest.test_plot_pandas_barplot']
     unittest.main()

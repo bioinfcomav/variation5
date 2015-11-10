@@ -118,7 +118,7 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
                         continue
 
         size = [vars_in_chunk, n_samples, z_axes_size]
-        maxshape = (None, n_samples, z_axes_size)
+        maxshape = (None, None, z_axes_size)
         chunks = (vars_in_chunk, n_samples, z_axes_size)
 
         # If the last dimension only has one of len we can work with only
@@ -335,7 +335,7 @@ def _prepare_gt_dataset(csv, hdf5, vars_in_chunk):
     field = 'GT'
     dtype = numpy.int8
     size = [vars_in_chunk, n_samples, ploidy]
-    maxshape = (None, n_samples, ploidy)
+    maxshape = (None, None, ploidy)
     chunks = (vars_in_chunk, n_samples, ploidy)
     # If the last dimension only has one of len we can work with only
     # two dimensions (variations x samples)
@@ -377,8 +377,9 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
             size = [vars_in_chunk, y_axes_size]
             maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
             chunks = (vars_in_chunk,  y_axes_size)
-
         dtype = _numpy_dtype('str', field, {field: 20})
+        if 'pos' in field:
+            dtype = _numpy_dtype('int32', field, {field: 20})
         kwargs = DEF_DSET_PARAMS.copy()
         kwargs['shape'] = size
         kwargs['dtype'] = dtype
@@ -438,7 +439,7 @@ def put_vars_from_csv(csv, hdf5, vars_in_chunk):
                             slice_ = _create_slice(snp_n, item)
                             if isinstance(item, list):
                                 item = [x.encode('utf-8') for x in item]
-                            else:
+                            elif 'pos' not in field:
                                 item = item.encode('utf-8')
                             matrix[slice_] = item
                         except TypeError as error:
@@ -753,7 +754,8 @@ class _VariationMatrices():
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
-    def iterate_chunks(self, kept_fields=None, ignored_fields=None):
+    def iterate_chunks(self, kept_fields=None, ignored_fields=None,
+                       chunk_size=None):
 
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same time'
@@ -781,7 +783,8 @@ class _VariationMatrices():
 
         # how many snps are per chunk?
 
-        chunk_size = self._vars_in_chunk
+        if chunk_size is None:
+            chunk_size = self._vars_in_chunk
         nsnps = self.num_variations
 
         for start in range(0, nsnps, chunk_size):
@@ -933,6 +936,8 @@ class VariationsH5(_VariationMatrices):
             if dtype is not None:
                 fillvalue = MISSING_VALUES[dtype]
                 kwargs['fillvalue'] = fillvalue
+        if 'maxshape' not in kwargs:
+            kwargs['maxshape'] = (None,) * len(kwargs['shape'])
         args = list(args)
         args.insert(0, dset_name)
         dset = group.create_dataset(*args, **kwargs)

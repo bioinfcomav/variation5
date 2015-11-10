@@ -5,8 +5,8 @@ import math
 import h5py
 import numpy
 
-from variation.iterutils import group_items, first
-from variation import SNPS_PER_CHUNK
+from iterutils import group_items, first
+from variation import SNPS_PER_CHUNK, MISSING_VALUES
 
 # Missing docstring
 # pylint: disable=C0111
@@ -57,10 +57,21 @@ def append_matrix(matrix, matrix_to_append):
     matrix[start:stop] = array
 
 
-def fill_array(array, size, dim=0):
+def fill_array(array, size, dim=0, constant_values=0):
     num_fill = size - array.shape[dim]
     fill_format = [[0, 0]] * dim + [[0, num_fill]] + [[0, 0]] * (array.ndim - dim - 1)
-    return numpy.pad(array, fill_format, mode='constant', constant_values=0)
+    return numpy.pad(array, fill_format, mode='constant',
+                     constant_values=constant_values)
+
+
+def append_different_size(matrix1, matrix2, axis=0):
+    if matrix1.shape[1] > matrix2.shape[1]:
+        matrix2 = fill_array(matrix2, matrix1.shape[1], dim=1,
+                             constant_values=MISSING_VALUES[matrix1.dtype])
+    else:
+        matrix1 = fill_array(matrix1, matrix2.shape[1], dim=1,
+                             constant_values=MISSING_VALUES[matrix1.dtype])
+    return numpy.append(matrix1, matrix2, axis=axis)
 
 
 def extend_matrix(matrix, arrays):

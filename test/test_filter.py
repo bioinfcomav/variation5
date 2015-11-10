@@ -7,30 +7,26 @@
 # pylint: disable=C0111
 
 import unittest
-import inspect
 import os
-from os.path import dirname, abspath, join
+from os.path import join
 from tempfile import NamedTemporaryFile
 
 import numpy
-
+from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (_filter_all,
-                                             _filter_none,
-                                             mafs_filter_fact,
-                                             missing_rate_filter_fact,
-                                             min_called_gts_filter_fact,
-                                             quality_filter_genotypes_fact,
-                                             quality_filter_snps_fact,
-                                             biallelic_filter,
-                                             filter_monomorphic_snps_fact,
-                                             biallelic_and_polymorphic_filter,
-                                             filter_gts_by_dp_fact)
+                                          _filter_none,
+                                          mafs_filter_fact,
+                                          missing_rate_filter_fact,
+                                          min_called_gts_filter_fact,
+                                          quality_filter_genotypes_fact,
+                                          quality_filter_snps_fact,
+                                          filter_biallelic,
+                                          filter_monomorphic_snps_fact,
+                                          filter_biallelic_and_polymorphic,
+                                          filter_gts_by_dp_fact,
+                                          filter_gt_no_data)
 from variation.iterutils import first
-#from variation.utils.concat import concat_chunks_into_array
-
-TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
-                        'test_data'))
 
 
 class FilterTest(unittest.TestCase):
@@ -38,7 +34,7 @@ class FilterTest(unittest.TestCase):
         in_hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         chunks = list(in_hdf5.iterate_chunks())
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
-            #out_hdf5 = h5py.File(fhand.name, 'w')
+            # out_hdf5 = h5py.File(fhand.name, 'w')
             os.remove(fhand.name)
             out_hdf5 = VariationsH5(fhand.name, mode='w')
             flt_chunks = map(_filter_all, chunks)
@@ -49,7 +45,7 @@ class FilterTest(unittest.TestCase):
             hdf5_2.close()
 
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
-            #out_hdf5 = h5py.File(fhand.name, 'w')
+            # out_hdf5 = h5py.File(fhand.name, 'w')
             os.remove(fhand.name)
             out_hdf5 = VariationsH5(fhand.name, mode='w')
             flt_chunks = map(_filter_none, chunks)
@@ -69,7 +65,7 @@ class FilterTest(unittest.TestCase):
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 200
 
-        flt_chunk = min_called_gts_filter_fact(min_= 307)(chunk)
+        flt_chunk = min_called_gts_filter_fact(min_=307)(chunk)
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 0
 
@@ -81,7 +77,7 @@ class FilterTest(unittest.TestCase):
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 200
 
-        flt_chunk = missing_rate_filter_fact(min_= 1.1)(chunk)
+        flt_chunk = missing_rate_filter_fact(min_=1.1)(chunk)
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 0
 
@@ -130,8 +126,8 @@ class FilterTest(unittest.TestCase):
 
     def test_filter_missing_varArray(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        #Fichero de entrada esta mal, cogeremos solo algunos
-        kept_fields = ['/calls/GT','/variations/alt','/variations/info/AF']
+        # Fichero de entrada esta mal, cogeremos solo algunos
+        kept_fields = ['/calls/GT', '/variations/alt', '/variations/info/AF']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
 
@@ -141,7 +137,7 @@ class FilterTest(unittest.TestCase):
         flt_chunk = min_called_gts_filter_fact()(chunk)
         assert first(flt_chunk.values()).shape[0] == 200
 
-        flt_chunk = min_called_gts_filter_fact(min_= 307)(chunk)
+        flt_chunk = min_called_gts_filter_fact(min_=307)(chunk)
         assert first(flt_chunk.values()).shape[0] == 0
 
         flt_chunk = missing_rate_filter_fact(min_=0.6)(chunk)
@@ -150,13 +146,13 @@ class FilterTest(unittest.TestCase):
         flt_chunk = missing_rate_filter_fact()(chunk)
         assert first(flt_chunk.values()).shape[0] == 200
 
-        flt_chunk = missing_rate_filter_fact(min_= 1.1)(chunk)
+        flt_chunk = missing_rate_filter_fact(min_=1.1)(chunk)
         assert first(flt_chunk.values()).shape[0] == 0
 
     def test_filter_mafs_varArray(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        #Fichero de entrada esta mal, cogeremos solo algunos
-        kept_fields = ['/calls/GT','/variations/alt','/variations/info/AF']
+        # Fichero de entrada esta mal, cogeremos solo algunos
+        kept_fields = ['/calls/GT', '/variations/alt', '/variations/info/AF']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
         filter_mafs = mafs_filter_fact(min_=0.6)
@@ -180,11 +176,11 @@ class FilterTest(unittest.TestCase):
 
     def test_filter_quality_genotype(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = ['/calls/GQ','/calls/GT']
+        kept_fields = ['/calls/GQ', '/calls/GT']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
         flt_chunk = quality_filter_genotypes_fact(min_=0.6)(chunk)
-        assert numpy.all(flt_chunk[0][147] == [-1,-1])
+        assert numpy.all(flt_chunk[0][147] == [-1, -1])
 
         flt_chunk = quality_filter_genotypes_fact()(chunk)
         assert numpy.all(flt_chunk.shape[0] == 200)
@@ -209,7 +205,7 @@ class FilterTest(unittest.TestCase):
         flt_chunk = quality_filter_snps_fact(min_=586325202)(chunk)
         assert first(flt_chunk.values()).shape[0] == 13
 
-        flt_chunk = quality_filter_snps_fact(max_= -1)(chunk)
+        flt_chunk = quality_filter_snps_fact(max_=-1)(chunk)
         assert first(flt_chunk.values()).shape[0] == 0
 
     def test_filter_quality_dp(self):
@@ -219,7 +215,7 @@ class FilterTest(unittest.TestCase):
         chunk = first(snps)
         filter_gts_by_dp = filter_gts_by_dp_fact(min_=300)
         flt_chunk = filter_gts_by_dp(chunk)
-        assert numpy.all(flt_chunk[0][147] == [-1,-1])
+        assert numpy.all(flt_chunk[0][147] == [-1, -1])
 
         filter_gts_by_dp = filter_gts_by_dp_fact()
         flt_chunk = filter_gts_by_dp(chunk)
@@ -239,11 +235,17 @@ class FilterTest(unittest.TestCase):
         kept_fields = ['/calls/GT']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
-        flt_chunk = biallelic_filter(chunk)
+        flt_chunk = filter_biallelic(chunk)
         assert flt_chunk['/calls/GT'].shape == (200, 153, 2)
-        flt_chunk = biallelic_and_polymorphic_filter(chunk)
+        flt_chunk = filter_biallelic_and_polymorphic(chunk)
         assert flt_chunk['/calls/GT'].shape == (174, 153, 2)
 
+    def test_filter_no_data(self):
+        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5.hdf5')
+        h5 = VariationsH5(fpath, "r")
+        result = filter_gt_no_data(h5)
+        assert result['/calls/GT'].shape[0] == 2
+
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'FilterTest.test_filter_biallelic']
+    import sys;sys.argv = ['', 'FilterTest.test_filter_no_data']
     unittest.main()

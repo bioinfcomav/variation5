@@ -97,7 +97,7 @@ class VCFParser():
             user_max_field_lens = max_field_lens
         self.max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
         self.max_field_str_lens = {'FILTER': 0, 'INFO': {}, 'chrom': 0,
-                                   'alt': 0}
+                                   'alt': 0, 'ref': 0, 'id': 10}
         self._init_max_field_lens()
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
@@ -105,9 +105,9 @@ class VCFParser():
                     self.max_field_lens[key1][key2] = value2
             else:
                 self.max_field_lens[key1] = value1
-        
+
 #         self.max_field_lens.update(user_max_field_lens)
-        
+
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
 

@@ -203,22 +203,49 @@ def merge_alleles(alleles_vcf, alleles_collapse):
     return alleles_merged
 
 
-def create_variations(variations_1, variations_2, fpath):
+def get_attribute(h5_1, h5_2, path, attribute):
+    try:
+        return getattr(h5_1[path], attribute)
+    except KeyError:
+        return getattr(h5_2[path], attribute)
+
+
+def create_variations(variations_1, variations_2, fpath, ignore_fields=[]):
     variations_merged = VariationsH5(fpath, "w")
     h5_paths = set(variations_1.keys()+variations_2.keys())
     h5_samples = variations_1.samples+variations_2.samples
     for path in h5_paths:
+        continue_ = False
+        for field in ignore_fields:
+            if field in path:
+                continue_ = True
+        if continue_:
+            continue
         kwargs = DEF_DSET_PARAMS.copy()
-        kwargs['shape'] = variations_1[path].shape
-        kwargs['shape'][0] = (variations_1[path].shape[0] +
-                              variations_2[path].shape[0])
+        kwargs['shape'] = list(get_attribute(variations_1, variations_2,
+                                             path, 'shape'))
+        kwargs['shape'][0] = (variations_1['/variations/pos'].shape[0] +
+                              variations_2['/variations/pos'].shape[0])
         if 'calls' in path:
             kwargs['shape'][1] = len(h5_samples)
-        kwargs['dtype'] = variations_1[path].dtype
-        kwargs['maxshape'] = variations_1[path].maxshape
-        if 'id' in path:
+        kwargs['shape'] = tuple(kwargs['shape'])
+        kwargs['dtype'] = get_attribute(variations_1, variations_2,
+                                        path, 'dtype')
+        kwargs['maxshape'] = get_attribute(variations_1, variations_2,
+                                           path, 'maxshape')
+        field_var = ['/variations/id', '/variations/qual', '/variations/alt']
+        if 'variations' in path and 'chrom' not in path and 'pos' not in path and 'ref' not in path:
             kwargs['maxshape'] = (None, None)
-        kwargs['chunks'] = variations_1[path].chunks
+            ncols = 0
+            try:
+                ncols += variations_1[path].shape[1]
+            except (KeyError, IndexError):
+                ncols += 1
+            try:
+                ncols += variations_2[path].shape[1]
+            except (KeyError, IndexError):
+                ncols += 1
+            kwargs['shape'] = (kwargs['shape'][0], ncols)
         _create_matrix(variations_merged, path, **kwargs)
     return variations_merged
 
@@ -227,13 +254,19 @@ def are_overlapping(var1, var2):
     pos1 = var1['/variations/pos']
     pos2 = var2['/variations/pos']
     return (var1['/variations/chrom'] == var2['/variations/chrom'] and
-            pos2 >= pos1 and pos2 < pos1 + len(var1['/variations/ref']))
+            pos2 >= pos1 and pos2 < pos1 + len(var1['/variations/ref'][0]))
 
 
-def merge_snps(snp1, snp2, i, merged, fields_funct={}):
+def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
     if '/variations/qual' not in fields_funct:
         fields_funct['/variations/qual'] = min
     for path in merged.keys():
+        continue_ = False
+        for field in ignore_fields:
+            if field in path:
+                continue_ = True
+        if continue_:
+            continue
         if 'calls' in path:
             if 'GT' in path:
                 if snp1 is not None:
@@ -255,14 +288,14 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}):
 
                 if snp1 is None:
                     merged['/variations/ref'][i] = ref2
-                    merged['/variations/alt'][i] = alt2
+                    merged['/variations/alt'][i, :alt2.shape[1]] = alt2[0]
                     merged['/variations/pos'][i] = pos2
                     merged[path][i, -len(snp2.samples):, ] = gts2
                     merged['/variations/chrom'][i] = chrom2
                     continue
                 if snp2 is None:
                     merged['/variations/ref'][i] = ref1
-                    merged['/variations/alt'][i] = alt1
+                    merged['/variations/alt'][i, :alt1.shape[1]] = alt1[0]
                     merged['/variations/pos'][i] = pos1
                     merged[path][i, :len(snp1.samples), ] = gts1
                     merged['/variations/chrom'][i] = chrom1
@@ -281,8 +314,9 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}):
                                                    numpy.unique(gts_collapsed))
                     gts_encoded = encode_gts(gts_collapsed,
                                              alleles_merged.reshape(1, alleles_merged.shape[0]))
+                    alleles_merged = alleles_merged.astype(merged['/variations/ref'].dtype)
                     merged['/variations/ref'][i] = alleles_merged[0]
-                    merged['/variations/alt'][i] = alleles_merged[1:]
+                    merged['/variations/alt'][i, :alleles_merged.shape[0]-1] = alleles_merged[1:]
                     merged['/variations/pos'][i] = pos1
                     merged[path][i, :len(snp1.samples), ] = snp1[path][:]
                     merged[path][i, -len(snp2.samples):, ] = gts_encoded
@@ -296,8 +330,9 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}):
                     alleles_merged = merge_alleles(alleles,
                                                    numpy.unique(gts_collapsed))
                     gts_encoded = encode_gts(gts_collapsed, alleles_merged)
+                    alleles_merged = alleles_merged.astype(merged['/variations/ref'].dtype)
                     merged['/variations/ref'][i] = alleles_merged[0]
-                    merged['/variations/alt'][i] = alleles_merged[1:]
+                    merged['/variations/alt'][i:alleles_merged.shape[0]-1] = alleles_merged[1:]
                     merged['/variations/pos'][i] = pos2
                     merged[path][i, :len(snp1.samples), ] = gts_encoded
                     merged[path][i, -len(snp2.samples):, ] = snp2[path][:]
@@ -340,10 +375,12 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}):
                         except (KeyError, TypeError):
                             merged[path][i, ] = numpy.append(missing, snp2[path])
                     except KeyError:
-                        merged[path][i, ] = numpy.append(missing, missing)
+                        merged[path][i, ] = numpy.full(merged[path][i, ].shape, missing,
+                                                       dtype=merged[path][i, ].dtype)
 
 
-def merge_sorted_variations(variations_1, variations_2):
+def merge_sorted_variations(variations_1, variations_2,
+                            ignore_2_or_more_overlaps=True):
     snps_1 = iter(variations_1.iterate_chunks(chunk_size=1))
     snps_2 = iter(variations_2.iterate_chunks(chunk_size=1))
     snp_1 = next(snps_1)
@@ -356,6 +393,7 @@ def merge_sorted_variations(variations_1, variations_2):
         pos2 = snp_2['/variations/pos']
         if snp_1['/variations/chrom'] == snp_2['/variations/chrom']:
             if are_overlapping(snp_1, snp_2) or are_overlapping(snp_2, snp_1):
+
                 result = snp_1, snp_2
                 try:
                     snp_1 = next(snps_1)
@@ -375,6 +413,9 @@ def merge_sorted_variations(variations_1, variations_2):
                     while are_overlapping(result[0], snp_2):
                         snp_2 = next(snps_2)
                         overlap = True
+                        if not ignore_2_or_more_overlaps:
+                            msg = 'More than 2 variations are overlapping'
+                            raise ValueError(msg)
                 except StopIteration:
                     stop = snps_1
                     are_snps1 = True
@@ -383,6 +424,9 @@ def merge_sorted_variations(variations_1, variations_2):
                     while are_overlapping(result[1], snp_1):
                         snp_1 = next(snps_1)
                         overlap = True
+                        if not ignore_2_or_more_overlaps:
+                            msg = 'More than 2 variations are overlapping'
+                            raise ValueError(msg)
                 except StopIteration:
                     stop = snps_2
                     break
@@ -427,10 +471,28 @@ def merge_sorted_variations(variations_1, variations_2):
             yield None, snp
 
 
-def merge_variations(variations1, variations2, merged_fpath, fields_funct):
+def merge_variations(variations1, variations2, merged_fpath, fields_funct={},
+                     ignore_overlaps=False, ignore_2_or_more_overlaps=False,
+                     ignore_fields=[]):
     merged_variations = create_variations(variations1, variations2,
-                                          merged_fpath)
+                                          merged_fpath,
+                                          ignore_fields=ignore_fields)
+    prev_snp1, prev_snp2 = None, None
     for i, (snp1, snp2) in enumerate(merge_sorted_variations(variations1,
-                                                             variations2)):
-        merge_snps(snp1, snp2, i, merged_variations, fields_funct)
+                                                             variations2,
+                                                             ignore_2_or_more_overlaps)):
+        if not ignore_overlaps:
+            if prev_snp1 is not None and snp1 is not None and are_overlapping(prev_snp1, snp1):
+                raise ValueError('Overlapping variations in variaitons 1')
+            if prev_snp2 is not None and snp2 is not None and are_overlapping(prev_snp2, snp2):
+                raise ValueError('Overlapping variations in variaitons 2')
+        merge_snps(snp1, snp2, i, merged_variations, fields_funct=fields_funct,
+                   ignore_fields=ignore_fields)
+        if snp1 is not None:
+            prev_snp1 = snp1
+        if snp2 is not None:
+            prev_snp2 = snp2
+    for path in merged_variations.keys():
+        new_shape = (i+1, ) + merged_variations[path].shape[1:]
+        merged_variations[path].resize(new_shape)
     return merged_variations

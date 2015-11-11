@@ -13,11 +13,14 @@ from variation.genotypes_matrix import (GenotypesMatrixParser,
                                         change_gts_chain, decode_gts,
                                         collapse_gts, encode_gts,
                                         merge_sorted_variations, merge_snps,
-    merge_alleles)
+    merge_alleles, merge_variations)
 import os
 from variations.vars_matrices import VariationsH5, put_vars_from_csv
 import numpy
 from variation.genotypes_matrix import count_compatible_snps_in_chains
+from variation.vcf import VCFParser
+from variation.variations.vars_matrices import _put_vars_from_vcf
+from variation.variations.stats import _remove_nans
 
 
 class GtMatrixTest(unittest.TestCase):
@@ -27,11 +30,11 @@ class GtMatrixTest(unittest.TestCase):
                                        2, sep='\t',
                                        snp_fieldnames=['chrom', 'pos'])
         expected = [{'gts': [[1, 1], [0, 0], [-1, -1]], 'alt': ['G'],
-                     'pos': '331954', 'ref': 'T', 'chrom': 'SL2.40ch02'},
+                     'pos': 331954, 'ref': 'T', 'chrom': 'SL2.40ch02'},
                     {'gts': [[0, 0], [0, 0], [-1, -1]], 'alt': [''],
-                     'pos': '681961', 'ref': 'C', 'chrom': 'SL2.40ch02'},
+                     'pos': 681961, 'ref': 'C', 'chrom': 'SL2.40ch02'},
                     {'gts': [[0, 0], [0, 0], [1, 0]], 'alt': ['A'],
-                     'pos': '1511764', 'ref': 'T', 'chrom': 'SL2.40ch02'}]
+                     'pos': 1511764, 'ref': 'T', 'chrom': 'SL2.40ch02'}]
         for x, y in zip(parser, expected):
             for key in x.keys():
                 assert x[key] == y[key]
@@ -63,13 +66,13 @@ class GtMatrixTest(unittest.TestCase):
                                                        'SNP_ID', 'ref'])
         expected = [{'gts': [[0, 0], [0, 0], [0, 0], [0, 1], [2, 2]],
                      'SNP_ID': 'solcap_snp_sl_15058', 'ref': 'A',
-                     'alt': ['C', 'G'], 'chrom': '1', 'pos': '12432'},
+                     'alt': ['C', 'G'], 'chrom': '1', 'pos': 12432},
                     {'gts': [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
                      'SNP_ID': 'solcap_snp_sl_60635', 'ref': 'G',
-                     'alt': [''], 'chrom': '2', 'pos': '43534'},
+                     'alt': [''], 'chrom': '2', 'pos': 43534},
                     {'gts': [[1, 1], [-1, -1], [0, 1], [1, 1], [1, 1]],
                      'SNP_ID': 'solcap_snp_sl_60604', 'ref': 'T',
-                     'alt': ['C'],  'chrom': 'sol.23', 'pos': '2345'}]
+                     'alt': ['C'],  'chrom': 'sol.23', 'pos': 2345}]
         for x, y in zip(parser, expected):
             for key in x.keys():
                 assert x[key] == y[key]
@@ -107,10 +110,6 @@ class GtMatrixTest(unittest.TestCase):
             pass
         h5 = VariationsH5(out_fpath, mode='w')
         put_vars_from_csv(parser, h5, 100)
-        print(list(h5['/variations/chrom'][:]))
-        print(list(h5['/variations/ref'][:]))
-        print(list(h5['/variations/pos'][:]))
-        print(h5['/calls/GT'][:])
 
     def test_count_compatible_snsp_in_chains(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
@@ -151,12 +150,11 @@ class GtMatrixTest(unittest.TestCase):
     def test_collapse_gts(self):
         gts = numpy.array([[['A', 'A'], ['A', 'T']],
                            [['T', 'T'], ['T', 'C']]])
-        base_allele = 'ATCAC'
+        base_allele = b'ATCAC'
         relative_positions = [1, 4]
         expected = numpy.array([[['AACAT', 'AACAT'],
                                  ['AACAT', 'ATCAC']]])
         result = collapse_gts(base_allele, gts, relative_positions)
-        print(result)
         assert numpy.all(result == expected)
 
     def test_merge_h5(self):
@@ -269,7 +267,7 @@ class GtMatrixTest(unittest.TestCase):
         expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
                     '/variations/pos': numpy.array([[11]]),
                     '/variations/ref': numpy.array([['A']], dtype='S10'),
-                    '/variations/alt': numpy.array([['T']], dtype='S10'),
+                    '/variations/alt': numpy.array([['T', '']], dtype='S10'),
                     '/variations/info/AF': numpy.array([[17]]),
                     '/variations/info/DP': numpy.array([[-1, 210]]),
                     '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
@@ -278,7 +276,32 @@ class GtMatrixTest(unittest.TestCase):
         for key in expected.keys():
             assert numpy.all(merged[key] == expected[key])
 
+    def test_merge_variations(self):
+        merged_fpath = join(TEST_DATA_DIR, 'csv', 'merged.h5')
+        format_array_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
+                                            'format.h5'), "r")
+        format_h5 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
+        try:
+            os.remove(merged_fpath)
+        except FileNotFoundError:
+            pass
+        try:
+            merge_variations(format_h5, format_array_h5, merged_fpath)
+            self.fail()
+        except ValueError:
+            pass
+        os.remove(merged_fpath)
+        merged_variations = merge_variations(format_h5, format_array_h5,
+                                             merged_fpath, ignore_overlaps=True,
+                                             ignore_2_or_more_overlaps=True)
+        expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
+                                        'expected_merged.h5'), 'r')
+        for key in merged_variations.keys():
+            if 'float' in str(merged_variations[key][:].dtype):
+                assert numpy.all(_remove_nans(expected_h5[key][:]) == _remove_nans(merged_variations[key][:]))
+            else:
+                assert numpy.all(expected_h5[key][:] == merged_variations[key][:])
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'GtMatrixTest.test_merge_snps']
+#     import sys;sys.argv = ['', 'GtMatrixTest.test_merge_alleles']
     unittest.main()

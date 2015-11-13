@@ -9,9 +9,12 @@ import unittest
 import sys
 import inspect
 from os.path import dirname, abspath, join
+
 import numpy
+from subprocess import check_output
 
 from variation.variations import VariationsH5, VariationsArrays
+from variation.matrix.methods import calc_min_max
 from variation.variations.stats import (_remove_nans,
                                         _CalledGTCalculator,
                                         _MissingGTCalculator,
@@ -40,12 +43,8 @@ from variation.variations.stats import (_remove_nans,
                                         HWECalcualtor,
                                         PositionalStatsCalculator,
                                         _ExpectedHetCalculator)
-
-from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
-from subprocess import check_output
-from scipy.stats.morestats import probplot
-from matplotlib import pyplot
+from tempfile import TemporaryDirectory
 
 TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
                         'test_data'))
@@ -446,11 +445,11 @@ class VarMatricesStatsTest(unittest.TestCase):
 
     def test_calc_hdf5_stats_bin(self):
         bin_ = join(BIN_DIR, 'calculate_h5_stats.py')
-        cmd = [sys.executable, bin_, join(TEST_DATA_DIR, 'ril.hdf5'), '-o',
-               join(TEST_DATA_DIR, 'ril_stats')]
-        check_output(cmd)
-
+        with TemporaryDirectory() as tmpdir:
+            cmd = [sys.executable, bin_, join(TEST_DATA_DIR, 'ril.hdf5'), '-o',
+                   tmpdir]
+            check_output(cmd)
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snv_density_distribution']
+    #import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snv_density_distribution']
     unittest.main()

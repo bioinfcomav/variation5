@@ -51,16 +51,17 @@ class VcfH5Test(unittest.TestCase):
             assert h5f._h5file.filename
 
     def test_put_vars_hdf5_from_vcf(self):
-        vcf_fhand = gzip.open(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz'), 'rb')
+        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
-                        max_field_lens={'alt': 3})
+                        max_field_lens={'alt': 4}, ignore_alt=True)
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
             h5f.put_vars_from_vcf(vcf)
             assert h5f['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(h5f['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
-            assert numpy.all(h5f['/calls/GQ'][0, :] == numpy.array([48, 48, 43], dtype=numpy.int16))
+            assert numpy.all(h5f['/calls/GQ'][0, :] == numpy.array([48, 48, 43],
+                                                                   dtype=numpy.int16))
             vcf_fhand.close()
 
     def test_put_vars_arrays_from_vcf(self):
@@ -70,7 +71,8 @@ class VcfH5Test(unittest.TestCase):
         snps.put_vars_from_vcf(vcf)
         assert snps['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
-        assert numpy.all(snps['/calls/GQ'][0, :] == numpy.array([48, 48, 43], dtype=numpy.int16))
+        assert numpy.all(snps['/calls/GQ'][0, :] == numpy.array([48, 48, 43],
+                                                                dtype=numpy.int16))
         vcf_fhand.close()
 
     def test_create_hdf5_with_chunks(self):
@@ -277,7 +279,7 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
 
 
-class VcfTests(unittest.TestCase):
+class VcfTest(unittest.TestCase):
 
     def test_vcf_detect_fields(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
@@ -296,5 +298,5 @@ class VcfTests(unittest.TestCase):
         assert '/variations/qual' not in metadata2.keys()
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
+#     import sys; sys.argv = ['', 'VcfTest.test_vcf_detect_fields']
     unittest.main()

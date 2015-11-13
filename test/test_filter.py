@@ -58,8 +58,8 @@ class FilterTest(unittest.TestCase):
     def test_filter_missing_varh5(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
-        flt_chunk = min_called_gts_filter_fact(min_=250)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 62
+        flt_chunk = min_called_gts_filter_fact(min_=100)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 94
 
         flt_chunk = min_called_gts_filter_fact()(chunk)
         path = first(chunk.keys())
@@ -130,9 +130,8 @@ class FilterTest(unittest.TestCase):
         kept_fields = ['/calls/GT', '/variations/alt', '/variations/info/AF']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
-
-        flt_chunk = min_called_gts_filter_fact(min_=250)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 62
+        flt_chunk = min_called_gts_filter_fact(min_=100)(chunk)
+        assert first(flt_chunk.values()).shape[0] == 94
 
         flt_chunk = min_called_gts_filter_fact()(chunk)
         assert first(flt_chunk.values()).shape[0] == 200
@@ -241,11 +240,11 @@ class FilterTest(unittest.TestCase):
         assert flt_chunk['/calls/GT'].shape == (174, 153, 2)
 
     def test_filter_no_data(self):
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5.hdf5')
+        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
         h5 = VariationsH5(fpath, "r")
         result = filter_gt_no_data(h5)
         assert result['/calls/GT'].shape[0] == 2
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'FilterTest.test_filter_no_data']
+#     import sys;sys.argv = ['', 'FilterTest.test_filter_missing_varArray']
     unittest.main()

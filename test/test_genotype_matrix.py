@@ -7,7 +7,7 @@
 
 import unittest
 from os.path import join
-from test.test_utils import TEST_DATA_DIR
+from test.test_utils import TEST_DATA_DIR, BIN_DIR
 from variation.genotypes_matrix import (GenotypesMatrixParser,
                                         IUPAC_CODING, STANDARD_GT,
                                         change_gts_chain, decode_gts,
@@ -21,6 +21,8 @@ from variation.genotypes_matrix import count_compatible_snps_in_chains
 from variation.vcf import VCFParser
 from variation.variations.vars_matrices import _put_vars_from_vcf
 from variation.variations.stats import _remove_nans
+import sys
+from subprocess import check_output
 
 
 class GtMatrixTest(unittest.TestCase):
@@ -171,6 +173,15 @@ class GtMatrixTest(unittest.TestCase):
                 except TypeError:
                     assert x is None
 
+        expected = [[681961, 681961], [1511764, 1511764],
+                    [15164, None], [15184, None]]
+        for snp, exp in zip(merge_sorted_variations(h5_2, h5_1), expected):
+            for x, y in zip(snp, exp):
+                try:
+                    assert x['/variations/pos'][0] == y
+                except TypeError:
+                    assert x is None
+
     def test_merge_alleles(self):
         alleles1 = numpy.array(['AT', 'TT'])
         alleles2 = numpy.array(['A', 'TT'])
@@ -298,10 +309,40 @@ class GtMatrixTest(unittest.TestCase):
                                         'expected_merged.h5'), 'r')
         for key in merged_variations.keys():
             if 'float' in str(merged_variations[key][:].dtype):
-                assert numpy.all(_remove_nans(expected_h5[key][:]) == _remove_nans(merged_variations[key][:]))
+                assert numpy.all(_remove_nans(expected_h5[key][:]) ==
+                                 _remove_nans(merged_variations[key][:]))
             else:
-                assert numpy.all(expected_h5[key][:] == merged_variations[key][:])
+                assert numpy.all(expected_h5[key][:] == merged_variations[key]
+                                 [:])
+
+        os.remove(merged_fpath)
+        # Change the order
+        merged_variations = merge_variations(format_array_h5, format_h5,
+                                             merged_fpath, ignore_overlaps=True,
+                                             ignore_2_or_more_overlaps=True)
+        expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
+                                        'expected_merged2.h5'), 'r')
+        for key in merged_variations.keys():
+            if 'float' in str(merged_variations[key][:].dtype):
+                assert numpy.all(_remove_nans(expected_h5[key][:]) ==
+                                 _remove_nans(merged_variations[key][:]))
+            else:
+                assert numpy.all(expected_h5[key][:] == merged_variations[key]
+                                 [:])
+
+    def test_merge_hdf5_bin(self):
+        merged_fpath = join(TEST_DATA_DIR, 'csv', 'merged2.h5')
+        h5_1 = join(TEST_DATA_DIR, 'csv', 'format.h5')
+        h5_2 = join(TEST_DATA_DIR, 'format_def.h5')
+        try:
+            os.remove(merged_fpath)
+        except FileNotFoundError:
+            pass
+        bin_ = join(BIN_DIR, 'merge_hdf5.py')
+        cmd = [sys.executable, bin_, h5_1, h5_2, '-o', merged_fpath,
+               '-i', '-di']
+        check_output(cmd)
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'GtMatrixTest.test_merge_alleles']
+#     import sys;sys.argv = ['', 'GtMatrixTest.test_merge_hdf5_bin']
     unittest.main()

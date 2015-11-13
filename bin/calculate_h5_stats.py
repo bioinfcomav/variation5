@@ -8,7 +8,7 @@ from matplotlib import gridspec
 from variation.variations.vars_matrices import VariationsH5
 from variation import (SNPS_PER_CHUNK, STATS_DEPTHS, MAX_DEPTH,
                        SNP_DENSITY_WINDOW_SIZE, MIN_N_GENOTYPES,
-                       MAX_N_ALLELES, MAX_ALLELE_COUNTS)
+                       MAX_N_ALLELES, MAX_ALLELE_COUNTS, DIVERSITY_WINDOW_SIZE)
 from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         _MissingGTCalculator,
                                         _ObsHetCalculatorBySnps,
@@ -29,13 +29,13 @@ from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         _CalledGTCalculator)
 from variation.plot import (plot_histogram, plot_pandas_barplot,
                             qqplot, plot_boxplot, plot_barplot, plot_hist2d,
-                            plot_lines,
-    manhattan_plot)
+                            plot_lines, manhattan_plot)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvas
 from itertools import combinations_with_replacement
 from scipy.stats._continuous_distns import chi2
 import sys
+import logging
 
 
 def _setup_argparse(**kwargs):
@@ -59,6 +59,10 @@ def _setup_argparse(**kwargs):
     help_msg = 'Window size to calculate SNP density ({})'
     help_msg = help_msg.format(SNP_DENSITY_WINDOW_SIZE)
     parser.add_argument('-w', '--window_size', default=SNP_DENSITY_WINDOW_SIZE,
+                        help=help_msg, type=int)
+    help_msg = 'Window size to calculate nucleotide diversity ({})'
+    help_msg = help_msg.format(DIVERSITY_WINDOW_SIZE)
+    parser.add_argument('-wd', '--window_size_diversity', default=DIVERSITY_WINDOW_SIZE,
                         help=help_msg, type=int)
     help_msg = 'Min number of called genotypes to calculate stats ({})'
     help_msg = help_msg.format(MIN_N_GENOTYPES)
@@ -91,6 +95,7 @@ def _parse_args(parser):
         args['depths'] = [int(x) for x in parsed_args.depths.split(',')]
     args['max_depth'] = parsed_args.max_depth
     args['window_size'] = parsed_args.window_size
+    args['window_size_diver'] = parsed_args.window_size_diversity
     args['min_num_genotypes'] = parsed_args.min_n_gts
     args['max_num_alleles'] = parsed_args.max_num_alleles
     args['max_gq'] = parsed_args.max_gq
@@ -99,6 +104,7 @@ def _parse_args(parser):
 
 
 def create_plots():
+
     description = 'Calculates basic stats of a HDF5 file'
     parser = _setup_argparse(description=description)
     args = _parse_args(parser)
@@ -108,48 +114,51 @@ def create_plots():
     h5 = VariationsH5(args['in_fpath'], mode='r',
                       vars_in_chunk=args['chunk_size'])
     by_chunk = args['by_chunk']
-    print('plot_maf')
-    plot_maf(h5, by_chunk, data_dir)
-    print('plot_maf_dp')
-    plot_maf_dp(h5, by_chunk, data_dir)
-    print('plot_missing_gt_rate_per_snp')
-    plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
-    print('plot_het_obs_distrib')
-    plot_het_obs_distrib(h5, by_chunk, data_dir)
-    print('plot_snp_dens_distrib')
+    logging.basicConfig(filename= join(data_dir, 'plots_info.log'),
+                                       filemode='w', level=logging.INFO)
+#     logging.info('plot_maf')
+#     plot_maf(h5, by_chunk, data_dir)
+#     logging.info('plot_maf_dp')
+#     plot_maf_dp(h5, by_chunk, data_dir)
+#     logging.info('plot_missing_gt_rate_per_snp')
+#     plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
+#     logging.info('plot_het_obs_distrib')
+#     plot_het_obs_distrib(h5, by_chunk, data_dir)
+    logging.info('plot_snp_dens_distrib')
     plot_snp_dens_distrib(h5, by_chunk, args['window_size'], data_dir)
-    print('plot_dp_distrib_per_sample')
-    plot_dp_distrib_per_sample(h5, by_chunk, args['max_depth'], data_dir)
-    print('plot_dp_distrib_all_sample')
-    plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
-    print('plot_gq_distrib_per_sample')
-    plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
-                               max_value=args['max_gq'])
-    print('plot_gq_distrib_all_sample')
-    plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
-                               max_value=args['max_gq'])
-    print('plot_dp_distrib_per_gt')
-    plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
-    print('plot_gq_distrib_per_gt')
-    plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
-    print('plot_gt_stats_per_sample')
-    plot_gt_stats_per_sample(h5, by_chunk, data_dir)
-    print('plot_ditrib_num_samples_hi_dp')
-    plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
-    print('plot_gq_distrib_per_dp')
-    plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
-                           max_value=args['max_gq'],
-                           max_depth=args['max_depth'])
-    print('plot_hwe_stats')
-    plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
-    print('plot_nucleotide_diversity')
-    plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
-                                       args['window_size'], data_dir, by_chunk)
-    print('plot_allele_obs_distrib_2D')
-    plot_allele_obs_distrib_2D(h5, by_chunk, data_dir,
-                               args['max_allele_counts'])
-    print('plot_inbreeding_coeficient')
-    plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
+#     logging.info('plot_dp_distrib_per_sample')
+#     plot_dp_distrib_per_sample(h5, by_chunk, args['max_depth'], data_dir)
+#     logging.info('plot_dp_distrib_all_sample')
+#     plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
+#     logging.info('plot_gq_distrib_per_sample')
+#     plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
+#                                max_value=args['max_gq'])
+#     logging.info('plot_gq_distrib_all_sample')
+#     plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
+#                                max_value=args['max_gq'])
+#     logging.info('plot_dp_distrib_per_gt')
+#     plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
+#     logging.info('plot_gq_distrib_per_gt')
+#     plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
+#     logging.info('plot_gt_stats_per_sample')
+#     plot_gt_stats_per_sample(h5, by_chunk, data_dir)
+#     logging.info('plot_ditrib_num_samples_hi_dp')
+#     plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
+#     logging.info('plot_gq_distrib_per_dp')
+#     plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
+#                            max_value=args['max_gq'],
+#                            max_depth=args['max_depth'])
+#     logging.info('plot_hwe_stats')
+#     plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
+#     logging.info('plot_nucleotide_diversity')
+#     plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
+#                                        args['window_size_diver'],
+#                                        data_dir, by_chunk)
+#     logging.info('plot_allele_obs_distrib_2D')
+#     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir,
+#                                args['max_allele_counts'])
+#     logging.info('plot_inbreeding_coeficient')
+#     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
 
 
 def plot_maf(h5, by_chunk, data_dir):
@@ -260,6 +269,8 @@ def plot_het_obs_distrib(h5, by_chunk, data_dir):
 def plot_snp_dens_distrib(h5, by_chunk, window_size, data_dir):
         # SNP density distribution
     density = calc_snp_density(h5, window_size)
+#     numpy.set_printoptions(threshold=numpy.nan)
+#     print(density)
     fpath = join(data_dir, 'snps_density.png')
     title = 'SNP density distribution per {} bp windows'
     title = title.format(window_size)
@@ -279,11 +290,11 @@ def plot_snp_dens_distrib(h5, by_chunk, window_size, data_dir):
     title = 'SNP denisity along the genome'
     manhattan_plot(h5['/variations/chrom'], h5['/variations/pos'], density,
                    mpl_params={'set_xlabel': {'args': ['Chromosome'],
-                                            'kwargs': {}},
-                             'set_ylabel': {'args': ['SNP per {} bp'.format(window_size)],
-                                            'kwargs': {}},
-                             'set_title': {'args': [title], 'kwargs': {}},
-                             'set_yscale':{'args': ['log'], 'kwargs': {}}},
+                                              'kwargs': {}},
+                               'set_ylabel': {'args': ['SNP per {} bp'.format(window_size)],
+                                              'kwargs': {}},
+                               'set_title': {'args': [title], 'kwargs': {}},
+                               'set_yscale': {'args': ['log'], 'kwargs': {}}},
                    fhand=fhand, figsize=(15, 7.5), ylim=1)
     bg_fhand = open(join(data_dir, 'snp_density.bg'), 'w')
     pos_dens = PositionalStatsCalculator(h5['/variations/chrom'],
@@ -636,7 +647,7 @@ def plot_allele_obs_distrib_2D(h5, by_chunk, data_dir, max_allele_counts):
             _save(fpath, df_allele_distrib_gq_2D)
         canvas.print_figure(fhand)
     else:
-        print('Allele distribution 2D could not be calculated\n')
+        logging.warn('Allele distribution 2D could not be calculated\n')
 
 
 def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):

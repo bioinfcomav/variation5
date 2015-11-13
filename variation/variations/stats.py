@@ -590,9 +590,9 @@ def calc_quality_by_depth_distrib(variations, depths, by_chunk=True,
         else:
             append_matrix(distributions, distribution)
             append_matrix(gq_cumulative_distrs, gq_cumulative_distr)
-    distributions = distributions.reshape((len(depths), max_value+1))
+    distributions = distributions.reshape((len(depths), int(max_value)+1))
     gq_cumulative_distrs = gq_cumulative_distrs.reshape((len(depths),
-                                                         max_value+1))
+                                                         int(max_value)+1))
     return distributions, gq_cumulative_distrs
 
 

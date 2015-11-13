@@ -53,8 +53,9 @@ def calc_stat_by_chunk(var_matrices, function, reduce_funct=None,
     return stats
 
 
-def _calc_stat(var_matrices, function, reduce_funct=None, matrix_transform=None,
-               matrix_transform_axis=None, by_chunk=True, mask=None):
+def _calc_stat(var_matrices, function, reduce_funct=None,
+               matrix_transform=None, matrix_transform_axis=None,
+               by_chunk=True, mask=None):
     if by_chunk:
         return calc_stat_by_chunk(var_matrices=var_matrices, function=function,
                                   reduce_funct=reduce_funct,
@@ -192,7 +193,8 @@ class _CalledHigherDepthDistribCalculator:
         is_called_higher_depth = _CalledHigherDepthMasker(self.depth)
         n_called_per_snp = numpy.sum(is_called_higher_depth(variations),
                                      axis=1)
-        n_called_per_snp = n_called_per_snp.reshape((1, n_called_per_snp.shape[0]))
+        n_called_per_snp = n_called_per_snp.reshape((1,
+                                                     n_called_per_snp.shape[0]))
         return self.calc_distrib(n_called_per_snp)
 
 
@@ -367,7 +369,6 @@ class _IntDistribution2DCalculator():
         return distrib
 
 
-
 class GenotypeStatsCalculator:
     def __init__(self):
         self.required_fields = ['/calls/GT']
@@ -415,7 +416,6 @@ def calc_snp_density(variations, window):
         pos_left = pos - window
         index_right = dic_index.index_pos(chrom, pos_right)
         index_left = dic_index.index_pos(chrom, pos_left)
-        density = index_right - index_left
         dens.append(index_right - index_left)
     return numpy.array(dens)
 
@@ -681,10 +681,11 @@ class HWECalcualtor:
         gts = variations['/calls/GT']
         allele_counts = numpy.zeros((gts.shape[0], self.max_num_allele))
         for allele in range(self.max_num_allele):
-            allele_counts[:, allele] = numpy.sum(gts == allele, axis=2).sum(axis=1)
+            allele_counts[:, allele] = numpy.sum(gts == allele,
+                                                 axis=2).sum(axis=1)
         total_counts = allele_counts.sum(axis=1)
         genotypes = list(combinations_with_replacement(range(self.max_num_allele),
-                                      self.ploidy))
+                                                       self.ploidy))
         gts_counts = numpy.zeros((gts.shape[0], len(genotypes)))
         exp_gts_counts = numpy.ones((gts.shape[0], len(genotypes)))
         for i, genotype in enumerate(genotypes):
@@ -694,8 +695,10 @@ class HWECalcualtor:
                     mask = gts[:, :, allele] == genotype[allele]
                 else:
                     mask = numpy.logical_and(mask,
-                                     gts[:, :, allele] == genotype[allele])
-                exp_gts_counts[:, i] *= allele_counts[:, genotype[allele]] / total_counts
+                                             gts[:, :,
+                                                 allele] == genotype[allele])
+                exp_gts_counts[:, i] *= allele_counts[:,
+                                                      genotype[allele]] / total_counts
             exp_gts_counts[:, i] *= len(set(permutations(genotype)))
             gts_counts[:, i] = numpy.sum(mask, axis=1)
         total_gt_counts = numpy.sum(gts_counts, axis=1)

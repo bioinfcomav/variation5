@@ -274,7 +274,8 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
                     pos1 = snp1['/variations/pos']
                     ref1 = snp1['/variations/ref']
                     alt1 = snp1['/variations/alt']
-                    alleles1 = numpy.append(ref1.reshape(ref1.shape[0], 1), alt1, axis=1)
+                    alleles1 = numpy.append(ref1.reshape(ref1.shape[0], 1),
+                                            alt1, axis=1)
                     chrom1 = snp1['/variations/chrom']
 
                 if snp2 is not None:
@@ -282,8 +283,8 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
                     pos2 = snp2['/variations/pos']
                     ref2 = snp2['/variations/ref']
                     alt2 = snp2['/variations/alt']
-                    alleles2 = numpy.append(ref2.reshape(ref2.shape[0], 1), alt2,
-                                            axis=1)
+                    alleles2 = numpy.append(ref2.reshape(ref2.shape[0], 1),
+                                            alt2, axis=1)
                     chrom2 = snp2['/variations/chrom']
 
                 if snp1 is None:

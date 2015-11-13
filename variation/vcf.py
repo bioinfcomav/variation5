@@ -56,7 +56,7 @@ def _detect_fields_in_vcf(metadata, fields):
         if type_ == 'CALLS':
             check_field = check_field.encode('utf-8')
         if check_field not in list(metadata[type_]):
-            msg = 'Field does not exist in vcf '+ field.decode('utf-8')
+            msg = 'Field does not exist in vcf ' + field.decode('utf-8')
             raise ValueError(msg)
         check_fields.append(check_field)
     return check_fields
@@ -223,7 +223,8 @@ class VCFParser():
             metadata[meta_kind][id_] = meta
 
         self.kept_fields = _detect_fields_in_vcf(metadata, self.kept_fields)
-        self.ignored_fields = _detect_fields_in_vcf(metadata, self.ignored_fields)
+        self.ignored_fields = _detect_fields_in_vcf(metadata,
+                                                    self.ignored_fields)
 
         self.metadata = metadata
 

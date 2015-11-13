@@ -6,7 +6,6 @@
 # pylint: disable=C0111
 
 import unittest
-from tempfile import NamedTemporaryFile
 from os.path import join
 
 import numpy

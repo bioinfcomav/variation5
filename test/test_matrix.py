@@ -1,21 +1,21 @@
-
-import unittest
-import numpy
-from tempfile import NamedTemporaryFile
-from posixpath import join
-import shutil
-
-from variation.matrix.methods import append_matrix, extend_matrix,\
-    append_different_size
-from variation.variations.vars_matrices import VariationsH5
-from test.test_utils import TEST_DATA_DIR
-
 # Method could be a function
 # pylint: disable=R0201
 # Too many public methods
 # pylint: disable=R0904
 # Missing docstring
 # pylint: disable=C0111
+
+import unittest
+import shutil
+from tempfile import NamedTemporaryFile
+from posixpath import join
+
+import numpy
+
+from variation.matrix.methods import (append_matrix, extend_matrix,
+                                      append_different_size)
+from variation.variations.vars_matrices import VariationsH5
+from test.test_utils import TEST_DATA_DIR
 
 
 class ArrayTest(unittest.TestCase):
@@ -29,10 +29,9 @@ class ArrayTest(unittest.TestCase):
                      [3, 3],
                      [4, 4],
                      [5, 5]])
-        array = numpy.zeros([1, 2],dtype=numpy.int)
+        array = numpy.zeros([1, 2], dtype=numpy.int)
         extend_matrix(array, mats)
         assert numpy.all(array == expected)
-
 
     def test_append_matrix(self):
         in_fpath = join(TEST_DATA_DIR, '1000snps.hdf5')
@@ -45,21 +44,21 @@ class ArrayTest(unittest.TestCase):
                      [1, 1, 1],
                      [2, 2, 2]])
         expected2 = [[1, 1, 1],
-                       [2, 2, 2],
-                       [1, 8, 5],
-                       [3, 5, 3],
-                       [6, 0, 4],
-                       [7, 4, 2],
-                       [4, 2, 3],
-                       [1, 1, 1],
-                       [2, 2, 2],
-                       [1, 8, 5],
-                       [3, 5, 3],
-                       [6, 0, 4],
-                       [7, 4, 2],
-                       [4, 2, 3],
-                       [1, 1, 1],
-                       [2, 2, 2]]
+                     [2, 2, 2],
+                     [1, 8, 5],
+                     [3, 5, 3],
+                     [6, 0, 4],
+                     [7, 4, 2],
+                     [4, 2, 3],
+                     [1, 1, 1],
+                     [2, 2, 2],
+                     [1, 8, 5],
+                     [3, 5, 3],
+                     [6, 0, 4],
+                     [7, 4, 2],
+                     [4, 2, 3],
+                     [1, 1, 1],
+                     [2, 2, 2]]
         with NamedTemporaryFile(suffix='.h5') as fhand_out:
             shutil.copy(in_fpath, fhand_out.name)
             hdf5 = VariationsH5(fhand_out.name, mode='r+')
@@ -87,5 +86,5 @@ class ArrayTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'ArrayTest.test_append_different_size']
+    # import sys;sys.argv = ['', 'ArrayTest.test_append_different_size']
     unittest.main()

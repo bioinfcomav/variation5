@@ -184,6 +184,7 @@ def encode_gts(gts, alleles):
 
 
 def collapse_gts(base_allele, gts, positions, max_allele_length=35):
+    # Type pass to str because join expected str not int(binary)
     collapsed_gts = gts[0].copy().reshape(1, gts.shape[1], gts.shape[2])
     collapsed_gts = collapsed_gts.astype(numpy.dtype(('U', max_allele_length)))
     for i in range(gts.shape[1]):
@@ -233,7 +234,6 @@ def create_variations(variations_1, variations_2, fpath, ignore_fields=[]):
                                         path, 'dtype')
         kwargs['maxshape'] = get_attribute(variations_1, variations_2,
                                            path, 'maxshape')
-        field_var = ['/variations/id', '/variations/qual', '/variations/alt']
         if 'variations' in path and 'chrom' not in path and 'pos' not in path and 'ref' not in path:
             kwargs['maxshape'] = (None, None)
             ncols = 0
@@ -329,10 +329,11 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
                                            for x in alleles2[0]])
                     alleles_merged = merge_alleles(alleles,
                                                    numpy.unique(gts_collapsed))
-                    gts_encoded = encode_gts(gts_collapsed, alleles_merged)
+                    gts_encoded = encode_gts(gts_collapsed,
+                                             alleles_merged.reshape(1, alleles_merged.shape[0]))
                     alleles_merged = alleles_merged.astype(merged['/variations/ref'].dtype)
                     merged['/variations/ref'][i] = alleles_merged[0]
-                    merged['/variations/alt'][i:alleles_merged.shape[0]-1] = alleles_merged[1:]
+                    merged['/variations/alt'][i, :alleles_merged.shape[0]-1] = alleles_merged[1:]
                     merged['/variations/pos'][i] = pos2
                     merged[path][i, :len(snp1.samples), ] = gts_encoded
                     merged[path][i, -len(snp2.samples):, ] = snp2[path][:]
@@ -355,13 +356,14 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
                     try:
                         try:
                             try:
-                                qual = fields_funct[path](snp1[path], snp2[path])
-                                merged[path][i] = qual
+                                merged_values = fields_funct[path](snp1[path],
+                                                                   snp2[path])
+                                merged[path][i] = merged_values
                             except (KeyError, TypeError):
                                 merged[path][i] = snp1[path]
                         except (KeyError, TypeError):
                             merged[path][i] = snp2[path]
-                    except KeyError:
+                    except (KeyError, TypeError):
                         merged[path][i] = missing
                 else:
                     try:
@@ -373,9 +375,11 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
                                 merged[path][i, ] = numpy.append(snp1[path],
                                                                  missing)
                         except (KeyError, TypeError):
-                            merged[path][i, ] = numpy.append(missing, snp2[path])
-                    except KeyError:
-                        merged[path][i, ] = numpy.full(merged[path][i, ].shape, missing,
+                            merged[path][i, ] = numpy.append(missing,
+                                                             snp2[path])
+                    except (KeyError, TypeError):
+                        merged[path][i, ] = numpy.full(merged[path][i, ].shape,
+                                                       missing,
                                                        dtype=merged[path][i, ].dtype)
 
 
@@ -464,6 +468,8 @@ def merge_sorted_variations(variations_1, variations_2,
                     stop = snps_1
                     are_snps1 = True
                     break
+    if are_snps1:
+        yield snp_1, None
     for snp in stop:
         if are_snps1:
             yield snp, None
@@ -483,9 +489,9 @@ def merge_variations(variations1, variations2, merged_fpath, fields_funct={},
                                                              ignore_2_or_more_overlaps)):
         if not ignore_overlaps:
             if prev_snp1 is not None and snp1 is not None and are_overlapping(prev_snp1, snp1):
-                raise ValueError('Overlapping variations in variaitons 1')
+                raise ValueError('Overlapping variations in variations 1')
             if prev_snp2 is not None and snp2 is not None and are_overlapping(prev_snp2, snp2):
-                raise ValueError('Overlapping variations in variaitons 2')
+                raise ValueError('Overlapping variations in variations 2')
         merge_snps(snp1, snp2, i, merged_variations, fields_funct=fields_funct,
                    ignore_fields=ignore_fields)
         if snp1 is not None:

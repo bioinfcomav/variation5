@@ -5,20 +5,21 @@
 # Missing docstring
 # pylint: disable=C0111
 
-import unittest
-from tempfile import NamedTemporaryFile
 import os
-from os.path import join
+import unittest
 import gzip
+import sys
+from tempfile import NamedTemporaryFile
+from subprocess import check_output
+from os.path import join
 
-from test.test_utils import TEST_DATA_DIR, BIN_DIR
+import h5py
+import numpy
+
 from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5)
-from vcf import VCFParser
-import numpy
-import h5py
-import sys
-from subprocess import check_output
+from variation.vcf import VCFParser
+from test.test_utils import TEST_DATA_DIR, BIN_DIR
 
 
 def _create_var_mat_objs_from_h5(h5_fpath):
@@ -60,8 +61,8 @@ class VcfH5Test(unittest.TestCase):
             h5f.put_vars_from_vcf(vcf)
             assert h5f['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(h5f['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
-            assert numpy.all(h5f['/calls/GQ'][0, :] == numpy.array([48, 48, 43],
-                                                                   dtype=numpy.int16))
+            expected = numpy.array([48, 48, 43], dtype=numpy.int16)
+            assert numpy.all(h5f['/calls/GQ'][0, :] == expected)
             vcf_fhand.close()
 
     def test_put_vars_arrays_from_vcf(self):
@@ -71,33 +72,34 @@ class VcfH5Test(unittest.TestCase):
         snps.put_vars_from_vcf(vcf)
         assert snps['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
-        assert numpy.all(snps['/calls/GQ'][0, :] == numpy.array([48, 48, 43],
-                                                                dtype=numpy.int16))
+        expected = numpy.array([48, 48, 43], dtype=numpy.int16)
+        assert numpy.all(snps['/calls/GQ'][0, :] == expected)
         vcf_fhand.close()
 
     def test_create_hdf5_with_chunks(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         out_fhand = NamedTemporaryFile(suffix='.hdf5')
-        os.remove(out_fhand.name)
-        hdf5_2 = VariationsH5(out_fhand.name, 'w')
+        out_fpath = out_fhand.name
+        out_fhand.close()
+        hdf5_2 = VariationsH5(out_fpath, 'w')
         try:
             hdf5_2.put_chunks(hdf5.iterate_chunks())
             assert sorted(hdf5_2['calls'].keys()) == ['DP', 'GQ', 'GT', 'HQ']
             assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
         finally:
-            out_fhand.close()
+            os.remove(out_fpath)
 
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         out_fhand = NamedTemporaryFile(suffix='.hdf5')
-        os.remove(out_fhand.name)
-        hdf5_2 = VariationsH5(out_fhand.name, 'w')
+        out_fpath = out_fhand.name
+        out_fhand.close()
+        hdf5_2 = VariationsH5(out_fpath, 'w')
         try:
             hdf5_2.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
             assert list(hdf5_2['calls'].keys()) == ['GT']
             assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
         finally:
-            out_fhand.close()
-
+            os.remove(out_fpath)
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -105,8 +107,9 @@ VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 def _init_var_mat(klass):
     if klass is VariationsH5:
         fhand = NamedTemporaryFile(suffix='.h5')
-        os.remove(fhand.name)
-        var_mat = klass(fhand.name, mode='w')
+        fpath = fhand.name
+        fhand.close()
+        var_mat = klass(fpath, mode='w')
     else:
         var_mat = klass()
     return var_mat
@@ -121,7 +124,8 @@ class VarMatsTests(unittest.TestCase):
             var_mat = _init_var_mat(klass)
             try:
                 var_mat.put_chunks(in_snps.iterate_chunks())
-                assert numpy.all(in_snps['/calls/GT'][:] == var_mat['/calls/GT'][:])
+                result = var_mat['/calls/GT'][:]
+                assert numpy.all(in_snps['/calls/GT'][:] == result)
                 in_snps.close()
             finally:
                 pass
@@ -131,7 +135,8 @@ class VarMatsTests(unittest.TestCase):
             in_snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
             var_mat = _init_var_mat(klass)
             try:
-                var_mat.put_chunks(in_snps.iterate_chunks(kept_fields=['/calls/GT']))
+                chunks = in_snps.iterate_chunks(kept_fields=['/calls/GT'])
+                var_mat.put_chunks(chunks)
                 assert numpy.any(var_mat.allele_count)
                 in_snps.close()
             finally:
@@ -167,7 +172,8 @@ class VarMatsTests(unittest.TestCase):
 
         for klass in VAR_MAT_CLASSES:
             out_snps = _init_var_mat(klass)
-            out_snps.put_chunks(in_snps.iterate_chunks(kept_fields=['/calls/GT']))
+            chunks = in_snps.iterate_chunks(kept_fields=['/calls/GT'])
+            out_snps.put_chunks(chunks)
             assert '/calls/GQ' not in out_snps.keys()
             assert out_snps['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(out_snps['/calls/GT'][:] == in_snps['/calls/GT'])
@@ -175,14 +181,15 @@ class VarMatsTests(unittest.TestCase):
     def test_iterate_chunks(self):
 
         fpath = join(TEST_DATA_DIR, 'ril.vcf.gz')
-        kwargs = {'max_field_lens': {"alt": 3}, 'ignored_fields': {'/calls/GL'}}
+        kwargs = {'max_field_lens': {"alt": 3},
+                  'ignored_fields': {'/calls/GL'}}
         for var_mats in _create_var_mat_objs_from_vcf(fpath, kwargs=kwargs):
             chunks = list(var_mats.iterate_chunks())
             chunk = chunks[0]
             assert chunk['/calls/GT'].shape == (200, 153, 2)
 
         fpath = join(TEST_DATA_DIR, 'format_def.vcf')
-        #check GT
+        # check GT
         for var_mats in _create_var_mat_objs_from_vcf(fpath, {}):
             chunks = list(var_mats.iterate_chunks())
             chunk = chunks[0]
@@ -215,46 +222,45 @@ class VarMatsTests(unittest.TestCase):
             fhand.close()
 
     def test_vcf_to_hdf5(self):
-        path = join(TEST_DATA_DIR, 'format_def')
-        try:
-            os.remove(path + '.hdf5')
-        except FileNotFoundError:
-            pass
-        fhand = open(join(TEST_DATA_DIR, path + '.vcf'), 'rb')
+        tmp_fhand = NamedTemporaryFile()
+        path = tmp_fhand.name
+        tmp_fhand.close()
+
+        fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
-        h5 = VariationsH5(path + '.hdf5', mode='w')
+        h5 = VariationsH5(path, mode='w')
         h5.put_vars_from_vcf(vcf_parser)
         fhand.close()
-        h5 = h5py.File(path + '.hdf5', 'r')
+        h5 = h5py.File(path, 'r')
         assert h5['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(h5['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
-        assert numpy.all(h5['/calls/GQ'][0, :] == numpy.array([48, 48, 43],
-                                                               dtype=numpy.int16))
+        expected = numpy.array([48, 48, 43], dtype=numpy.int16)
+        assert numpy.all(h5['/calls/GQ'][0, :] == expected)
+        os.remove(path)
 
         # With another file
-        path = join(TEST_DATA_DIR, 'phylome.sample')
-        try:
-            os.remove(path + '.hdf5')
-        except FileNotFoundError:
-            pass
-        fhand = open(join(TEST_DATA_DIR, path + '.vcf'), 'rb')
+        tmp_fhand = NamedTemporaryFile()
+        path = tmp_fhand.name
+        tmp_fhand.close()
+
+        fhand = open(join(TEST_DATA_DIR, 'phylome.sample.vcf'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
-        h5 = VariationsH5(path + '.hdf5', mode='w')
+        h5 = VariationsH5(path, mode='w')
         h5.put_vars_from_vcf(vcf_parser)
         fhand.close()
-        h5 = h5py.File(path + '.hdf5', 'r')
+        h5 = h5py.File(path, 'r')
         assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
         assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
+        os.remove(path)
 
     def test_vcf_to_hdf5_bin(self):
-        path = join(TEST_DATA_DIR, 'phylome.sample')
-        in_fpath = path + '.vcf'
-        out_fpath = path + '.hdf5'
-        try:
-            os.remove(out_fpath)
-        except FileNotFoundError:
-            pass
+        tmp_fhand = NamedTemporaryFile()
+        out_fpath = tmp_fhand.name
+        tmp_fhand.close()
+
+        in_fpath = join(TEST_DATA_DIR, 'phylome.sample.vcf')
+
         cmd = [sys.executable, join(BIN_DIR, 'vcf_to_hdf5.py'), in_fpath, '-o',
                out_fpath, '-i', '-a', '4']
         check_output(cmd)
@@ -262,14 +268,10 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
         assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
+        os.remove(out_fpath)
 
         # Input compressed with gzip
-        in_fpath = path + '.vcf.gz'
-        out_fpath = path + '.hdf5'
-        try:
-            os.remove(out_fpath)
-        except FileNotFoundError:
-            pass
+        in_fpath = join(TEST_DATA_DIR, 'phylome.sample.vcf.gz')
         cmd = [sys.executable, join(BIN_DIR, 'vcf_to_hdf5.py'), in_fpath, '-o',
                out_fpath, '-i', '-a', '4']
         check_output(cmd)
@@ -296,7 +298,9 @@ class VcfTest(unittest.TestCase):
         metadata2 = snps2.metadata
         assert '/calls/HQ' in metadata.keys()
         assert '/variations/qual' not in metadata2.keys()
+        vcf_fhand.close()
+        vcf_fhand2.close()
 
 if __name__ == "__main__":
-#     import sys; sys.argv = ['', 'VcfTest.test_vcf_detect_fields']
+    # import sys; sys.argv = ['', 'VcfTest.test_vcf_detect_fields']
     unittest.main()

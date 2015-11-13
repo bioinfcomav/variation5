@@ -1,11 +1,7 @@
 #!/usr/bin/env python
-import sys
 import argparse
-from argparse import ArgumentError
-from variation.vcf import VCFParser, read_gzip_file
 from variation.variations.vars_matrices import VariationsH5
-from variation import PRE_READ_MAX_SIZE
-from genotypes_matrix import merge_variations
+from variation.genotypes_matrix import merge_variations
 from numpy import mean
 
 

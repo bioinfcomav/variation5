@@ -36,9 +36,10 @@ from variation.variations.stats import (_remove_nans,
                                         calc_allele_obs_distrib_2D,
                                         calc_allele_obs_gq_distrib_2D,
                                         _is_hom_ref, _is_hom_alt,
-                                        _InbreedingCoeficientCalculator,
                                         calc_inbreeding_coeficient_distrib,
-    HWECalcualtor, PositionalStatsCalculator, _ExpectedHetCalculator)
+                                        HWECalcualtor,
+                                        PositionalStatsCalculator,
+                                        _ExpectedHetCalculator)
 
 from variation.matrix.methods import calc_min_max
 from test.test_utils import BIN_DIR
@@ -251,8 +252,8 @@ class VarMatricesStatsTest(unittest.TestCase):
     def test_calc_snv_density_distribution(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         dist_snv_density = calc_snv_density_distribution(hdf5, 100000)
-        assert dist_snv_density[3] == 6
-        assert dist_snv_density.shape[0] == 96
+        assert dist_snv_density[3] == 12
+        assert dist_snv_density.shape[0] == 95
 
     def test_calc_genotypes_stats(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -451,5 +452,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snp_density']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snv_density_distribution']
     unittest.main()

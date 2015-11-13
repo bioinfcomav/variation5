@@ -13,13 +13,13 @@ import gzip
 from timeit import timeit
 
 from test.test_utils import TEST_DATA_DIR
-from variation.vars_matrices.vars_matrices import VariationsH5, VariationsArrays
-from variation.vars_matrices.filters import (mafs_filter_fact,
-                                             missing_rate_filter_fact)
+from variation.variations.vars_matrices import VariationsH5, VariationsArrays
+from variation.variations.filters import (mafs_filter_fact,
+                                          missing_rate_filter_fact)
 
-from variation.vars_matrices.stats import (MafCalculator,
-                                           MissingGTCalculator,
-    calc_stat_by_chunk)
+from variation.variations.stats import (_MafCalculator,
+                                        _MissingGTCalculator,
+                                        calc_stat_by_chunk)
 from variation.matrix.stats import histogram, _low_mem_histogram
 
 from variation.vcf import VCFParser
@@ -45,10 +45,11 @@ from variation.matrix.methods import calc_min_max
 def from_vcf_to_hdf5():
     fpath = join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz')
     fhand = gzip.open(fpath, 'rb')
-    kwargs = {'max_field_lens': {"alt":4}}
+    kwargs = {'max_field_lens': {"alt": 4}}
     vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=10000,
                            **kwargs)
-    h5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'), mode='w')
+    h5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'),
+                      mode='w')
     h5.put_vars_from_vcf(vcf_parser)
 
 
@@ -65,6 +66,7 @@ def filter_mafs_from_hdf5():
     h5_2 = VariationsH5(out_fpath.name, mode='w')
     h5_2.put_chunks(filtered_chunks)
     h5_2.close()
+
 
 def filter_missing_rates_from_hdf5():
     fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
@@ -84,20 +86,21 @@ def filter_missing_rates_from_hdf5():
 def stats_missing_rate_from_hdf5():
     fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
     h5 = VariationsH5(fpath, mode='r')
-    calc_stat_by_chunk(h5, MissingGTCalculator())
+    calc_stat_by_chunk(h5, _MissingGTCalculator())
+
 
 def stats_missing_rate_from_hdf5_memory():
     fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
     var_mat = VariationsH5(fpath, mode='r')
     array = VariationsArrays()
     array.put_chunks(var_mat.iterate_chunks(kept_fields=['/calls/GT']))
-    calc_stat_by_chunk(array, MissingGTCalculator())
+    calc_stat_by_chunk(array, _MissingGTCalculator())
 
 
 def stats_mafs_from_hdf5():
     fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
     h5 = VariationsH5(fpath, mode='r')
-    calc_stat_by_chunk(h5, MafCalculator())
+    calc_stat_by_chunk(h5, _MafCalculator())
 
 
 def histograma_from_hdf5():

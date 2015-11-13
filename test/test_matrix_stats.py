@@ -6,22 +6,20 @@
 # pylint: disable=C0111
 
 import unittest
-import inspect
 from tempfile import NamedTemporaryFile
-from os.path import dirname, abspath, join
+from os.path import join
+
 import numpy
 
-
-TEST_DATA_DIR = abspath(join(dirname(inspect.getfile(inspect.currentframe())),
-                        'test_data'))
 from variation.variations.vars_matrices import (VariationsH5,
                                                 select_dset_from_chunks,
                                                 VariationsArrays)
-
+from variation.matrix.methods import extend_matrix
 from variation.matrix.stats import (row_value_counter_fact,
                                     counts_by_row)
 from variation.iterutils import first
 from variation.matrix.stats import histogram
+from test.test_utils import TEST_DATA_DIR
 
 
 class RowValueCounterTest(unittest.TestCase):
@@ -33,20 +31,17 @@ class RowValueCounterTest(unittest.TestCase):
         missing_counter = row_value_counter_fact(value=-1, ratio=True)
         assert numpy.allclose(missing_counter(mat), [0., 0.5, 0.5, 1.])
 
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        chunks = list(hdf5.iterate_chunks())
+        gt_chunk = first(select_dset_from_chunks(chunks, '/calls/GT'))
 
-        with NamedTemporaryFile(suffix='.hdf5') as hdf5_fhand:
+        homo_counter = row_value_counter_fact(value=2)
+        assert numpy.all(homo_counter(gt_chunk) == [0, 0, 4, 0, 1])
 
-            hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
-            chunks = list(hdf5.iterate_chunks())
-            gt_chunk = first(select_dset_from_chunks(chunks, '/calls/GT'))
-
-            homo_counter = row_value_counter_fact(value=2)
-            assert numpy.all(homo_counter(gt_chunk) == [0, 0, 4, 0, 1])
-
-            missing_counter = row_value_counter_fact(value=2, ratio=True)
-            expected = [0., 0, 0.66666, 0., 0.166666]
-            assert numpy.allclose(missing_counter(gt_chunk), expected)
-            hdf5.close()
+        missing_counter = row_value_counter_fact(value=2, ratio=True)
+        expected = [0., 0, 0.66666, 0., 0.166666]
+        assert numpy.allclose(missing_counter(gt_chunk), expected)
+        hdf5.close()
 
     def test_count_alleles(self):
 
@@ -63,24 +58,23 @@ class RowValueCounterTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         chunks = hdf5.iterate_chunks(kept_fields=['/calls/GT'])
         chunks = (chunk['/calls/GT'] for chunk in chunks)
-        from variation.matrix.methods import extend_matrix
         matrix = first(chunks)
         for _ in range(20):
             extend_matrix(matrix, chunks)
 
         counts = counts_by_row(matrix, missing_value=-1)
 
-    def xtest_low_mem_histogram(self):
+    def test_low_mem_histogram(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
         genotypes = chunk['/calls/GT']
         array = VariationsArrays()
         array.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
         gt_array = array['/calls/GT']
-        assert histogram(gt_array, 10, True) == histogram(genotypes,10, True)
-        assert histogram(gt_array, 10, True) == histogram(genotypes,10, False)
+        assert histogram(gt_array, 10, True) == histogram(genotypes, 10, True)
+        assert histogram(gt_array, 10, True) == histogram(genotypes, 10, True)
 
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'RowValueCounterTest.test_count_alleles']
+    # import sys;sys.argv = ['', 'RowValueCounterTest.test_count_alleles']
     unittest.main()

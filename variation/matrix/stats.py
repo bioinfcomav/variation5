@@ -87,21 +87,22 @@ def counts_by_row(mat, missing_value=None):
     return allele_counts
 
 
-def plot_hist(hist, bins):
+def plot_hist(hist, bins, print_plot=False):
     width = 0.7 * (bins[1] - bins[0])
     center = (bins[:-1] + bins[1:]) / 2
     plt.bar(center, hist, align='center', width=width)
-    plt.show()
+    if print_plot:
+        plt.show()
 
 
-def histogram(matrix, nbins, low_mem=False):
+def histogram(matrix, nbins, low_mem=False, print_plot=False):
     if low_mem:
         min_, max_ = calc_min_max(matrix)
         hist, bins = _low_mem_histogram(matrix, nbins, min_, max_)
-        plot_hist(hist, bins)
+        plot_hist(hist, bins, print_plot=print_plot)
     else:
         hist, bins = numpy.histogram(matrix, nbins)
-        plot_hist(hist, bins)
+        plot_hist(hist, bins, print_plot=print_plot)
 
 
 def _low_mem_histogram(matrix, nbins, min_=None,  max_=None):

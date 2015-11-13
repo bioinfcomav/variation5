@@ -112,7 +112,7 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
                     z_axes_size = vcf.max_field_lens['CALLS'][field]
                     if not z_axes_size:
                         msg = 'This field is empty in the preread SNPs: '
-                        #msg += field.decode("utf-8")
+                        # msg += field.decode("utf-8")
                         msg += 'CALLS/' + field.decode("utf-8")
                         warnings.warn(msg, RuntimeWarning)
                         continue
@@ -430,7 +430,7 @@ def put_vars_from_csv(csv, hdf5, vars_in_chunk):
                     break
                 if first_field:
                     log['variations_processed'] += 1
-                #snp_n es el indice que se moverá en cada array
+                # snp_n es el indice que se moverá en cada array
                 snp_n = snp_i + chunk_i * vars_in_chunk
                 if grp == 'VARIATIONS':
                     item = snp[field]
@@ -465,7 +465,7 @@ def put_vars_from_csv(csv, hdf5, vars_in_chunk):
                     try:
                         gts = snp['gts']
                     except TypeError:
-                    # SNP is None
+                        # SNP is None
                         break
                     if gts is not None:
 
@@ -507,7 +507,7 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
     snps = vcf.variations
     log = {'data_no_fit': {},
            'variations_processed': 0,
-           'alt_max_detected' : 0,
+           'alt_max_detected': 0,
            'num_alt_item_descarted': 0}
 
     fmt_matrices = _prepate_call_datasets(vcf, hdf5, vars_in_chunk)
@@ -564,7 +564,7 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                     break
                 if first_field:
                     log['variations_processed'] += 1
-                #snp_n es el indice que se moverá en cada array
+                # snp_n es el indice que se moverá en cada array
                 snp_n = snp_i + chunk_i * vars_in_chunk
                 if grp == 'FILTER':
                     data = snp[6]
@@ -593,7 +593,7 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                 if field not in log['data_no_fit']:
                                     log['data_no_fit'][field] = 0
                                 log['data_no_fit'][field] += 1
-                    #TODO: FIXME=1
+                    # TODO: FIXME=1
                 elif grp == 'VARIATIONS':
                     if field == 'chrom':
                         item = snp[0]
@@ -605,7 +605,6 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                         item = snp[3]
                     elif field == 'alt':
                         item = snp[4]
-                        #_expand_list_to_size(item, size[1], b'')
                     elif field == 'qual':
                         item = snp[5]
                     if item is not None:
@@ -659,7 +658,7 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                 call_sample_data = [missing_val if item is None
                                                     else item
                                                     for item in call_sample_data]
-                        #In case of GL and GT [[[1,2,3],[1,2,3],[1,2,3], none]]
+                        # In case of GL and GT [[[1,2,3],[1,2,3],[1,2,3], none]]
                         elif len(size) > 2:
                             call_sample_data = [[missing_val]*size[-1]
                                                 if item is None else item

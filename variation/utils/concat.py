@@ -7,6 +7,7 @@ import h5py
 
 from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS
 
+
 def _first_item(iterable):
     for item in iterable:
         return item
@@ -14,7 +15,7 @@ def _first_item(iterable):
 
 
 def concat_chunks_into_dset(matrices, group, dset_name,
-                                 rows_in_chunk=SNPS_PER_CHUNK):
+                            rows_in_chunk=SNPS_PER_CHUNK):
     matrices = iter(matrices)
     fst_mat = _first_item(matrices)
     if matrices is None:

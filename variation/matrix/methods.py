@@ -5,7 +5,7 @@ import math
 import h5py
 import numpy
 
-from iterutils import group_items, first
+from variation.iterutils import group_items, first
 from variation import SNPS_PER_CHUNK, MISSING_VALUES
 
 # Missing docstring

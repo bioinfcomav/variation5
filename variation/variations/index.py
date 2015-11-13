@@ -25,16 +25,16 @@ class PosIndex():
             array_chrom = snps['/variations/chrom'][start:stop]
             first_chrom = array_chrom[0]
             last_chrom = array_chrom[-1]
-            #if the chunk has differents chroms
+            # if the chunk has differents chroms
             if first_chrom != last_chrom:
                 chroms = set(array_chrom)
-                #create and fill the arrays per chrom
+                # create and fill the arrays per chrom
                 while len(chroms) > 0:
                     chrom = chroms.pop()
                     is_chrom = array_chrom == chrom
                     chrom_positions = array('l')
                     chrom_positions.extend(snps['/variations/pos'][start:stop][is_chrom])
-                    #if chrom is in the dictionary and is not the first chunk
+                    # if chrom is in the dictionary and is not the first chunk
                     try:
                         idx[chrom].extend(chrom_positions)
                     except KeyError:
@@ -55,8 +55,10 @@ class PosIndex():
             hi = len(chrom_positions)
         while lo < hi:
             mid = (lo+hi)//2
-            if chrom_positions[mid] < pos: lo = mid+1
-            else: hi = mid
+            if chrom_positions[mid] < pos:
+                lo = mid+1
+            else:
+                hi = mid
         return lo
 
 

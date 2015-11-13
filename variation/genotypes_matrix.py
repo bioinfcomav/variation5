@@ -9,7 +9,7 @@ from itertools import chain
 from variation import MISSING_VALUES, DEF_DSET_PARAMS
 from variation.variations.filters import filter_gt_no_data
 import numpy
-from variations.vars_matrices import VariationsH5
+from variation.variations.vars_matrices import VariationsH5
 from variation.variations.vars_matrices import _create_matrix
 
 

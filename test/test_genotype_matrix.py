@@ -5,30 +5,31 @@
 # Missing docstring
 # pylint: disable=C0111
 
+import os
 import unittest
+import sys
 from os.path import join
-from test.test_utils import TEST_DATA_DIR, BIN_DIR
+from subprocess import check_output, CalledProcessError
+from tempfile import NamedTemporaryFile
+
+import numpy
+
 from variation.genotypes_matrix import (GenotypesMatrixParser,
                                         IUPAC_CODING, STANDARD_GT,
                                         change_gts_chain, decode_gts,
                                         collapse_gts, encode_gts,
                                         merge_sorted_variations, merge_snps,
-    merge_alleles, merge_variations)
-import os
-from variations.vars_matrices import VariationsH5, put_vars_from_csv
-import numpy
+                                        merge_alleles, merge_variations)
+from variation.variations.vars_matrices import VariationsH5, put_vars_from_csv
 from variation.genotypes_matrix import count_compatible_snps_in_chains
-from variation.vcf import VCFParser
-from variation.variations.vars_matrices import _put_vars_from_vcf
 from variation.variations.stats import _remove_nans
-import sys
-from subprocess import check_output
+from test.test_utils import TEST_DATA_DIR, BIN_DIR
 
 
 class GtMatrixTest(unittest.TestCase):
     def test_gt_matrix_parser(self):
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt')
-        parser = GenotypesMatrixParser(open(fpath), IUPAC_CODING,
+        fhand = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt'))
+        parser = GenotypesMatrixParser(fhand, IUPAC_CODING,
                                        2, sep='\t',
                                        snp_fieldnames=['chrom', 'pos'])
         expected = [{'gts': [[1, 1], [0, 0], [-1, -1]], 'alt': ['G'],
@@ -40,8 +41,10 @@ class GtMatrixTest(unittest.TestCase):
         for x, y in zip(parser, expected):
             for key in x.keys():
                 assert x[key] == y[key]
-        fpath = join(TEST_DATA_DIR, 'csv', 'standard_ex.tsv')
-        parser = GenotypesMatrixParser(open(fpath), STANDARD_GT,
+        fhand.close()
+
+        fhand = open(join(TEST_DATA_DIR, 'csv', 'standard_ex.tsv'))
+        parser = GenotypesMatrixParser(fhand, STANDARD_GT,
                                        2, sep='\t',
                                        snp_fieldnames=['SNP_ID'])
         expected = [{'gts': [[1, 1], [1, 1], [1, 1], [1, 2], [0, 0]],
@@ -56,14 +59,15 @@ class GtMatrixTest(unittest.TestCase):
         for x, y in zip(parser, expected):
             for key in x.keys():
                 assert x[key] == y[key]
+        fhand.close()
 
         # With the SNP data in a different file
-        fpath = join(TEST_DATA_DIR, 'csv', 'standard_ex.tsv')
-        meta_fpath = join(TEST_DATA_DIR, 'csv', 'meta.tsv')
-        parser = GenotypesMatrixParser(open(fpath), STANDARD_GT,
+        fhand = open(join(TEST_DATA_DIR, 'csv', 'standard_ex.tsv'))
+        meta_fhand = open(join(TEST_DATA_DIR, 'csv', 'meta.tsv'))
+        parser = GenotypesMatrixParser(fhand, STANDARD_GT,
                                        2, sep='\t', id_fieldnames=['SNP_ID',
                                                                    'SNP_ID'],
-                                       metadata_fhand=open(meta_fpath),
+                                       metadata_fhand=meta_fhand,
                                        snp_fieldnames=['chrom', 'pos',
                                                        'SNP_ID', 'ref'])
         expected = [{'gts': [[0, 0], [0, 0], [0, 0], [0, 1], [2, 2]],
@@ -78,40 +82,45 @@ class GtMatrixTest(unittest.TestCase):
         for x, y in zip(parser, expected):
             for key in x.keys():
                 assert x[key] == y[key]
+        fhand.close()
+        meta_fhand.close()
 
     def test_put_vars_from_csv(self):
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt')
-        parser = GenotypesMatrixParser(open(fpath), IUPAC_CODING,
+        fhand_ex = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt'))
+        parser = GenotypesMatrixParser(fhand_ex, IUPAC_CODING,
                                        2, sep='\t',
                                        snp_fieldnames=['chrom', 'pos'])
-        out_fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
-        try:
-            os.remove(out_fpath)
-        except FileNotFoundError:
-            pass
-        h5 = VariationsH5(out_fpath, mode='w')
-        put_vars_from_csv(parser, h5, 100)
-        exp = [b'SL2.40ch02',b'SL2.40ch02', b'SL2.40ch02']
-        assert list(h5['/variations/chrom'][:]) == exp
-        assert list(h5['/variations/ref'][:]) == [b'T', b'C', b'T']
-        assert list(h5['/variations/pos'][:]) == [331954, 681961,
-                                                  1511764]
-        exp = numpy.array([[[1, 1], [0, 0], [-1, -1]],
-                           [[0, 0], [0, 0], [-1, -1]],
-                           [[0, 0], [0, 0], [1, 0]]])
-        assert numpy.all(h5['/calls/GT'][:] == exp)
 
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex2.txt')
-        parser = GenotypesMatrixParser(open(fpath), IUPAC_CODING,
+        with NamedTemporaryFile(suffix='.h5') as fhand:
+            os.remove(fhand.name)
+            h5 = VariationsH5(fhand.name, mode='w')
+            put_vars_from_csv(parser, h5, 100)
+            exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
+            assert list(h5['/variations/chrom'][:]) == exp
+            assert list(h5['/variations/ref'][:]) == [b'T', b'C', b'T']
+            assert list(h5['/variations/pos'][:]) == [331954, 681961,
+                                                      1511764]
+            exp = numpy.array([[[1, 1], [0, 0], [-1, -1]],
+                               [[0, 0], [0, 0], [-1, -1]],
+                               [[0, 0], [0, 0], [1, 0]]])
+            assert numpy.all(h5['/calls/GT'][:] == exp)
+
+        if os.path.exists(fhand.name):
+            os.remove(fhand.name)
+        fhand_ex.close()
+        fhand_ex2 = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex2.txt'))
+        parser = GenotypesMatrixParser(fhand_ex2, IUPAC_CODING,
                                        2, sep='\t',
                                        snp_fieldnames=['chrom', 'pos'])
-        out_fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex2.h5')
-        try:
-            os.remove(out_fpath)
-        except FileNotFoundError:
-            pass
-        h5 = VariationsH5(out_fpath, mode='w')
-        put_vars_from_csv(parser, h5, 100)
+
+        with NamedTemporaryFile(suffix='.h5') as fhand:
+            os.remove(fhand.name)
+            h5 = VariationsH5(fhand.name, mode='w')
+            put_vars_from_csv(parser, h5, 100)
+
+        if os.path.exists(fhand.name):
+            os.remove(fhand.name)
+        fhand_ex2.close()
 
     def test_count_compatible_snsp_in_chains(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
@@ -189,7 +198,7 @@ class GtMatrixTest(unittest.TestCase):
         assert numpy.all(merge_alleles(alleles1, alleles2) == exp)
 
     def test_merge_snps(self):
-        class Variation(dict):
+        class FakeVariation(dict):
             def set_samples(self, samples):
                 self.samples = samples
 
@@ -199,12 +208,12 @@ class GtMatrixTest(unittest.TestCase):
                   '/variations/alt': numpy.array([['', '', '']], dtype='S10'),
                   '/variations/qual': numpy.array([[-1, ]]),
                   '/variations/info/AF': numpy.array([[-1, ]]),
-                  '/variations/info/DP': numpy.array([[-1,-1]]),
+                  '/variations/info/DP': numpy.array([[-1, -1]]),
                   '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
                                              [-1, -1], [-1, -1]]]),
                   '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
         snp1 = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
-                '/variations/pos': numpy.array([[10]]),
+                '/variations/pos': numpy.array([10]),
                 '/variations/ref': numpy.array([['AT']], dtype='S10'),
                 '/variations/alt': numpy.array([['TT', 'G']], dtype='S10'),
                 '/variations/qual': numpy.array([[120]]),
@@ -212,23 +221,24 @@ class GtMatrixTest(unittest.TestCase):
                 '/variations/info/DP': numpy.array([[200]]),
                 '/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 2]]]),
                 '/calls/DP': numpy.array([[20, 30, 10]])}
-        snp1 = Variation(snp1)
+        snp1 = FakeVariation(snp1)
         snp1.set_samples(['s1', 's2', 's3'])
         snp2 = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
-                '/variations/pos': numpy.array([[11]]),
+                '/variations/pos': numpy.array([11]),
                 '/variations/ref': numpy.array([['A']], dtype='S10'),
                 '/variations/alt': numpy.array([['T']], dtype='S10'),
                 '/variations/info/AF': numpy.array([[17]]),
                 '/variations/info/DP': numpy.array([[210]]),
                 '/calls/GT': numpy.array([[[1, 1], [0, 1]]])}
-        snp2 = Variation(snp2)
+        snp2 = FakeVariation(snp2)
         snp2.set_samples(['s4', 's5'])
         merge_snps(snp1, snp2, 0, merged,
                    fields_funct={'/variations/info/AF': min})
         expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
                     '/variations/pos': numpy.array([[10]]),
                     '/variations/ref': numpy.array([['AT']], dtype='S10'),
-                    '/variations/alt': numpy.array([['TT', 'G', 'AA']], dtype='S10'),
+                    '/variations/alt': numpy.array([['TT', 'G', 'AA']],
+                                                   dtype='S10'),
                     '/variations/qual': numpy.array([[120]]),
                     '/variations/info/AF': numpy.array([[15]]),
                     '/variations/info/DP': numpy.array([[200, 210]]),
@@ -244,7 +254,7 @@ class GtMatrixTest(unittest.TestCase):
                   '/variations/alt': numpy.array([['', '']], dtype='S10'),
                   '/variations/qual': numpy.array([[-1, ]]),
                   '/variations/info/AF': numpy.array([[-1, ]]),
-                  '/variations/info/DP': numpy.array([[-1,-1]]),
+                  '/variations/info/DP': numpy.array([[-1, -1]]),
                   '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
                                              [-1, -1], [-1, -1]]]),
                   '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
@@ -288,61 +298,74 @@ class GtMatrixTest(unittest.TestCase):
             assert numpy.all(merged[key] == expected[key])
 
     def test_merge_variations(self):
-        merged_fpath = join(TEST_DATA_DIR, 'csv', 'merged.h5')
+        merged_fhand = NamedTemporaryFile()
+        merged_fpath = merged_fhand.name
+        merged_fhand.close()
+
         format_array_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
                                             'format.h5'), "r")
         format_h5 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
-        try:
-            os.remove(merged_fpath)
-        except FileNotFoundError:
-            pass
         try:
             merge_variations(format_h5, format_array_h5, merged_fpath)
             self.fail()
         except ValueError:
             pass
         os.remove(merged_fpath)
+
         merged_variations = merge_variations(format_h5, format_array_h5,
-                                             merged_fpath, ignore_overlaps=True,
+                                             merged_fpath,
+                                             ignore_overlaps=True,
                                              ignore_2_or_more_overlaps=True)
+
         expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
                                         'expected_merged.h5'), 'r')
-        for key in merged_variations.keys():
-            if 'float' in str(merged_variations[key][:].dtype):
-                assert numpy.all(_remove_nans(expected_h5[key][:]) ==
-                                 _remove_nans(merged_variations[key][:]))
-            else:
-                assert numpy.all(expected_h5[key][:] == merged_variations[key]
-                                 [:])
+        # Dirty hack to remove tmp_path
+        try:
+            for key in merged_variations.keys():
+                if 'float' in str(merged_variations[key][:].dtype):
+                    assert numpy.all(_remove_nans(expected_h5[key][:]) ==
+                                     _remove_nans(merged_variations[key][:]))
+                else:
+                    result = merged_variations[key][:]
+                    assert numpy.all(expected_h5[key][:] == result)
+            os.remove(merged_fpath)
+        except Exception:
+            os.remove(merged_fpath)
 
-        os.remove(merged_fpath)
         # Change the order
         merged_variations = merge_variations(format_array_h5, format_h5,
-                                             merged_fpath, ignore_overlaps=True,
+                                             merged_fpath,
+                                             ignore_overlaps=True,
                                              ignore_2_or_more_overlaps=True)
         expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
                                         'expected_merged2.h5'), 'r')
-        for key in merged_variations.keys():
-            if 'float' in str(merged_variations[key][:].dtype):
-                assert numpy.all(_remove_nans(expected_h5[key][:]) ==
-                                 _remove_nans(merged_variations[key][:]))
-            else:
-                assert numpy.all(expected_h5[key][:] == merged_variations[key]
-                                 [:])
+        try:
+            for key in merged_variations.keys():
+                if 'float' in str(merged_variations[key][:].dtype):
+                    assert numpy.all(_remove_nans(expected_h5[key][:]) ==
+                                     _remove_nans(merged_variations[key][:]))
+                else:
+                    result = merged_variations[key][:]
+                    assert numpy.all(expected_h5[key][:] == result)
+            os.remove(merged_fpath)
+        except Exception:
+            os.remove(merged_fpath)
 
     def test_merge_hdf5_bin(self):
-        merged_fpath = join(TEST_DATA_DIR, 'csv', 'merged2.h5')
+        merged_fhand = NamedTemporaryFile()
+        merged_fpath = merged_fhand.name
+        merged_fhand.close()
         h5_1 = join(TEST_DATA_DIR, 'csv', 'format.h5')
         h5_2 = join(TEST_DATA_DIR, 'format_def.h5')
-        try:
-            os.remove(merged_fpath)
-        except FileNotFoundError:
-            pass
         bin_ = join(BIN_DIR, 'merge_hdf5.py')
-        cmd = [sys.executable, bin_, h5_1, h5_2, '-o', merged_fpath,
-               '-i', '-di']
-        check_output(cmd)
+        cmd = [sys.executable, bin_, h5_1, h5_2, '-o', merged_fpath, '-i',
+               '-di']
+        try:
+            check_output(cmd)
+            os.remove(merged_fpath)
+        except CalledProcessError:
+            os.remove(merged_fpath)
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'GtMatrixTest.test_merge_hdf5_bin']
+    # import sys;sys.argv = ['', 'GtMatrixTest.test_put_vars_from_csv']
     unittest.main()

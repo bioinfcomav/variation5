@@ -406,7 +406,6 @@ def _called_gt_counts(gts):
 
 def calc_snp_density(variations, window):
     dens = []
-    index_right = 0
     dic_index = PosIndex(variations)
     n_snps = variations['/variations/chrom'].shape
     for i in range(n_snps[0]):
@@ -414,10 +413,10 @@ def calc_snp_density(variations, window):
         pos = variations['/variations/pos'][i]
         pos_right = window + pos
         pos_left = pos - window
-        if pos_right > variations['/variations/pos'][0]:
-            index_right = dic_index.index_pos(chrom, pos_right)
+        index_right = dic_index.index_pos(chrom, pos_right)
         index_left = dic_index.index_pos(chrom, pos_left)
-        dens.append(index_right - index_left + 1)
+        density = index_right - index_left
+        dens.append(index_right - index_left)
     return numpy.array(dens)
 
 

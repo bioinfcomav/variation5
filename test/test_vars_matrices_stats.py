@@ -124,6 +124,14 @@ class VarMatricesStatsTest(unittest.TestCase):
         density_h5 = calc_snp_density(hdf5, 1000)
         density_array = calc_snp_density(snps, 1000)
         assert numpy.all(density_array == density_h5)
+        var = {'/variations/chrom': numpy.array(['sh', 'sh', 'sh', 'sh', 'sh',
+                                                 'sh', 'sh', 'sh', 'sh', 'sh',
+                                                 'sh', 'sh', 'sh', 'sh']),
+               '/variations/pos': numpy.array([1, 2, 3, 4, 5, 6, 7, 25, 34, 44,
+                                              80, 200, 300, 302])}
+        dens_var = calc_snp_density(var, 10)
+        expected = numpy.array([7, 7, 7, 7, 7, 7, 7, 2, 2, 2, 1, 1, 2, 2])
+        assert numpy.all(dens_var == expected)
 
     def test_calc_depth_distribution(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -175,7 +183,7 @@ class VarMatricesStatsTest(unittest.TestCase):
                                                  [0, 0]]])}
         calc_expected_het = _ExpectedHetCalculator(max_num_allele=2)
         exp_het = calc_expected_het(variations)
-        assert exp_het[0] - 0.42 < 0.001 
+        assert exp_het[0] - 0.42 < 0.001
 
     def test_calc_inbreeding_coeficient(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -376,7 +384,7 @@ class VarMatricesStatsTest(unittest.TestCase):
         assert numpy.all(is_hom_alt == numpy.array([False, False, False, False,
                                                     False, False, False, False,
                                                     True, False]))
-    
+
     def test_calculate_hwe(self):
         variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
                                                  [0, 0], [0, 1], [0, 0],
@@ -393,7 +401,7 @@ class VarMatricesStatsTest(unittest.TestCase):
         for res, exp in zip(result, expected_result):
             for x, y in zip(res, exp):
                 assert abs(x - y) < 0.000000001
-    
+
     def test_to_positional_stats(self):
         chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3', 'chr4'])
         pos = numpy.array([10, 5, 20, 30, 40, 50])
@@ -404,13 +412,13 @@ class VarMatricesStatsTest(unittest.TestCase):
                     '5 2.0', '20 3.0', 'variableStep chrom=chr3', '30 4.0', '40 5.0']
         for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
             assert line.strip() == exp
-        
+
         bg_lines = ['track type=bedGraph name="track1" description="description"',
                     'chr1 10 11 1.0', 'chr2 5 6 2.0', 'chr2 20 21 3.0',
                     'chr3 30 31 4.0', 'chr3 40 41 5.0']
         for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
             assert line.strip() == exp
-        
+
         # Taking windows
         chrom = numpy.repeat('chr1', 5)
         pos = numpy.array([10, 20, 30, 40, 50])
@@ -422,19 +430,19 @@ class VarMatricesStatsTest(unittest.TestCase):
                     str(6/25), str(9/25)]
         for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
             assert line.strip() == exp
-        
+
         bg_lines = ['track type=bedGraph name="track1" description="description"',
                     'chr1 10 35 {}'.format(6/25), 'chr1 35 60 {}'.format(9/25)]
         for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
             assert line.strip() == exp
-        
+
         # Pre-calculating the windows
         pos_stats = pos_stats.calc_window_stat()
         bg_lines = ['track type=bedGraph name="track1" description="description"',
                     'chr1 10 35 {}'.format(6/25), 'chr1 35 60 {}'.format(9/25)]
         for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
             assert line.strip() == exp
-        
+
     def test_calc_hdf5_stats_bin(self):
         bin_ = join(BIN_DIR, 'calculate_h5_stats.py')
         cmd = [sys.executable, bin_, join(TEST_DATA_DIR, 'ril.hdf5'), '-o',
@@ -443,5 +451,5 @@ class VarMatricesStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_gq_distribution']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snp_density']
     unittest.main()

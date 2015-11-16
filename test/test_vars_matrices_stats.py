@@ -153,7 +153,8 @@ class VarMatricesStatsTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks())
-        result = calc_gq_cumulative_distribution_per_sample(hdf5, by_chunk=True,
+        result = calc_gq_cumulative_distribution_per_sample(hdf5,
+                                                            by_chunk=True,
                                                             max_value=161.0)
         distribution, cum_dist = result
         assert distribution[0, 25] == 15
@@ -163,7 +164,8 @@ class VarMatricesStatsTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), mode='r')
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks())
-        result = calc_hq_cumulative_distribution_per_sample(hdf5, by_chunk=True)
+        result = calc_hq_cumulative_distribution_per_sample(hdf5,
+                                                            by_chunk=True)
         distribution, cum_dist = result
         assert distribution[0, -1] == 2
         assert cum_dist[0, -1] == 2
@@ -334,8 +336,9 @@ class VarMatricesStatsTest(unittest.TestCase):
     def test_calculate_maf_depth_dist(self):
         variations = {'/calls/AO': numpy.array([[[0, 0]], [[5, 0]], [[-1, -1]],
                                                 [[0, -1]], [[0, 0]], [[0, 10]],
-                                                [[20, 0]], [[25, 0]], [[20, 20]],
-                                                [[0, 0]], [[20, 0]], [[-1, -1]]]),
+                                                [[20, 0]], [[25, 0]],
+                                                [[20, 20]], [[0, 0]],
+                                                [[20, 0]], [[-1, -1]]]),
                       '/calls/RO': numpy.array([[10, 5, 15, 7, 10,
                                                 0, 0, 25, 20, 10, 0, -1]])}
         result = calc_maf_depth_distrib(variations, by_chunk=False)
@@ -408,8 +411,9 @@ class VarMatricesStatsTest(unittest.TestCase):
         stat = numpy.array([1, 2, 3, 4, 5, numpy.nan])
         pos_stats = PositionalStatsCalculator(chrom, pos, stat)
         wiglines = ['track type=wiggle_0 name="track1" description="description"',
-                    'variableStep chrom=chr1', '10 1.0', 'variableStep chrom=chr2',
-                    '5 2.0', '20 3.0', 'variableStep chrom=chr3', '30 4.0', '40 5.0']
+                    'variableStep chrom=chr1', '10 1.0',
+                    'variableStep chrom=chr2', '5 2.0', '20 3.0',
+                    'variableStep chrom=chr3', '30 4.0', '40 5.0']
         for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
             assert line.strip() == exp
 
@@ -451,5 +455,5 @@ class VarMatricesStatsTest(unittest.TestCase):
             check_output(cmd)
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snv_density_distribution']
+    # import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snv_density_distribution']
     unittest.main()

@@ -199,14 +199,23 @@ class _CalledHigherDepthDistribCalculator:
 
 
 class GQualityByDepthDistribCalculator:
-    def __init__(self, depth, calc_distrib):
+    def __init__(self, depth, calc_distrib, mask_function=None,
+                 mask_field=None):
         self.depth = depth
         self.required_fields = ['/calls/GQ', '/calls/DP']
         self.calc_distrib = calc_distrib
+        self.mask_field = mask_field
+        self.mask_function = mask_function
+        if mask_field is not None:
+            self.required_fields.append(mask_field)
 
     def __call__(self, variations):
         gqs = variations['/calls/GQ']
-        gqs = gqs[variations['/calls/DP'] == self.depth]
+        mask = variations['/calls/DP'] == self.depth
+        if self.mask_function is not None:
+            mask_mat = variations[self.mask_field]
+            mask = numpy.logical_and(mask, self.mask_function(mask_mat))
+        gqs = gqs[mask]
         if gqs.shape[0] == 0:
             return numpy.zeros((1, self.calc_distrib.max_value+1))
         else:
@@ -571,7 +580,8 @@ def calc_called_gts_distrib_per_depth(variations, depths, by_chunk=True):
 
 
 def calc_quality_by_depth_distrib(variations, depths, by_chunk=True,
-                                  max_value=None):
+                                  max_value=None, mask_function=None,
+                                  mask_field=None):
     distributions, gq_cumulative_distrs = None, None
     if max_value is None:
         _, max_value = calc_min_max(_remove_nans(variations['/calls/GQ']))
@@ -579,7 +589,9 @@ def calc_quality_by_depth_distrib(variations, depths, by_chunk=True,
                                                         per_sample=False)
     for depth in depths:
         calc_gq_by_dp_distrib = GQualityByDepthDistribCalculator(depth=depth,
-                                         calc_distrib=calculate_distribution)
+                                         calc_distrib=calculate_distribution,
+                                         mask_field=mask_field,
+                                         mask_function=mask_function)
         distribution = _calc_stat(variations, calc_gq_by_dp_distrib,
                                   reduce_funct=numpy.add,
                                   by_chunk=by_chunk)

@@ -114,51 +114,52 @@ def create_plots():
     h5 = VariationsH5(args['in_fpath'], mode='r',
                       vars_in_chunk=args['chunk_size'])
     by_chunk = args['by_chunk']
-    logging.basicConfig(filename= join(data_dir, 'plots_info.log'),
-                                       filemode='w', level=logging.INFO)
-#     logging.info('plot_maf')
-#     plot_maf(h5, by_chunk, data_dir)
-#     logging.info('plot_maf_dp')
-#     plot_maf_dp(h5, by_chunk, data_dir)
-#     logging.info('plot_missing_gt_rate_per_snp')
-#     plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
-#     logging.info('plot_het_obs_distrib')
-#     plot_het_obs_distrib(h5, by_chunk, data_dir)
-    logging.info('plot_snp_dens_distrib')
+    logging.basicConfig(filename=join(data_dir, 'plots_info.log'),
+                        filemode='w', level=logging.INFO)
+    logging.info('Plotting MAF Distribution')
+    plot_maf(h5, by_chunk, data_dir)
+    logging.info('Plotting Depth based MAF per Sample Distributions')
+    plot_maf_dp(h5, by_chunk, data_dir)
+    logging.info('Plotting Missing Genotype rate per SNP')
+    plot_missing_gt_rate_per_snp(h5, by_chunk, data_dir)
+    logging.info('Plotting Observed Heterozygosity')
+    plot_het_obs_distrib(h5, by_chunk, data_dir)
+    logging.info('Plotting SNP Density Distribution')
     plot_snp_dens_distrib(h5, by_chunk, args['window_size'], data_dir)
-#     logging.info('plot_dp_distrib_per_sample')
-#     plot_dp_distrib_per_sample(h5, by_chunk, args['max_depth'], data_dir)
-#     logging.info('plot_dp_distrib_all_sample')
-#     plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
-#     logging.info('plot_gq_distrib_per_sample')
-#     plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
-#                                max_value=args['max_gq'])
-#     logging.info('plot_gq_distrib_all_sample')
-#     plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
-#                                max_value=args['max_gq'])
-#     logging.info('plot_dp_distrib_per_gt')
-#     plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
-#     logging.info('plot_gq_distrib_per_gt')
-#     plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
-#     logging.info('plot_gt_stats_per_sample')
-#     plot_gt_stats_per_sample(h5, by_chunk, data_dir)
-#     logging.info('plot_ditrib_num_samples_hi_dp')
-#     plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
-#     logging.info('plot_gq_distrib_per_dp')
-#     plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
-#                            max_value=args['max_gq'],
-#                            max_depth=args['max_depth'])
-#     logging.info('plot_hwe_stats')
-#     plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
-#     logging.info('plot_nucleotide_diversity')
-#     plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
-#                                        args['window_size_diver'],
-#                                        data_dir, by_chunk)
-#     logging.info('plot_allele_obs_distrib_2D')
-#     plot_allele_obs_distrib_2D(h5, by_chunk, data_dir,
-#                                args['max_allele_counts'])
-#     logging.info('plot_inbreeding_coeficient')
-#     plot_inbreeding_coeficient(h5, args['max_num_alleles'], by_chunk, data_dir)
+    logging.info('Plotting Depth Distribution per Sample')
+    plot_dp_distrib_per_sample(h5, by_chunk, args['max_depth'], data_dir)
+    logging.info('Plotting Depth Distribution all Samples')
+    plot_dp_distrib_all_sample(h5, by_chunk, args['max_depth'], data_dir)
+    logging.info('Plotting Genotypes Quality Distribution per Sample')
+    plot_gq_distrib_per_sample(h5, by_chunk, data_dir,
+                               max_value=args['max_gq'])
+    logging.info('Plotting Genotypes Quality Distribution all Samples')
+    plot_gq_distrib_all_sample(h5, by_chunk, data_dir,
+                               max_value=args['max_gq'])
+    logging.info('Plotting Depth Distribution per genotypes')
+    plot_dp_distrib_per_gt(h5, by_chunk, args['max_depth'], data_dir)
+    logging.info('Plotting Genotypes Quality per Genotypes')
+    plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=args['max_gq'])
+    logging.info('Plotting Genotypes Statistics per Sample')
+    plot_gt_stats_per_sample(h5, by_chunk, data_dir)
+    logging.info('Plotting number of Samples with higher Depth Distribution')
+    plot_ditrib_num_samples_hi_dp(h5, by_chunk, args['depths'], data_dir)
+    logging.info('Plotting Genotypes Quality Distribution per Depth')
+    plot_gq_distrib_per_dp(h5, by_chunk, args['depths'], data_dir,
+                           max_value=args['max_gq'],
+                           max_depth=args['max_depth'])
+    logging.info('Plotting Hardy-Weinberg Equilibrium')
+    plot_hwe(h5, args['max_num_alleles'], by_chunk, data_dir, ploidy=2)
+    logging.info('Plotting Nucleotide Diversity Measures')
+    plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
+                                       args['window_size_diver'],
+                                       data_dir, by_chunk)
+    logging.info('Plotting Allele Observations Distribution 2 Dimensions')
+    plot_allele_obs_distrib_2D(h5, by_chunk, data_dir,
+                               args['max_allele_counts'])
+    logging.info('Plotting Inbreeding Coefficient')
+    plot_inbreeding_coefficient(h5, args['max_num_alleles'],
+                                by_chunk, data_dir)
 
 
 def plot_maf(h5, by_chunk, data_dir):
@@ -566,37 +567,47 @@ def plot_ditrib_num_samples_hi_dp(h5, by_chunk, depths, data_dir):
 
 def plot_gq_distrib_per_dp(h5, by_chunk, depths, data_dir, max_value,
                            max_depth):
-        # GQ distribution per depth
+    # GQ distribution per depth
     fpath = join(data_dir, 'gq_distrig_per_snp.png')
-    distrib_gq, cum_gq = calc_quality_by_depth_distrib(h5, depths=depths,
-                                                       max_value=max_value)
-
-    fig = Figure(figsize=(10, 10))
-    canvas = FigureCanvas(fig)
     fhand = open(fpath, 'w')
-    axes = fig.add_subplot(111)
-    title = 'Genotype Quality (GQ) distribution per depth'
-    mpl_params = {'set_xlabel': {'args': ['Depth'], 'kwargs': {}},
-                  'set_ylabel': {'args': ['GQ'], 'kwargs': {}},
-                  'set_title': {'args': [title], 'kwargs': {}},
-                  'set_xticklabels': {'args': [depths],
-                                      'kwargs': {'rotation': 90}}}
-    plot_boxplot(distrib_gq, axes=axes, figsize=(15, 10),
-                 mpl_params=mpl_params)
-    df_cum_gq = DataFrame(cum_gq)
-    axes = axes.twinx()
-    distrib_dp, _ = calc_depth_cumulative_distribution_per_sample(h5,
-                                                            by_chunk=by_chunk,
-                                                            max_depth=max_depth)
-    distrib_dp_all = numpy.sum(distrib_dp, axis=0)
-    plot_lines(numpy.arange(0, distrib_gq.shape[0]+1), distrib_dp_all[:distrib_gq.shape[0]+1],
-               mpl_params={'set_ylabel': {'args': ['Number of GTs'],
-                                          'kwargs': {}},
-                           'set_title': {'args': [title], 'kwargs': {}}},
-               axes=axes)
+    fig = Figure(figsize=(20, 10))
+    canvas = FigureCanvas(fig)
+    gs = gridspec.GridSpec(1, 2)
+    masks = [_is_het, _is_hom]
+    names = ['Heterozygous', 'Homozygous']
+    for i, (mask, name) in enumerate(zip(masks, names)):
+        result = calc_quality_by_depth_distrib(h5, depths=depths,
+                                               mask_function=mask,
+                                               mask_field='/calls/GT',
+                                               by_chunk=by_chunk,
+                                               max_value=max_value)
+        distrib_gq, _ = result
+        title = 'Genotype Quality (GQ) distribution per depth {}'.format(name)
+        axes = fig.add_subplot(gs[0, i])
+        mpl_params = {'set_xlabel': {'args': ['Depth'], 'kwargs': {}},
+                      'set_ylabel': {'args': ['GQ'], 'kwargs': {}},
+                      'set_title': {'args': [title], 'kwargs': {}},
+                      'set_xticklabels': {'args': [depths],
+                                          'kwargs': {'rotation': 90}}}
+        plot_boxplot(distrib_gq, axes=axes, mpl_params=mpl_params)
+        axes = axes.twinx()
+        distrib_dp, _ = calc_depth_cumulative_distribution_per_sample(h5,
+                                                        mask_function=mask,
+                                                        mask_field='/calls/GT',
+                                                        by_chunk=by_chunk,
+                                                        max_depth=max_depth)
+        distrib_dp_all = numpy.sum(distrib_dp, axis=0)
+        plot_lines(numpy.arange(0, distrib_gq.shape[0]+1),
+                   distrib_dp_all[:distrib_gq.shape[0]+1],
+                   mpl_params={'set_ylabel': {'args': ['Number of GTs'],
+                                              'kwargs': {}},
+                               'set_title': {'args': [title], 'kwargs': {}}},
+                   axes=axes)
 
+        fpath = join(data_dir, 'distribution_gq_{}.csv'.format(name))
+        df_distrib_gq = DataFrame(distrib_gq)
+        _save(fpath, df_distrib_gq)
     canvas.print_figure(fhand)
-    _save(fpath.strip('.png') + '.csv', df_cum_gq)
 
 
 def plot_allele_obs_distrib_2D(h5, by_chunk, data_dir, max_allele_counts):
@@ -650,7 +661,7 @@ def plot_allele_obs_distrib_2D(h5, by_chunk, data_dir, max_allele_counts):
         logging.warn('Allele distribution 2D could not be calculated\n')
 
 
-def plot_inbreeding_coeficient(h5, max_num_allele, by_chunk, data_dir):
+def plot_inbreeding_coefficient(h5, max_num_allele, by_chunk, data_dir):
     ic = calc_inbreeding_coeficient(h5, max_num_allele=max_num_allele,
                                     by_chunk=by_chunk)
     fpath = join(data_dir, 'inbreeding_coef_distribution.png')

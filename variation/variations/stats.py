@@ -194,7 +194,7 @@ class _CalledHigherDepthDistribCalculator:
         n_called_per_snp = numpy.sum(is_called_higher_depth(variations),
                                      axis=1)
         n_called_per_snp = n_called_per_snp.reshape((1,
-                                                     n_called_per_snp.shape[0]))
+                                                    n_called_per_snp.shape[0]))
         return self.calc_distrib(n_called_per_snp)
 
 
@@ -362,7 +362,7 @@ class _IntDistribution2DCalculator():
                                           weights=weights)
         if weights is not None:
             counts_matrix, _, _ = numpy.histogram2d(mat1, mat2,
-                                                    [x+1 for x in self.max_values],
+                                                [x+1 for x in self.max_values],
                                                     [[0, self.max_values[0]],
                                                      [0, self.max_values[1]]])
             distrib = distrib / counts_matrix
@@ -471,7 +471,7 @@ def calc_inbreeding_coeficient_distrib(variations, max_num_allele=MAX_N_ALLELES,
     calculate_distrib = _IntDistributionCalculator(max_value=100,
                                                    per_sample=False)
     calc_IC = _InbreedingCoeficientDistribCalculator(max_num_allele,
-                                                     calc_distrib=calculate_distrib)
+                                                calc_distrib=calculate_distrib)
     return _calc_stat(variations, calc_IC, by_chunk=by_chunk,
                       reduce_funct=numpy.add)
 
@@ -557,7 +557,7 @@ def calc_called_gts_distrib_per_depth(variations, depths, by_chunk=True):
                                               per_sample=False)
     for depth in depths:
         calc_call_hi_dp_distr = _CalledHigherDepthDistribCalculator(depth=depth,
-                                                                    calc_distrib=calc_distrib)
+                                                     calc_distrib=calc_distrib)
         called_gt_per_snp_distrib = _calc_stat(variations,
                                                calc_call_hi_dp_distr,
                                                reduce_funct=numpy.add,
@@ -698,7 +698,7 @@ class HWECalcualtor:
                                              gts[:, :,
                                                  allele] == genotype[allele])
                 exp_gts_counts[:, i] *= allele_counts[:,
-                                                      genotype[allele]] / total_counts
+                                              genotype[allele]] / total_counts
             exp_gts_counts[:, i] *= len(set(permutations(genotype)))
             gts_counts[:, i] = numpy.sum(mask, axis=1)
         total_gt_counts = numpy.sum(gts_counts, axis=1)

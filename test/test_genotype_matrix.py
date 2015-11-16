@@ -20,7 +20,7 @@ from variation.genotypes_matrix import (GenotypesMatrixParser,
                                         collapse_gts, encode_gts,
                                         merge_sorted_variations, merge_snps,
                                         merge_alleles, merge_variations)
-from variation.variations.vars_matrices import VariationsH5, put_vars_from_csv
+from variation.variations.vars_matrices import VariationsH5
 from variation.genotypes_matrix import count_compatible_snps_in_chains
 from variation.variations.stats import _remove_nans
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
@@ -94,7 +94,7 @@ class GtMatrixTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
             h5 = VariationsH5(fhand.name, mode='w')
-            put_vars_from_csv(parser, h5, 100)
+            h5.put_vars_from_csv(parser, 100)
             exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
             assert list(h5['/variations/chrom'][:]) == exp
             assert list(h5['/variations/ref'][:]) == [b'T', b'C', b'T']
@@ -116,7 +116,7 @@ class GtMatrixTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
             h5 = VariationsH5(fhand.name, mode='w')
-            put_vars_from_csv(parser, h5, 100)
+            h5.put_vars_from_csv(parser, 100)
 
         if os.path.exists(fhand.name):
             os.remove(fhand.name)

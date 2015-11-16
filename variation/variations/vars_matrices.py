@@ -391,7 +391,7 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
     return var_matrices
 
 
-def put_vars_from_csv(csv, hdf5, vars_in_chunk):
+def _put_vars_from_csv(csv, hdf5, vars_in_chunk):
 
     ignore_alt = csv.ignore_alt
     log = {'data_no_fit': {},
@@ -865,6 +865,9 @@ class VariationsH5(_VariationMatrices):
 
     def put_vars_from_vcf(self, vcf):
         return _put_vars_from_vcf(vcf, self, self._vars_in_chunk)
+
+    def put_vars_from_csv(self, csv):
+        return _put_vars_from_csv(csv, self, self._vars_in_chunk)
 
     def __getitem__(self, path):
         return self._h5file[path]

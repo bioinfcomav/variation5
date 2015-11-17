@@ -26,31 +26,21 @@ from variation.vcf import VCFParser
 from variation.matrix.methods import calc_min_max
 
 
-# def from_vcf_to_hdf5():
-#     fpath = join(TEST_DATA_DIR, 'performance',
-#                  'fb_genome_inca_aethi_torvum_beren_annotated.vcf.gz')
-#     fhand = gzip.open(fpath, 'rb')
-#
-#     kwargs = {'max_field_lens': {"alt":0}, 'max_n_vars':5000,
-#               'kept_fields':['/calls/GT', '/calls/GQ'], 'ignore_alt':True}
-#     vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=5,
-#                            **kwargs)
-#     out_fhand = NamedTemporaryFile(suffix='.h5', prefix='tomato_all')
-#     os.remove(out_fhand.name)
-#     var_mat = VariationsH5(out_fhand.name, mode='w')
-#     log = var_mat.put_vars_from_vcf(vcf_parser)
-#     print('log_alt_max_detected: ', log['alt_max_detected'])
-#     print('log_items_alt_descarted: ', log['num_alt_item_descarted'])
-
 def from_vcf_to_hdf5():
-    fpath = join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz')
+    fpath = join(TEST_DATA_DIR, 'performance',
+                 'fb_genome_inca_aethi_torvum_beren_annotated.vcf.gz')
     fhand = gzip.open(fpath, 'rb')
-    kwargs = {'max_field_lens': {"alt": 4}}
-    vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=10000,
+
+    kwargs = {'max_field_lens': {"alt":0}, 'max_n_vars':5000,
+              'kept_fields':['/calls/GT', '/calls/GQ'], 'ignore_alt':True}
+    vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=5,
                            **kwargs)
-    h5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'),
-                      mode='w')
-    h5.put_vars_from_vcf(vcf_parser)
+    out_fhand = NamedTemporaryFile(suffix='.h5', prefix='tomato_all')
+    os.remove(out_fhand.name)
+    var_mat = VariationsH5(out_fhand.name, mode='w')
+    log = var_mat.put_vars_from_vcf(vcf_parser)
+    print('log_alt_max_detected: ', log['alt_max_detected'])
+    print('log_items_alt_descarted: ', log['num_alt_item_descarted'])
 
 
 def filter_mafs_from_hdf5():
@@ -114,15 +104,18 @@ def histograma_low_from_hdf5():
     h5 = VariationsH5(fpath, mode='r')
     histogram(h5['/calls/GT'], 10, True)
 
+
 def histograma_min_max_prueba():
     fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
     h5 = VariationsH5(fpath, mode='r')
-    min_,max_ = calc_min_max(h5['/calls/GT'])
+    _, _ = calc_min_max(h5['/calls/GT'])
+
 
 def histograma_prueba():
     fpath = join(TEST_DATA_DIR, 'performance', 'inca_torvum_all_snps.h5')
     h5 = VariationsH5(fpath, mode='r')
     _low_mem_histogram(h5['/calls/GT'], 30, -1, 3)
+
 
 def _prepare_smt_for_timeit(funct):
     per_path = (join(dirname(inspect.getfile(inspect.currentframe()))))
@@ -138,26 +131,26 @@ import variation
 
 
 def check_performance():
-#     smt = _prepare_smt_for_timeit('from_vcf_to_hdf5')
-#     print(timeit(smt, number=1))
-#     smt = _prepare_smt_for_timeit('filter_mafs_from_hdf5')
-#     print(timeit(smt, number=50))
-#     smt = _prepare_smt_for_timeit('filter_missing_rates_from_hdf5')
-#     print(timeit(smt, number=50))
-#     smt = _prepare_smt_for_timeit('stats_mafs_from_hdf5')
-#     print(timeit(smt, number=50))
+    smt = _prepare_smt_for_timeit('from_vcf_to_hdf5')
+    print(timeit(smt, number=1))
+    smt = _prepare_smt_for_timeit('filter_mafs_from_hdf5')
+    print(timeit(smt, number=50))
+    smt = _prepare_smt_for_timeit('filter_missing_rates_from_hdf5')
+    print(timeit(smt, number=50))
+    smt = _prepare_smt_for_timeit('stats_mafs_from_hdf5')
+    print(timeit(smt, number=50))
     smt = _prepare_smt_for_timeit('stats_missing_rate_from_hdf5')
     print(timeit(smt, number=50))
     smt = _prepare_smt_for_timeit('stats_missing_rate_from_hdf5_memory')
     print(timeit(smt, number=50))
-#     smt = _prepare_smt_for_timeit('histograma_from_hdf5')
-#     print(timeit(smt, number=1))
-#     smt = _prepare_smt_for_timeit('histograma_low_from_hdf5')
-#     print( timeit(smt, number=1))
-#     smt = _prepare_smt_for_timeit('histograma_min_max_prueba')
-#     print('Min_max', timeit(smt, number=50))
-#     smt = _prepare_smt_for_timeit('histograma_prueba')
-#     print('Histogram', timeit(smt, number=50))
+    smt = _prepare_smt_for_timeit('histograma_from_hdf5')
+    print(timeit(smt, number=1))
+    smt = _prepare_smt_for_timeit('histograma_low_from_hdf5')
+    print(timeit(smt, number=1))
+    smt = _prepare_smt_for_timeit('histograma_min_max_prueba')
+    print('Min_max', timeit(smt, number=50))
+    smt = _prepare_smt_for_timeit('histograma_prueba')
+    print('Histogram', timeit(smt, number=50))
 
 if __name__ == "__main__":
     check_performance()

@@ -3,6 +3,8 @@ import argparse
 from variation.variations.vars_matrices import VariationsH5
 from variation.genotypes_matrix import merge_variations
 from numpy import mean
+import logging
+from os.path import join
 
 
 def _setup_argparse(**kwargs):
@@ -59,12 +61,15 @@ def main():
     merged_fpath = args['out_fpath']
     h5_1 = VariationsH5(args['in_fpaths'][0], 'r')
     h5_2 = VariationsH5(args['in_fpaths'][1], 'r')
+    logging.basicConfig(filename=merged_fpath + '.log',
+                        filemode='w', level=logging.INFO)
     try:
-        merge_variations(h5_1, h5_2, merged_fpath,
-                         ignore_overlaps=args['ignore_overlaps'],
-                         ignore_2_or_more_overlaps=args['ignore_more_overlaps'],
-                         fields_funct=fields_function,
-                         ignore_fields=args['ignore_fields'])
+        _, log = merge_variations(h5_1, h5_2, merged_fpath,
+                                  ignore_overlaps=args['ignore_overlaps'],
+                                  ignore_2_or_more_overlaps=args['ignore_more_overlaps'],
+                                  fields_funct=fields_function,
+                                  ignore_fields=args['ignore_fields'])
+        logging.info(log)
     except FileExistsError:
         raise ('The output file already exists. Remove it to create a new one')
 

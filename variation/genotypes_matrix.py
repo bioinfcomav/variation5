@@ -163,37 +163,21 @@ def _max_length(chars_array):
     return max([len(x) for x in chars_array])
 
 
-def decode_gts(alleles, gts):
-    decoded = gts.copy().astype('str')
-    for i, (snp_gts, snp_alleles) in enumerate(zip(gts, alleles)):
-        decoded[i] = snp_alleles[snp_gts]
-    return decoded
-
-
-def encode_gts(gts, alleles):
-    encoded = numpy.zeros(gts.shape)
-    i = 0
-    for j in range(alleles.shape[1]):
-        allele = alleles[:, j].reshape(alleles.shape[0], 1).T
-        if allele != b'':
-            encoded[gts == allele] = i
-            i += 1
-        else:
-            encoded[gts == allele] = MISSING_VALUES[int]
-    return encoded
-
-
-def collapse_gts(base_allele, gts, positions, max_allele_length=35):
+def collapse_alleles(base_allele, alleles, position, max_allele_length=35):
     # Type pass to str because join expected str not int(binary)
-    collapsed_gts = gts[0].copy().reshape(1, gts.shape[1], gts.shape[2])
-    collapsed_gts = collapsed_gts.astype(numpy.dtype(('U', max_allele_length)))
-    for i in range(gts.shape[1]):
-        for j in range(gts.shape[2]):
-            allele = [x for x in base_allele.decode('utf-8')]
-            for k, pos in enumerate(positions):
-                allele[pos] = gts[k, i, j]
-            collapsed_gts[0, i, j] = ''.join(allele)
-    return collapsed_gts
+    alleles = alleles.astype(numpy.dtype(('U', max_allele_length)))
+    collapsed_alleles = alleles[0].copy()
+    for i in range(alleles.shape[1]):
+        allele = [x for x in base_allele.decode('utf-8')]
+        if '' == alleles[0, i]:
+            continue
+        else:
+            assert len(alleles[0, i]) == 1
+        allele[position] = alleles[0, i]
+        collapsed_alleles[i] = ''.join(allele)
+    collapsed_alleles = collapsed_alleles.astype(numpy.dtype(('S',
+                                                             max_allele_length)))
+    return collapsed_alleles.reshape((1, collapsed_alleles.shape[0]))
 
 
 def merge_alleles(alleles_vcf, alleles_collapse):
@@ -258,6 +242,21 @@ def are_overlapping(var1, var2):
             pos2 >= pos1 and pos2 < pos1 + len(var1['/variations/ref'][0]))
 
 
+def transform_gts_to_merge(alleles, collapsed_alleles, gts):
+    alleles_merged = alleles.copy()
+    new_gts = gts.copy()
+    for i, collapsed_allele in enumerate(collapsed_alleles):
+        for allele in alleles:
+            if collapsed_allele == allele:
+                new_gts[gts == i] = 0
+                break
+        else:
+            alleles_merged = numpy.append(alleles_merged,
+                                          collapsed_allele)
+            new_gts[gts == i] = alleles_merged.shape[0] - 1
+    return alleles_merged, new_gts
+
+
 def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[],
                check_ref_match=True):
     is_merged = 0
@@ -320,37 +319,29 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[],
                     raise ValueError('Chromosome names must be equal')
                 merged['/variations/chrom'][i] = chrom1
                 if pos1 <= pos2:
-                    gts_decoded = decode_gts(alleles2, gts2)
-                    gts_collapsed = collapse_gts(alleles1[0, 0], gts_decoded,
-                                                 pos2 - pos1)
-                    alleles = numpy.array([x.decode('utf-8')
-                                           for x in alleles1[0]])
-                    alleles_merged = merge_alleles(alleles,
-                                                   numpy.unique(gts_collapsed))
-                    gts_encoded = encode_gts(gts_collapsed,
-                                             alleles_merged.reshape(1, alleles_merged.shape[0]))
-                    alleles_merged = alleles_merged.astype(merged['/variations/ref'].dtype)
+                    alleles_collapsed = collapse_alleles(alleles1[0, 0],
+                                                         alleles2,
+                                                         pos2 - pos1)
+                    alleles_merged, gts2 = transform_gts_to_merge(alleles1[0],
+                                                                 alleles_collapsed[0],
+                                                                 gts2)
                     merged['/variations/ref'][i] = alleles_merged[0]
                     merged['/variations/alt'][i, :alleles_merged.shape[0]-1] = alleles_merged[1:]
                     merged['/variations/pos'][i] = pos1
                     merged[path][i, :len(snp1.samples), ] = snp1[path][:]
-                    merged[path][i, -len(snp2.samples):, ] = gts_encoded
+                    merged[path][i, -len(snp2.samples):, ] = gts2
 
                 else:
-                    gts_decoded = decode_gts(alleles1, gts1)
-                    gts_collapsed = collapse_gts(alleles2[0, 0], gts_decoded,
-                                                 pos1 - pos2)
-                    alleles = numpy.array([x.decode('utf-8')
-                                           for x in alleles2[0]])
-                    alleles_merged = merge_alleles(alleles,
-                                                   numpy.unique(gts_collapsed))
-                    gts_encoded = encode_gts(gts_collapsed,
-                                             alleles_merged.reshape(1, alleles_merged.shape[0]))
-                    alleles_merged = alleles_merged.astype(merged['/variations/ref'].dtype)
+                    alleles_collapsed = collapse_alleles(alleles2[0, 0],
+                                                         alleles1,
+                                                         pos1 - pos2)
+                    alleles_merged, gts1 = transform_gts_to_merge(alleles2[0],
+                                                                 alleles_collapsed[0],
+                                                                 gts1)
                     merged['/variations/ref'][i] = alleles_merged[0]
                     merged['/variations/alt'][i, :alleles_merged.shape[0]-1] = alleles_merged[1:]
                     merged['/variations/pos'][i] = pos2
-                    merged[path][i, :len(snp1.samples), ] = gts_encoded
+                    merged[path][i, :len(snp1.samples), ] = gts1
                     merged[path][i, -len(snp2.samples):, ] = snp2[path][:]
 
             elif snp1 is not None:

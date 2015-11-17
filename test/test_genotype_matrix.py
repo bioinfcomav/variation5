@@ -16,10 +16,11 @@ import numpy
 
 from variation.genotypes_matrix import (GenotypesMatrixParser,
                                         IUPAC_CODING, STANDARD_GT,
-                                        change_gts_chain, decode_gts,
-                                        collapse_gts, encode_gts,
+                                        change_gts_chain,
+                                        collapse_alleles,
                                         merge_sorted_variations, merge_snps,
-                                        merge_alleles, merge_variations)
+                                        merge_alleles, merge_variations,
+                                        transform_gts_to_merge)
 from variation.variations.vars_matrices import VariationsH5
 from variation.genotypes_matrix import count_compatible_snps_in_chains
 from variation.variations.stats import _remove_nans
@@ -140,33 +141,26 @@ class GtMatrixTest(unittest.TestCase):
                                                  [b'C', b'', b''],
                                                  [b'A', b'T', b'']]))
 
-    def test_decode_gts(self):
-        gts = numpy.array([[[0, 0], [0, 1]], [[1, 1], [1, 0]]])
-        alleles = numpy.array([['A', 'T'], ['C', 'T']])
-        expected = numpy.array([[['A', 'A'], ['A', 'T']],
-                                [['T', 'T'], ['T', 'C']]])
-        assert numpy.all(decode_gts(alleles, gts) == expected)
-
-    def test_encode_gts(self):
-        gts = numpy.array([[['A', 'A'], ['A', 'T']],
-                           [['T', 'T'], ['T', 'C']]])
-        alleles = numpy.array([['A', 'T'], ['C', 'T']])
-        expected = numpy.array([[[0, 0], [0, 1]], [[1, 1], [1, 0]]])
-        assert numpy.all(encode_gts(gts, alleles) == expected)
-        gts = numpy.array([[['AA', 'AA'], ['G', 'T']]])
-        alleles = numpy.array([['AA', 'T', 'G']])
-        expected = numpy.array([[[0, 0], [2, 1]]])
-        assert numpy.all(encode_gts(gts, alleles) == expected)
-
-    def test_collapse_gts(self):
-        gts = numpy.array([[['A', 'A'], ['A', 'T']],
-                           [['T', 'T'], ['T', 'C']]])
+    def test_collapse_alleles(self):
+        alleles = numpy.array([[b'A', b'T', b'C']])
         base_allele = b'ATCAC'
-        relative_positions = [1, 4]
-        expected = numpy.array([[['AACAT', 'AACAT'],
-                                 ['AACAT', 'ATCAC']]])
-        result = collapse_gts(base_allele, gts, relative_positions)
+        relative_position = 1
+        expected = numpy.array([[b'AACAC', b'ATCAC', b'ACCAC']])
+        result = collapse_alleles(base_allele, alleles, relative_position)
         assert numpy.all(result == expected)
+
+    def test_transform_gts_to_merge(self):
+        alleles = numpy.array([b'AACAC', b'A'])
+        collapsed_alleles = numpy.array([b'ACCAC', b'ATCAC', b'AACAC'])
+        gts = numpy.array([[[0, 0], [1, 2]],
+                           [[2, 2], [0, 1]]])
+        expected = numpy.array([[[2, 2], [3, 0]],
+                                [[0, 0], [2, 3]]])
+        expected_alleles = numpy.array([b'AACAC', b'A', b'ACCAC', b'ATCAC'])
+        result = transform_gts_to_merge(alleles, collapsed_alleles, gts)
+        merged_alleles, gts = result
+        assert numpy.all(gts == expected)
+        assert numpy.all(merged_alleles == expected_alleles)
 
     def test_merge_h5(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
@@ -373,5 +367,5 @@ class GtMatrixTest(unittest.TestCase):
             os.remove(merged_fpath + '.log')
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'GtMatrixTest.test_merge_variations']
+#     import sys;sys.argv = ['', 'GtMatrixTest.test_merge_variations']
     unittest.main()

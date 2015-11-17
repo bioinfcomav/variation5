@@ -280,6 +280,27 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
 
+    def test_csv_to_hdf5_bin(self):
+        tmp_fhand = NamedTemporaryFile()
+        out_fpath = tmp_fhand.name
+        tmp_fhand.close()
+
+        in_fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt')
+
+        cmd = [sys.executable, join(BIN_DIR, 'csv_to_hdf5.py'), in_fpath, '-o',
+               out_fpath, '-s', '\t', '-i', '-a', '2', '-f', 'chrom,pos']
+        check_output(cmd)
+        h5 = h5py.File(out_fpath, 'r')
+        exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
+        assert list(h5['/variations/chrom'][:]) == exp
+        assert list(h5['/variations/ref'][:]) == [b'T', b'C', b'T']
+        assert list(h5['/variations/pos'][:]) == [331954, 681961,
+                                                  1511764]
+        exp = numpy.array([[[1, 1], [0, 0], [-1, -1]],
+                           [[0, 0], [0, 0], [-1, -1]],
+                           [[0, 0], [0, 0], [1, 0]]])
+        assert numpy.all(h5['/calls/GT'][:] == exp)
+        os.remove(out_fpath)
 
 class VcfTest(unittest.TestCase):
 
@@ -302,5 +323,5 @@ class VcfTest(unittest.TestCase):
         vcf_fhand2.close()
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VcfTest.test_vcf_detect_fields']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_csv_to_hdf5_bin']
     unittest.main()

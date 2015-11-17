@@ -211,7 +211,8 @@ def get_attribute(h5_1, h5_2, path, attribute):
         return getattr(h5_2[path], attribute)
 
 
-def create_variations(variations_1, variations_2, fpath, ignore_fields=[]):
+def create_variations_merged(variations_1, variations_2,
+                             fpath, ignore_fields=[]):
     variations_merged = VariationsH5(fpath, "w")
     h5_paths = set(variations_1.keys()+variations_2.keys())
     h5_samples = variations_1.samples+variations_2.samples
@@ -257,7 +258,20 @@ def are_overlapping(var1, var2):
             pos2 >= pos1 and pos2 < pos1 + len(var1['/variations/ref'][0]))
 
 
-def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
+def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[],
+               check_ref_match=True):
+    is_merged = 0
+    is_added = 0
+    is_ignored = 0
+    if snp1 is not None and snp2 is not None and 'ref' in snp1.keys() and 'ref' in snp2.keys():
+        if snp1['/variations/ref'] != snp2['/variations/ref']:
+            if check_ref_match:
+                raise 'The reference allele of the SNPs are not the same.'
+            else:
+                # The snps have been ignored
+                is_ignored = 1
+                return is_ignored, is_merged, is_added
+
     if '/variations/qual' not in fields_funct:
         fields_funct['/variations/qual'] = min
     for path in merged.keys():
@@ -381,11 +395,21 @@ def merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[]):
                     except (KeyError, TypeError):
                         merged[path][i, ] = numpy.full(merged[path][i, ].shape,
                                                        missing,
-                                                       dtype=merged[path][i, ].dtype)
+                                                       dtype=merged[path][i,].dtype)
+    # The snps have been merged succesfully
+    if snp1 is not None and snp2 is not None:
+        is_merged = 1
+        is_added = 0
+        return is_ignored, is_merged, is_added
+    else:
+        is_merged = 0
+        is_added = 1
+        return is_ignored, is_merged, is_added
 
 
 def merge_sorted_variations(variations_1, variations_2,
-                            ignore_2_or_more_overlaps=True):
+                            ignore_2_or_more_overlaps=False,
+                            check_ref_match=True):
     snps_1 = iter(variations_1.iterate_chunks(chunk_size=1))
     snps_2 = iter(variations_2.iterate_chunks(chunk_size=1))
     snp_1 = next(snps_1)
@@ -396,9 +420,9 @@ def merge_sorted_variations(variations_1, variations_2,
     while True:
         pos1 = snp_1['/variations/pos']
         pos2 = snp_2['/variations/pos']
+
         if snp_1['/variations/chrom'] == snp_2['/variations/chrom']:
             if are_overlapping(snp_1, snp_2) or are_overlapping(snp_2, snp_1):
-
                 result = snp_1, snp_2
                 try:
                     snp_1 = next(snps_1)
@@ -480,26 +504,43 @@ def merge_sorted_variations(variations_1, variations_2,
 
 def merge_variations(variations1, variations2, merged_fpath, fields_funct={},
                      ignore_overlaps=False, ignore_2_or_more_overlaps=False,
-                     ignore_fields=[]):
-    merged_variations = create_variations(variations1, variations2,
-                                          merged_fpath,
-                                          ignore_fields=ignore_fields)
+                     ignore_fields=[], check_ref_match=True):
+    merged_variations = create_variations_merged(variations1, variations2,
+                                                 merged_fpath,
+                                                 ignore_fields=ignore_fields)
+    num_snp1 = variations1['/variations/pos'].shape[0]
+    num_snp2 = variations2['/variations/pos'].shape[0]
+    log = {'total_merged_snps': 0,
+           'modified_merged_snps': 0,
+           'added_new_snps': 0,
+           'ignored_ref_snps': 0,
+           'ignored_overlap_snps': 0}
     prev_snp1, prev_snp2 = None, None
     for i, (snp1, snp2) in enumerate(merge_sorted_variations(variations1,
                                                              variations2,
-                                                             ignore_2_or_more_overlaps)):
+                        ignore_2_or_more_overlaps=ignore_2_or_more_overlaps)):
         if not ignore_overlaps:
             if prev_snp1 is not None and snp1 is not None and are_overlapping(prev_snp1, snp1):
                 raise ValueError('Overlapping variations in variations 1')
             if prev_snp2 is not None and snp2 is not None and are_overlapping(prev_snp2, snp2):
                 raise ValueError('Overlapping variations in variations 2')
-        merge_snps(snp1, snp2, i, merged_variations, fields_funct=fields_funct,
-                   ignore_fields=ignore_fields)
+        result = merge_snps(snp1, snp2, i, merged_variations,
+                            fields_funct=fields_funct,
+                            ignore_fields=ignore_fields,
+                            check_ref_match=check_ref_match)
+        ignored_snps, merged_snps, added_snps = result
+        log['ignored_ref_snps'] += ignored_snps
+        log['modified_merged_snps'] += merged_snps
+        log['added_new_snps'] += added_snps
         if snp1 is not None:
+            num_snp1 -= 1
             prev_snp1 = snp1
         if snp2 is not None:
+            num_snp2 -= 1
             prev_snp2 = snp2
+    log['ignored_overlap_snps'] = num_snp1 + num_snp2
     for path in merged_variations.keys():
         new_shape = (i+1, ) + merged_variations[path].shape[1:]
         merged_variations[path].resize(new_shape)
-    return merged_variations
+    log['total_merged_snps'] = merged_variations['/variations/pos'].shape[0]
+    return merged_variations, log

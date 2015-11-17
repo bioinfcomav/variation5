@@ -94,7 +94,7 @@ class GtMatrixTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
             h5 = VariationsH5(fhand.name, mode='w')
-            h5.put_vars_from_csv(parser, 100)
+            h5.put_vars_from_csv(parser)
             exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
             assert list(h5['/variations/chrom'][:]) == exp
             assert list(h5['/variations/ref'][:]) == [b'T', b'C', b'T']
@@ -116,7 +116,7 @@ class GtMatrixTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
             h5 = VariationsH5(fhand.name, mode='w')
-            h5.put_vars_from_csv(parser, 100)
+            h5.put_vars_from_csv(parser)
 
         if os.path.exists(fhand.name):
             os.remove(fhand.name)
@@ -175,7 +175,7 @@ class GtMatrixTest(unittest.TestCase):
         h5_2 = VariationsH5(fpath, "r")
         expected = [[681961, 681961], [1511764, 1511764],
                     [None, 15164], [None, 15184]]
-        for snp, exp in zip(merge_sorted_variations(h5_1, h5_2), expected):
+        for snp, exp in zip(merge_sorted_variations(h5_1, h5_2, True), expected):
             for x, y in zip(snp, exp):
                 try:
                     assert x['/variations/pos'][0] == y
@@ -184,7 +184,7 @@ class GtMatrixTest(unittest.TestCase):
 
         expected = [[681961, 681961], [1511764, 1511764],
                     [15164, None], [15184, None]]
-        for snp, exp in zip(merge_sorted_variations(h5_2, h5_1), expected):
+        for snp, exp in zip(merge_sorted_variations(h5_2, h5_1, True), expected):
             for x, y in zip(snp, exp):
                 try:
                     assert x['/variations/pos'][0] == y
@@ -312,13 +312,17 @@ class GtMatrixTest(unittest.TestCase):
             pass
         os.remove(merged_fpath)
 
-        merged_variations = merge_variations(format_h5, format_array_h5,
-                                             merged_fpath,
-                                             ignore_overlaps=True,
-                                             ignore_2_or_more_overlaps=True)
+        merged_variations, log = merge_variations(format_h5, format_array_h5,
+                                                  merged_fpath,
+                                                  ignore_overlaps=True,
+                                                  ignore_2_or_more_overlaps=True)
 
         expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
                                         'expected_merged.h5'), 'r')
+        expected_log = {'added_new_snps': 5, 'total_merged_snps': 6,
+                        'ignored_overlap_snps': 3, 'modified_merged_snps': 1,
+                        'ignored_ref_snps': 0}
+        assert log == expected_log
         # Dirty hack to remove tmp_path
         try:
             for key in merged_variations.keys():
@@ -363,9 +367,11 @@ class GtMatrixTest(unittest.TestCase):
         try:
             check_output(cmd)
             os.remove(merged_fpath)
+            os.remove(merged_fpath + '.log')
         except CalledProcessError:
             os.remove(merged_fpath)
+            os.remove(merged_fpath + '.log')
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'GtMatrixTest.test_put_vars_from_csv']
+    # import sys;sys.argv = ['', 'GtMatrixTest.test_merge_variations']
     unittest.main()

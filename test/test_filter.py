@@ -25,7 +25,7 @@ from variation.variations.filters import (_filter_all,
                                           filter_monomorphic_snps_fact,
                                           filter_biallelic_and_polymorphic,
                                           filter_gts_by_dp_fact,
-                                          filter_gt_no_data)
+                                          filter_snps_with_no_strand_info)
 from variation.iterutils import first
 
 
@@ -239,10 +239,10 @@ class FilterTest(unittest.TestCase):
         flt_chunk = filter_biallelic_and_polymorphic(chunk)
         assert flt_chunk['/calls/GT'].shape == (174, 153, 2)
 
-    def test_filter_no_data(self):
+    def test_filter_snps_with_no_strand_info(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
         h5 = VariationsH5(fpath, "r")
-        result = filter_gt_no_data(h5)
+        result = filter_snps_with_no_strand_info(h5)
         assert result['/calls/GT'].shape[0] == 2
 
 if __name__ == "__main__":

@@ -208,7 +208,7 @@ def filter_biallelic(chunk):
     return _biallelic_filter(chunk, keep_monomorphic=True)
 
 
-def filter_gt_no_data(chunk, n_snps_check=None):
+def filter_snps_with_no_strand_info(chunk, n_snps_check=None):
     ref = chunk['/variations/ref'][:n_snps_check]
     alt = chunk['/variations/alt'][:n_snps_check]
     alleles = numpy.append(alt, ref.reshape(ref.shape[0], 1), axis=1)

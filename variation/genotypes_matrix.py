@@ -7,7 +7,6 @@
 from csv import DictReader
 from itertools import chain
 from variation import MISSING_VALUES, DEF_DSET_PARAMS
-from variation.variations.filters import filter_gt_no_data
 import numpy
 from variation.variations.vars_matrices import VariationsH5
 from variation.variations.vars_matrices import _create_matrix
@@ -122,23 +121,28 @@ class GenotypesMatrixParser():
                 yield record
 
 
-def count_compatible_snps_in_chains(variations, chains_matrix,
-                                    n_snps_check=10000):
-    variations = filter_gt_no_data(variations, n_snps_check)
+def count_compatible_snps_in_strands(variations, array_specification_matrix,
+                                     custom_alleles, n_snps_check=10000):
     ref = variations['/variations/ref'][:]
     alt = variations['/variations/alt'][:]
     alleles = numpy.append(ref.reshape(ref.shape[0], 1), alt, axis=1)
-    chain_counts = numpy.zeros(chains_matrix.shape[1])
-    for snp_alleles, chains_snp_alleles in zip(alleles, chains_matrix):
-        for i, chain_alleles in enumerate(chains_snp_alleles):
-            compatible = True
-            for allele in snp_alleles:
-                if allele not in chain_alleles and allele != b'':
-                    compatible = False
-                    break
-            if compatible:
-                chain_counts[i] += 1
-    return chain_counts
+    strand_counts = numpy.array([], dtype=numpy.bool)
+    for snp_alleles, strand_alleles in zip(alleles, custom_alleles):
+        strand_counts = numpy.append(strand_counts,
+                                     _check_compatible_strand(snp_alleles,
+                                                              strand_alleles))
+        if strand_counts.shape[0] == n_snps_check:
+            break
+    strand_counts = strand_counts.reshape((strand_counts.shape[0], 1))
+    res = strand_counts == array_specification_matrix[:strand_counts.shape[0]]
+    return res.sum(axis=0)
+
+
+def _check_compatible_strand(alleles, strand_alleles):
+    for allele in alleles:
+        if allele not in strand_alleles and allele != b'':
+            return False
+    return True
 
 
 def _rev_compl(seq):

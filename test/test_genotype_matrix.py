@@ -22,7 +22,7 @@ from variation.genotypes_matrix import (GenotypesMatrixParser,
                                         merge_alleles, merge_variations,
                                         transform_gts_to_merge)
 from variation.variations.vars_matrices import VariationsH5
-from variation.genotypes_matrix import count_compatible_snps_in_chains
+from variation.genotypes_matrix import count_compatible_snps_in_strands
 from variation.variations.stats import _remove_nans
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
 
@@ -123,14 +123,18 @@ class GtMatrixTest(unittest.TestCase):
             os.remove(fhand.name)
         fhand_ex2.close()
 
-    def test_count_compatible_snsp_in_chains(self):
+    def test_count_compatible_snsp_in_strands(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
         h5 = VariationsH5(fpath, "r")
-        chains_matrix = numpy.array([[[b'G', b'T']],
-                                     [[b'G', b'T']],
-                                     [[b'G', b'T']]])
-        result = count_compatible_snps_in_chains(h5, chains_matrix)
-        assert result == 1
+        custom_alleles = numpy.array([[b'G', b'T'],
+                                     [b'G', b'T'],
+                                     [b'G', b'T']])
+        array_spec_matrix = numpy.array([[True, False, True],
+                                         [True, True, False],
+                                         [True, True, False]])
+        result = count_compatible_snps_in_strands(h5, array_spec_matrix,
+                                                  custom_alleles)
+        assert numpy.all(result == numpy.array([1, 0, 3]))
 
     def test_change_gts_chain(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
@@ -366,6 +370,7 @@ class GtMatrixTest(unittest.TestCase):
             os.remove(merged_fpath)
             os.remove(merged_fpath + '.log')
 
+
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'GtMatrixTest.test_merge_variations']
+    import sys;sys.argv = ['', 'GtMatrixTest.test_count_compatible_snsp_in_strands']
     unittest.main()

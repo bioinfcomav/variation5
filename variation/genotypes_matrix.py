@@ -72,12 +72,13 @@ class CSVParser():
         self._var_info = var_info
 
         self.samples = self._get_samples()
-        self.max_alt_alleles = 0
+        self.max_field_lens = {'alt': 0}
 
     def _get_samples(self):
         for line_num, line in enumerate(self.fhand):
             if line_num == self._sample_line:
                 return line.strip().split(self._sep)[self._first_sample_column:]
+
         raise RuntimeError("We didn't reach to sample line")
 
     def _parse_gts(self, record):
@@ -100,26 +101,28 @@ class CSVParser():
                 coded_gt = tuple([allele_coding[allele] for allele in gt])
             genotype_coding[gt] = coded_gt
             recoded_gts.append(coded_gt)
-        return tuple([chr(allele) for allele in alleles]), recoded_gts
+        return (tuple([chr(allele).encode() for allele in alleles]),
+                [(b'GT', recoded_gts)])
 
     @property
     def variations(self):
+        max_field_lens = self.max_field_lens
         for line in self.fhand:
             items = line.split(self._sep)
             items[-1] = items[-1].strip()
 
             snp_id = items[self._snp_id_column]
             alleles, gts = self._parse_gts(items)
-            var_info = self._var_info[snp_id.decode('utf8')]
+            var_info = self._var_info[snp_id]
 
             alt_alleles = list(alleles[1:]) if len(alleles) > 1 else None
 
-            variation = {'chrom': var_info['chrom'], 'pos': var_info['pos'],
-                         'gts': gts, 'ref': alleles[0]}
             if alt_alleles:
-                variation['alt'] = alt_alleles
-                if self.max_alt_alleles < len(alt_alleles):
-                    self.max_alt_alleles = len(alt_alleles)
+                if max_field_lens['alt'] < len(alt_alleles):
+                    max_field_lens['alt'] = len(alt_alleles)
+
+            variation = (var_info['chrom'], var_info['pos'], snp_id,
+                         alleles[0], alt_alleles, None, None, None, gts)
             yield variation
 
 

@@ -14,15 +14,115 @@ from variation.variations.vars_matrices import _create_matrix
 
 
 IUPAC = {'A': 'AA', 'T': 'TT', 'C': 'CC', 'G': 'GG',
-         'W': 'AT', 'M': 'AC', 'R': 'AG', '': '--',
-         'Y': 'TC', 'K': 'TG', 'S': 'CG', '-': '--'}
-IUPAC_CODING = 'iupac'
-STANDARD_GT = 'standard'
-DECODE = {IUPAC_CODING: lambda x: IUPAC[x],
-          STANDARD_GT: lambda x: x}
+         'W': 'AT', 'M': 'AC', 'R': 'AG', '': None,
+         'Y': 'TC', 'K': 'TG', 'S': 'CG', '-': None}
 
 
-class GenotypesMatrixParser():
+MISSING_GT_VALUES = (b'-', b'', b'.', None)
+MISSING_ALLELE_VALUES = (ord('-'), ord('N'))
+
+
+def def_gt_allele_splitter(gt):
+    if gt in MISSING_GT_VALUES:
+        return None
+    not_missing = False
+    alleles = []
+    for allele in gt:
+        if allele in MISSING_ALLELE_VALUES:
+            allele = None
+        else:
+            not_missing = True
+        alleles.append(allele)
+    if not not_missing:
+        alleles = None
+    return tuple(alleles)
+
+
+def create_iupac_allele_splitter(ploidy=2):
+    if ploidy != 2:
+        msg = 'It is not possible to generate the genotypes for other ploidy'
+        raise ValueError(msg)
+
+    def iupac_allele_splitter(gt):
+        return def_gt_allele_splitter(IUPAC[gt])
+    return iupac_allele_splitter
+
+
+class CSVParser():
+    def __init__(self, fhand, var_info, gt_splitter=def_gt_allele_splitter,
+                 first_sample_column=1, sample_line=0, snp_id_column=0,
+                 sep=','):
+        '''It reads genotype calls from a CSV file
+
+        var_info can be either a dict or an OrderedDict with the snp_ids as
+        keys and the values should have a dict with, at least, the keys chrom
+        and pos. The rest of the key can match the VCF fields.
+
+        gt_splitter should take a genotype as it is stored in the CSV file and
+        it should return a tuple with the alleles in byte format.
+        '''
+
+        self.fhand = fhand
+        self._sample_line = sample_line
+        self._first_sample_column = first_sample_column
+        self._sep = sep
+        self._snp_id_column = snp_id_column
+        self.gt_splitter = gt_splitter
+        self._var_info = var_info
+
+        self.samples = self._get_samples()
+        self.max_alt_alleles = 0
+
+    def _get_samples(self):
+        for line_num, line in enumerate(self.fhand):
+            if line_num == self._sample_line:
+                return line.strip().split(self._sep)[self._first_sample_column:]
+        raise RuntimeError("We didn't reach to sample line")
+
+    def _parse_gts(self, record):
+        gts = record[self._first_sample_column:]
+        recoded_gts = []
+        gts = [self.gt_splitter(gt) for gt in gts]
+        alleles = set()
+        for gt in gts:
+            if gt is None:
+                continue
+            for allele in gt:
+                alleles.add(allele)
+        allele_coding = {allele: idx for idx, allele in enumerate(alleles)}
+        allele_coding[None] = None
+        genotype_coding = {None: None}
+        for gt in gts:
+            try:
+                coded_gt = genotype_coding[gt]
+            except KeyError:
+                coded_gt = tuple([allele_coding[allele] for allele in gt])
+            genotype_coding[gt] = coded_gt
+            recoded_gts.append(coded_gt)
+        return tuple(alleles), recoded_gts
+
+    @property
+    def variations(self):
+        for line in self.fhand:
+            items = line.split(self._sep)
+            items[-1] = items[-1].strip()
+
+            snp_id = items[self._snp_id_column]
+            alleles, gts = self._parse_gts(items)
+            var_info = self._var_info[snp_id]
+
+            alt_alleles = list(alleles[1:]) if len(alleles) > 1 else None
+
+            variation = {'chrom': var_info['chrom'], 'pos': var_info['pos'],
+                         'gts': gts, 'ref': alleles[0]}
+            if alt_alleles:
+                variation['alt'] = alt_alleles
+                if self.max_alt_alleles < len(alt_alleles):
+                    self.max_alt_alleles = len(alt_alleles)
+            yield variation
+
+
+class GenotypesMatrixParser2():
     def __init__(self, fhand, gt_coding, max_alt_allele, metadata_fhand=None,
                  sep=',', id_fieldnames=None, ref_field='ref', alt_field='alt',
                  snp_fieldnames=['id', 'chrom', 'pos'], ignore_alt=False):

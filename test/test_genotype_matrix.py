@@ -14,13 +14,14 @@ from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.genotypes_matrix import (GenotypesMatrixParser,
-                                        IUPAC_CODING, STANDARD_GT,
+from variation.genotypes_matrix import (CSVParser,
                                         change_gts_chain,
                                         collapse_alleles,
                                         merge_sorted_variations, merge_snps,
                                         merge_alleles, merge_variations,
-                                        transform_gts_to_merge)
+                                        transform_gts_to_merge,
+                                        def_gt_allele_splitter,
+                                        create_iupac_allele_splitter)
 from variation.variations.vars_matrices import VariationsH5
 from variation.genotypes_matrix import count_compatible_snps_in_chains
 from variation.variations.stats import _remove_nans
@@ -28,7 +29,61 @@ from test.test_utils import TEST_DATA_DIR, BIN_DIR
 
 
 class GtMatrixTest(unittest.TestCase):
-    def test_gt_matrix_parser(self):
+    def test_def_gt_allele_splitter(self):
+        assert def_gt_allele_splitter(b'-') == None
+        assert def_gt_allele_splitter(b'--') == None
+        assert def_gt_allele_splitter(b'') == None
+        assert def_gt_allele_splitter(b'A-') == [ord('A'), None]
+        assert def_gt_allele_splitter(b'AA') == [ord('A'), ord('A')]
+
+    def _var_gt_to_letter(self, variation):
+        gts = variation['gts']
+        allele_coding = {0: variation['ref']}
+        del variation['ref']
+        if 'alt' in variation:
+            allele_coding.update({idx+1: allele for idx, allele in
+                                                enumerate(variation['alt'])})
+            del variation['alt']
+        alleles = set(allele_coding.values())
+        variation['alleles'] = alleles
+
+        allele_coding[None] = None
+        new_gts = []
+        for gt in gts:
+            if gt is None:
+                new_gts.append(None)
+                continue
+            new_gts.append(tuple([allele_coding[allele] for allele in gt]))
+        variation['gts'] = new_gts
+
+    def test_csv_parser(self):
+        fhand = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex3.txt'))
+        var_info = {'1': {'chrom': 'SL2.40ch02', 'pos': 331954 },
+                    '2': {'chrom': 'SL2.40ch02', 'pos': 681961},
+                    '3': {'chrom': 'SL2.40ch02', 'pos': 1511764}}
+
+        parser = CSVParser(fhand, var_info, first_sample_column=3,
+                           sep='\t', snp_id_column=0,
+                           gt_splitter=create_iupac_allele_splitter())
+        expected = [{'gts': [('G', 'G'), ('T', 'T'), None],
+                     'alleles': set(['T', 'G']), 'pos': 331954,
+                     'chrom': 'SL2.40ch02'},
+                    {'gts': [('C', 'C'), ('C', 'C'), None],
+                     'pos': 681961, 'alleles': set(['C']),
+                     'chrom': 'SL2.40ch02'},
+                    {'gts': [('T', 'T'), ('T', 'T'), ('A', 'T')],
+                     'alleles': set(['T', 'A']),
+                     'pos': 1511764, 'chrom': 'SL2.40ch02'}]
+        for variation, expect in zip(parser.variations, expected):
+            self._var_gt_to_letter(variation)
+            for key in variation.keys():
+                assert variation[key] == expect[key]
+        fhand.close()
+        assert parser.samples == ['TS-1', 'TS-11', 'TS-21']
+        assert parser.max_alt_alleles == 1
+
+
+    def test_gt_matrix_parser2(self):
         fhand = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt'))
         parser = GenotypesMatrixParser(fhand, IUPAC_CODING,
                                        2, sep='\t',
@@ -367,5 +422,5 @@ class GtMatrixTest(unittest.TestCase):
             os.remove(merged_fpath + '.log')
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'GtMatrixTest.test_merge_variations']
+    import sys;sys.argv = ['', 'GtMatrixTest.test_csv_parser']
     unittest.main()

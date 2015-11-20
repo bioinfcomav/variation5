@@ -365,5 +365,5 @@ class VcfTest(unittest.TestCase):
         vcf_fhand2.close()
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
+    #import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
     unittest.main()

@@ -20,6 +20,7 @@ from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5)
 from variation.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
+from variation.variations.stats import _remove_nans
 
 
 def _create_var_mat_objs_from_h5(h5_fpath):
@@ -231,13 +232,47 @@ class VarMatsTests(unittest.TestCase):
         h5 = VariationsH5(path, mode='w')
         h5.put_vars_from_vcf(vcf_parser)
         fhand.close()
-        h5 = h5py.File(path, 'r')
+        h5 = VariationsH5(path, 'r')
         assert h5['/calls/GT'].shape == (5, 3, 2)
+        expected = numpy.array([[[51, 51], [51, 51], [-1, -1]],
+                                [[58, 50], [65, 3], [-1, -1]],
+                                [[23, 27], [18, 2], [-1, -1]],
+                                [[56, 60], [51, 51], [-1, -1]],
+                                [[-1, -1], [-1, -1], [-1, -1]]])
         assert numpy.all(h5['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
+        assert numpy.all(h5['/calls/HQ'] == expected)
         expected = numpy.array([48, 48, 43], dtype=numpy.int16)
         assert numpy.all(h5['/calls/GQ'][0, :] == expected)
-        os.remove(path)
 
+        # Variations filters fields
+        expected = numpy.array([False, True, False, False, False])
+        assert numpy.all(h5['/variations/filter/q10'][:] == expected)
+        expected = numpy.array([False, False, False, False, False])
+        assert numpy.all(h5['/variations/filter/s50'][:] == expected)
+        assert numpy.all(h5['/variations/filter/no_filters'][:] == expected)
+
+        # Variations info fields
+        expected = _remove_nans(numpy.array([[0.5, numpy.nan],
+                                             [0.01699829, numpy.nan],
+                                             [0.33300781, 0.66699219],
+                                             [numpy.nan, numpy.nan],
+                                             [numpy.nan, numpy.nan]],
+                                            dtype=numpy.float16))
+        af = _remove_nans(h5['/variations/info/AF'][:])
+        assert numpy.all(af == expected)
+        expected = numpy.array([3, 3, 2, 3, 3])
+        assert numpy.all(h5['/variations/info/NS'][:] == expected)
+        expected = numpy.array([14, 11, 10, 13, 9])
+        assert numpy.all(h5['/variations/info/DP'][:] == expected)
+        expected = numpy.array([b'', b'', b'T', b'T', b'G'])
+        assert numpy.all(h5['/variations/info/AA'][:] == expected)
+        expected = numpy.array([True, False, True, False, False])
+        assert numpy.all(h5['/variations/info/DB'][:] == expected)
+        expected = numpy.array([True, False, False, False, False])
+        assert numpy.all(h5['/variations/info/H2'][:] == expected)
+
+        os.remove(path)
+        return
         # With another file
         tmp_fhand = NamedTemporaryFile()
         path = tmp_fhand.name
@@ -302,6 +337,13 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GT'][:] == exp)
         os.remove(out_fpath)
 
+    def test_put_vars_to_vcf(self):
+        format_h5 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
+        vcf = open('/tmp/format_def_new.vcf', 'w')
+        format_h5.put_vars_to_vcf(vcf)
+        vcf.close()
+
+
 class VcfTest(unittest.TestCase):
 
     def test_vcf_detect_fields(self):
@@ -323,5 +365,5 @@ class VcfTest(unittest.TestCase):
         vcf_fhand2.close()
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VarMatsTests.test_csv_to_hdf5_bin']
+    import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
     unittest.main()

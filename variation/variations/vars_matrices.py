@@ -14,6 +14,7 @@ from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import (append_matrix, is_dataset, resize_matrix)
+from variation.variations.stats import _remove_nans
 # Missing docstring
 # pylint: disable=C0111
 
@@ -25,7 +26,8 @@ def _grouper(iterable, n, fillvalue=None):
 
 TYPES = {'int16': numpy.int16,
          'int32': numpy.int32,
-         'float16': numpy.float16}
+         'float16': numpy.float16,
+         'bool': numpy.bool}
 
 
 def _numpy_dtype(dtype, field, max_field_str_lens):
@@ -58,7 +60,6 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
         if field not in vcf.max_field_lens['INFO']:
             # We assume that it is not used by any SNP
             continue
-
         y_axes_size = vcf.max_field_lens['INFO'][field]
         if not y_axes_size:
             msg = 'This field is empty in the preread SNPs: '
@@ -568,10 +569,19 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                 snp_n = snp_i + chunk_i * vars_in_chunk
                 if grp == 'FILTER':
                     data = snp[6]
+                    data = [x.decode('utf-8') for x in data]
                     if field == 'no_filters':
                         data = data is None
                     else:
                         data = field in data
+                    try:
+                        slice_ = _create_slice(snp_n, data)
+                        matrix[slice_] = data
+                    except TypeError as error:
+                        if 'broadcast' in str(error):
+                            if field not in log['data_no_fit']:
+                                log['data_no_fit'][field] = 0
+                            log['data_no_fit'][field] += 1
                 elif grp == 'INFO':
                     info_data = snp[7]
                     info_data = info_data.get(byte_field, None)
@@ -698,6 +708,187 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
     if hasattr(hdf5, 'flush'):
         hdf5.flush()
     return log
+
+
+def _get_header_line(h5, _id, record, group=None):
+        required_fields = {'INFO': ['Number', 'Type', 'Description'],
+                           'FILTER': ['Description'],
+                           'FORMAT': ['Number', 'Type', 'Description'],
+                           'ATL': ['Description']}
+        if group is None:
+            line = '##{}={}'.format(_id.strip('/'), record)
+        else:
+            line = '##{}=<ID={}'.format(group, _id)
+            for key in required_fields[group]:
+                if key == 'Description':
+                    value = '"{}"'.format(record[key])
+                line += ',{}={}'.format(key, record[key])
+            for key, value in record.items():
+                if key in required_fields[group]:
+                    continue
+                line += ',{}={}'.format(key, value)
+            line += '>'
+        return line
+
+
+def _get_vcf_header(h5, vcf_format):
+    metadata = h5.metadata
+    yield '##fileformat={}'.format(vcf_format)
+    for key in sorted(metadata.keys()):
+        if isinstance(metadata[key], dict):
+            continue
+        yield _get_header_line(h5, key, metadata[key], group=None)
+
+    groups = ['INFO', 'FILTER', 'FORMAT', 'ALT', 'contig', 'SAMPLE',
+              'PEDIGREE', 'pedigreeDB']
+    fields = ['/variations/info', '/variations/filter',
+              '/calls', '/other/alt', '/other/contig', '/other/sample',
+              '/other/pedigree', '/other/pedigreedb']
+    for group, field in zip(groups, fields):
+        for key in sorted(metadata.keys()):
+            if not isinstance(metadata[key], dict) or field not in key:
+                continue
+            _id = key.split('/')[-1]
+            yield _get_header_line(h5, _id, metadata[key], group)
+
+
+def _get_fieldnames_line(h5):
+    fieldnames = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER',
+                  'INFO', 'FORMAT']
+    fieldnames.extend(h5.samples)
+    return '#{}'.format('\t'.join(fieldnames))
+
+
+def _get_value_filter(h5, n_snp, filter_paths):
+    filters = []
+    for key in filter_paths:
+        if h5[key][n_snp] != False:
+            filters.append(key.split('/')[-1])
+    if filters:
+        return ';'.join(filters)
+    elif 'no_filter' in filters:
+        return '.'
+    else:
+        return 'PASS'
+
+
+def _get_value_info(h5, n_snp, info_paths):
+    info = []
+    for key in info_paths:
+        if 'bool' in str(h5[key][n_snp].dtype):
+            if h5[key][n_snp]:
+                info.append(key.split('/')[-1])
+        elif 'S' in str(h5[key][n_snp].dtype):
+            if b'' != h5[key][n_snp]:
+                new_info = '{}={}'.format(key.split('/')[-1],
+                                          h5[key][n_snp].decode('utf-8'))
+                info.append(new_info)
+        else:
+            if 'numpy' in str(type(h5[key][n_snp])):
+                value = _remove_nans(h5[key][n_snp])
+                value = [str(x) for x in value]
+                value = ','.join(value)
+                new_info = '{}={}'.format(key.split('/')[-1],
+                                          value)
+            else:
+                new_info = '{}={}'.format(key.split('/')[-1],
+                                          value)
+            info.append(new_info)
+    return ';'.join(info)
+
+
+def _get_calls_per_sample(h5, n_snp, n_sample, calls_path):
+    calls_sample = []
+    for key in calls_path:
+        value = h5[key][n_snp][n_sample]
+        if 'GT' in key:
+            value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
+                     for x in value]
+            value = '|'.join(value)
+        elif h5.metadata[key]['Number'] > 1:
+            value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
+                     for x in value]
+            value = ','.join(value)
+        else:
+            if value == MISSING_VALUES[value.dtype]:
+                value = '.'
+            else:
+                value = str(value)
+        calls_sample.append(value)
+    return ':'.join(calls_sample)
+
+
+def _get_calls_samples(h5, n_snp, calls_paths):
+    calls_samples = []
+    for n_sample in range(len(h5.samples)):
+        calls_samples.append(_get_calls_per_sample(h5, n_snp, n_sample,
+                                                   calls_paths))
+    return '\t'.join(calls_samples)
+
+
+def _preprocess_format_calls_paths(h5, n_snp, format_paths, calls_paths):
+    for key in calls_paths:
+        matrix = numpy.array([])
+        for n_sample in range(len(h5.samples)):
+            matrix = numpy.append(matrix, h5[key][n_snp][n_sample])
+        value = MISSING_VALUES[h5[key].dtype] * matrix.shape[0]
+        if numpy.sum(matrix) == value:
+            calls_paths.remove(key)
+            format_paths.remove(key.split('/')[-1])
+    return
+
+
+def _put_vars_to_vcf(h5, vcf):
+    for line in _get_vcf_header(h5, vcf_format='VCFv4.0'):
+        vcf.write(line+'\n')
+    vcf.write(_get_fieldnames_line(h5)+'\n')
+    filter_paths = ['/variations/filter/q10', '/variations/filter/s50',
+                    '/variations/filter/no_filters']
+    info_paths = []
+    for key in h5.keys():
+        if 'info' in key:
+            info_paths.append(key)
+    format_paths, calls_paths = [], []
+    if '/calls/GT' in h5.keys():
+        format_paths = ['GT']
+        calls_paths = ['/calls/GT']
+    for key in h5.keys():
+        if 'calls' in key:
+            if 'GT' not in key:
+                format_paths.append(key.split('/')[-1])
+                calls_paths.append(key)
+
+    for n_snp in range(h5['/variations/filter/q10'][:].shape[0]):
+        snp = []
+        # Chrom ready
+        snp.append(h5['/variations/chrom'][n_snp].decode('utf-8'))
+        # Pos ready
+        snp.append(str(h5['/variations/pos'][n_snp]))
+        # ID ready
+        id = h5['/variations/id'][n_snp].decode('utf-8')
+        if id == MISSING_VALUES['str']:
+            id = '.'
+        snp.append(id)
+        # ref ready
+        snp.append(h5['/variations/ref'][n_snp].decode('utf-8'))
+        # alt ready
+        alt = [x.decode('utf-8') for x in h5['/variations/alt'][n_snp]
+               if x.decode('utf-8') != MISSING_VALUES['str']]
+        snp.append(','.join(alt))
+        # qual ready
+        snp.append(str(h5['/variations/qual'][n_snp]))
+        # Info ready
+        snp.append(_get_value_info(h5, n_snp, info_paths))
+        # Filters ready
+        snp.append(_get_value_filter(h5, n_snp, filter_paths))
+
+        _preprocess_format_calls_paths(h5, n_snp, format_paths, calls_paths)
+        # Format ready
+        snp.append(':'.join(format_paths))
+        # Calls gt samples ready
+        snp.append(_get_calls_samples(h5, n_snp, calls_paths))
+        vcf.write('\t'.join(snp)+'\n')
+
 
 
 class _VariationMatrices():
@@ -868,6 +1059,9 @@ class VariationsH5(_VariationMatrices):
 
     def put_vars_from_csv(self, csv):
         return _put_vars_from_csv(csv, self, self._vars_in_chunk)
+
+    def put_vars_to_vcf(self, vcf_fhand):
+        return _put_vars_to_vcf(self, vcf_fhand)
 
     def __getitem__(self, path):
         return self._h5file[path]

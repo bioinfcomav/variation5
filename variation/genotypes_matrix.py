@@ -4,13 +4,14 @@
 # pylint: disable=R0904
 # Missing docstring
 # pylint: disable=C0111
-from csv import DictReader
+
 from itertools import chain
 from variation import MISSING_VALUES, DEF_DSET_PARAMS
 from variation.variations.filters import filter_gt_no_data
 import numpy
 from variation.variations.vars_matrices import VariationsH5
 from variation.variations.vars_matrices import _create_matrix
+from variation.vcf import _do_nothing
 
 
 IUPAC = {b'A': b'AA', b'T': b'TT', b'C': b'CC', b'G': b'GG',
@@ -52,7 +53,7 @@ def create_iupac_allele_splitter(ploidy=2):
 class CSVParser():
     def __init__(self, fhand, var_info, gt_splitter=def_gt_allele_splitter,
                  first_sample_column=1, sample_line=0, snp_id_column=0,
-                 sep=','):
+                 sep=',', max_field_lens=None, max_field_str_lens=None):
         '''It reads genotype calls from a CSV file
 
         var_info can be either a dict or an OrderedDict with the snp_ids as
@@ -72,7 +73,45 @@ class CSVParser():
         self._var_info = var_info
 
         self.samples = self._get_samples()
-        self.max_field_lens = {'alt': 0}
+        self._determine_ploidy()
+        if max_field_lens is None:
+            self.max_field_lens = {'alt': 0}
+        else:
+            self.max_field_lens = max_field_lens
+        if max_field_str_lens is None:
+            self.max_field_str_lens = {'alt': 0,
+                                       'chrom': 0}
+        else:
+            self.max_field_str_lens = max_field_str_lens
+        self.metadata = {'CALLS': {b'GT': {'Description': 'Genotype',
+                                           'dtype': 'int',
+                                           'type_cast': _do_nothing}},
+                         'INFO': {}, 'FILTER': {}, 'OTHER': {},
+                         'VARIATIONS': {'alt': {'dtype': 'str'},
+                                        'chrom': {'dtype': 'str'},
+                                        'id': {'dtype': 'str'},
+                                        'pos': {'dtype': 'int32'},
+                                        'qual': {'dtype': 'float16'},
+                                        'ref': {'dtype': 'str'}}}
+        self.ignored_fields = []
+        self.kept_fields = []
+
+    def _determine_ploidy(self):
+        read_lines = []
+        for line in self.fhand:
+            read_lines.append(line)
+            items = line.split()
+            items[-1] = items[-1].strip()
+            gts = items[self._first_sample_column:]
+            gts = [self.gt_splitter(gt) for gt in gts]
+            for gt in gts:
+                if gt is None:
+                    continue
+                else:
+                    self.ploidy = len(gt)
+                    break
+
+        self.fhand = chain(read_lines, self.fhand)
 
     def _get_samples(self):
         for line_num, line in enumerate(self.fhand):
@@ -81,8 +120,8 @@ class CSVParser():
 
         raise RuntimeError("We didn't reach to sample line")
 
-    def _parse_gts(self, record):
-        gts = record[self._first_sample_column:]
+    def _parse_gts(self, items):
+        gts = items[self._first_sample_column:]
         recoded_gts = []
         gts = [self.gt_splitter(gt) for gt in gts]
         alleles = set()
@@ -107,6 +146,7 @@ class CSVParser():
     @property
     def variations(self):
         max_field_lens = self.max_field_lens
+        max_field_str_lens = self.max_field_str_lens
         for line in self.fhand:
             items = line.split(self._sep)
             items[-1] = items[-1].strip()
@@ -120,6 +160,9 @@ class CSVParser():
             if alt_alleles:
                 if max_field_lens['alt'] < len(alt_alleles):
                     max_field_lens['alt'] = len(alt_alleles)
+                max_len = max(len(allele) for allele in alt_alleles)
+                if max_field_str_lens['alt'] < max_len:
+                    max_field_str_lens['alt'] = max_len
 
             variation = (var_info['chrom'], var_info['pos'], snp_id,
                          alleles[0], alt_alleles, None, None, None, gts)
@@ -539,3 +582,4 @@ def merge_variations(variations1, variations2, merged_fpath, fields_funct={},
         merged_variations[path].resize(new_shape)
     log['total_merged_snps'] = merged_variations['/variations/pos'].shape[0]
     return merged_variations, log
+

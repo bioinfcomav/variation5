@@ -22,7 +22,7 @@ from variation.genotypes_matrix import (CSVParser,
                                         merge_sorted_variations, merge_snps,
                                         merge_alleles, merge_variations,
                                         transform_gts_to_merge)
-from variation.variations.vars_matrices import VariationsH5
+from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from variation.genotypes_matrix import count_compatible_snps_in_chains
 from variation.variations.stats import _remove_nans
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
@@ -86,6 +86,7 @@ class CSVParserTest(unittest.TestCase):
         assert parser.samples == [b'SR-9', b'SR-12', b'SR-13', b'SR-15',
                                   b'SR-18']
         assert parser.max_field_lens['alt'] == 2
+        assert parser.ploidy == 2
 
         # IUPAC file
         fhand = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex3.txt'), 'rb')
@@ -110,43 +111,75 @@ class CSVParserTest(unittest.TestCase):
         fhand.close()
         assert parser.samples == [b'TS-1', b'TS-11', b'TS-21']
         assert parser.max_field_lens['alt'] == 1
+        assert parser.ploidy == 2
 
     def test_put_vars_from_csv(self):
-        fhand_ex = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt'))
-        parser = GenotypesMatrixParser(fhand_ex, IUPAC_CODING,
-                                       2, sep='\t',
-                                       snp_fieldnames=['chrom', 'pos'])
+        fhand_ex = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex3.txt'), 'rb')
+        var_info = {b'1': {'chrom': b'SL2.40ch02', 'pos': 331954},
+                    b'2': {'chrom': b'SL2.40ch02', 'pos': 681961},
+                    b'3': {'chrom': b'SL2.40ch02', 'pos': 1511764}}
+        parser = CSVParser(fhand_ex, var_info, first_sample_column=3, sep='\t',
+                           gt_splitter=create_iupac_allele_splitter(),
+                           max_field_lens={'alt': 1},
+                           max_field_str_lens={'alt': 1, 'chrom':20})
 
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
             h5 = VariationsH5(fhand.name, mode='w')
-            h5.put_vars_from_csv(parser)
+            h5.put_vars(parser)
             exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
             assert list(h5['/variations/chrom'][:]) == exp
-            assert list(h5['/variations/ref'][:]) == [b'T', b'C', b'T']
+            alleles = list(zip(h5['/variations/ref'],
+                           [alts[0] for alts in h5['/variations/alt']]))
+            exp = [(b'G', b'T'), (b'C', b''), (b'A', b'T')]
+            for als, aexp in zip(alleles, exp):
+                assert set(als) == set(aexp)
             assert list(h5['/variations/pos'][:]) == [331954, 681961,
                                                       1511764]
-            exp = numpy.array([[[1, 1], [0, 0], [-1, -1]],
-                               [[0, 0], [0, 0], [-1, -1]],
-                               [[0, 0], [0, 0], [1, 0]]])
-            assert numpy.all(h5['/calls/GT'][:] == exp)
+            exp1 = numpy.array([[[1, 1], [0, 0], [-1, -1]],
+                                [[0, 0], [0, 0], [-1, -1]],
+                                [[0, 0], [0, 0], [1, 0]]])
+            exp2 = numpy.array([[[0, 0], [1, 1], [-1, -1]],
+                                [[0, 0], [0, 0], [-1, -1]],
+                                [[1, 1], [1, 1], [0, 1]]])
+            for gts, exp_gts1, exp_gts2 in zip(h5['/calls/GT'][:], exp1, exp2):
+                for gt, ex1, ex2 in zip(gts, exp_gts1, exp_gts2):
+                    assert set(gt) == set(ex1) or set(gt) == set(ex2)
 
         if os.path.exists(fhand.name):
             os.remove(fhand.name)
         fhand_ex.close()
-        fhand_ex2 = open(join(TEST_DATA_DIR, 'csv', 'iupac_ex2.txt'))
-        parser = GenotypesMatrixParser(fhand_ex2, IUPAC_CODING,
-                                       2, sep='\t',
-                                       snp_fieldnames=['chrom', 'pos'])
 
-        with NamedTemporaryFile(suffix='.h5') as fhand:
-            os.remove(fhand.name)
-            h5 = VariationsH5(fhand.name, mode='w')
-            h5.put_vars_from_csv(parser)
+        fhand_ex = open(join(TEST_DATA_DIR, 'csv',
+                             'two_letter_coding_ex3.txt'), 'rb')
+        var_info = {b'1': {'chrom': b'SL2.40ch02', 'pos': 331954},
+                    b'2': {'chrom': b'SL2.40ch02', 'pos': 681961},
+                    b'3': {'chrom': b'SL2.40ch02', 'pos': 1511764}}
+        parser = CSVParser(fhand_ex, var_info, first_sample_column=3, sep='\t',
+                           max_field_lens={'alt': 1},
+                           max_field_str_lens={'alt': 1, 'chrom':20})
 
-        if os.path.exists(fhand.name):
-            os.remove(fhand.name)
-        fhand_ex2.close()
+        h5 = VariationsArrays()
+        h5.put_vars(parser)
+        exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
+        assert list(h5['/variations/chrom'][:]) == exp
+        alleles = list(zip(h5['/variations/ref'],
+                       [alts[0] for alts in h5['/variations/alt']]))
+        exp = [(b'G', b'T'), (b'C', b''), (b'A', b'T')]
+        for als, aexp in zip(alleles, exp):
+            assert set(als) == set(aexp)
+        assert list(h5['/variations/pos'][:]) == [331954, 681961,
+                                                  1511764]
+        exp1 = numpy.array([[[1, 1], [0, 0], [-1, -1]],
+                            [[0, 0], [0, 0], [-1, -1]],
+                            [[0, 0], [0, 0], [1, 0]]])
+        exp2 = numpy.array([[[0, 0], [1, 1], [-1, -1]],
+                            [[0, 0], [0, 0], [-1, -1]],
+                            [[1, 1], [1, 1], [0, 1]]])
+        for gts, exp_gts1, exp_gts2 in zip(h5['/calls/GT'][:], exp1, exp2):
+            for gt, ex1, ex2 in zip(gts, exp_gts1, exp_gts2):
+                assert set(gt) == set(ex1) or set(gt) == set(ex2)
+        fhand_ex.close()
 
     def test_count_compatible_snsp_in_chains(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
@@ -392,7 +425,4 @@ class CSVParserTest(unittest.TestCase):
             os.remove(merged_fpath + '.log')
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'CSVParserTest.test_def_gt_allele_splitter',
-                           'CSVParserTest.test_create_iupac_splitter',
-                           'CSVParserTest.test_csv_parser']
     unittest.main()

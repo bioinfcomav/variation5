@@ -66,10 +66,9 @@ def main():
                            ignored_fields=args['ignored_fields'],
                            kept_fields=args['kept_fields'],
                            max_field_lens={'CALLS': {b'AO': args['alt_gt_num']},
-                                           'alt': args['alt_gt_num']},
-                           ignore_alt=args['ignore_alt'])
+                                           'alt': args['alt_gt_num']}   )
     h5 = VariationsH5(args['out_fpath'], mode='w')
-    h5.put_vars_from_vcf(vcf_parser)
+    h5.put_vars(vcf_parser)
 
 
 if __name__ == '__main__':

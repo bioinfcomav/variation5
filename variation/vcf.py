@@ -66,8 +66,7 @@ class VCFParser():
 
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
-                 max_field_lens=None, max_n_vars=None,
-                 ignore_alt=False):
+                 max_field_lens=None, max_n_vars=None):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
@@ -86,7 +85,6 @@ class VCFParser():
         kept_fields = [field.encode('utf-8') for field in kept_fields]
         self.ignored_fields = ignored_fields
         self.kept_fields = kept_fields
-        self.ignore_alt = ignore_alt
         self._determine_ploidy()
 
         self._empty_gt = [MISSING_VALUES[int]] * self.ploidy

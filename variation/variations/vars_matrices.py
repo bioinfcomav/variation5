@@ -392,129 +392,22 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
     return var_matrices
 
 
-def _put_vars_from_csv(csv, hdf5, vars_in_chunk):
+def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
+                      ignored_fields=None):
 
-    ignore_alt = csv.ignore_alt
+    ignore_alt = hdf5.ignore_alt_overflow
+    snps = vars_parser.variations
     log = {'data_no_fit': {},
            'variations_processed': 0,
            'alt_max_detected': 0,
            'num_alt_item_descarted': 0}
 
-    fmt_matrices = _prepare_gt_dataset(csv, hdf5, vars_in_chunk)
-    var_matrices = _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk)
-
-    paths = list(var_matrices.keys())
-    paths.extend(fmt_matrices.keys())
-
-    snp_chunks = _grouper(csv, vars_in_chunk)
-    for chunk_i, chunk in enumerate(snp_chunks):
-        chunk = list(chunk)
-        first_field = True
-        for path in paths:
-            if path in var_matrices:
-                grp = 'VARIATIONS'
-            else:
-                grp = 'CALLS'
-            matrix = hdf5[path]
-            # resize the dataset to fit the new chunk
-            size = matrix.shape
-            new_size = list(size)
-            new_size[0] = vars_in_chunk * (chunk_i + 1)
-
-            resize_matrix(matrix, new_size)
-
-            field = posixpath.basename(path)
-
-            # We store the information
-            for snp_i, snp in enumerate(chunk):
-                if snp is None:
-                    break
-                if first_field:
-                    log['variations_processed'] += 1
-                # snp_n es el indice que se moverá en cada array
-                snp_n = snp_i + chunk_i * vars_in_chunk
-                if grp == 'VARIATIONS':
-                    item = snp[field]
-                    if item is not None:
-                        try:
-                            slice_ = _create_slice(snp_n, item)
-                            if isinstance(item, list):
-                                item = [x.encode('utf-8') for x in item]
-                            elif 'pos' not in field:
-                                item = item.encode('utf-8')
-                            matrix[slice_] = item
-                        except TypeError as error:
-                            if 'broadcast' in str(error) and field == 'alt':
-                                if not ignore_alt:
-                                    msg = 'More alt alleles than expected.'
-                                    msg2 = 'Expected, present: {}, {}'
-                                    msg2 = msg2.format(size[1], len(item))
-                                    msg += msg2
-                                    msg = '\nYou might fix it prereading more'
-                                    msg += ' SNPs, or passing: '
-                                    msg += 'max_field_lens={'
-                                    msg += '"alt":{}'.format(len(item))
-                                    msg += '}\nto VCF reader'
-                                    raise TypeError(msg)
-                                else:
-                                    log['num_alt_item_descarted'] += 1
-                                    if log['alt_max_detected'] < len(item):
-                                        log['alt_max_detected'] = len(item)
-                                    continue
-                elif grp == 'CALLS':
-                    # store the calldata
-                    try:
-                        gts = snp['gts']
-                    except TypeError:
-                        # SNP is None
-                        break
-                    if gts is not None:
-
-                        try:
-                            slice_ = _create_slice(snp_n, gts)
-                            matrix[slice_] = gts
-                        except TypeError as error:
-                            if 'broadcast' in str(error):
-                                if field not in log['data_no_fit']:
-                                    log['data_no_fit'][field] = 0
-                                log['data_no_fit'][field] += 1
-                        except:
-                            print('snp_id', snp_i)
-                            print('field', field)
-                            print('failed data', gts)
-                            raise
-            first_field = False
-    # we have to remove the empty snps from the last chunk
-
-    for path in paths:
-        matrix = hdf5[path]
-        size = matrix.shape
-        new_size = list(size)
-        snp_n = snp_i + chunk_i * vars_in_chunk
-        new_size[0] = snp_n
-
-        resize_matrix(matrix, new_size)
-    hdf5._set_samples(csv.samples)
-
-    if hasattr(hdf5, 'flush'):
-        hdf5.flush()
-    return log
-
-
-def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
-                       ignored_fields=None):
-
-    ignore_alt = vcf.ignore_alt
-    snps = vcf.variations
-    log = {'data_no_fit': {},
-           'variations_processed': 0,
-           'alt_max_detected': 0,
-           'num_alt_item_descarted': 0}
-
-    fmt_matrices = _prepate_call_datasets(vcf, hdf5, vars_in_chunk)
-    info_matrices = _prepare_info_datasets(vcf, hdf5, vars_in_chunk)
-    filter_matrices = _prepare_filter_datasets(vcf, hdf5, vars_in_chunk)
-    var_matrices = _prepare_variation_datasets(vcf, hdf5, vars_in_chunk)
+    fmt_matrices = _prepate_call_datasets(vars_parser, hdf5, vars_in_chunk)
+    info_matrices = _prepare_info_datasets(vars_parser, hdf5, vars_in_chunk)
+    filter_matrices = _prepare_filter_datasets(vars_parser,
+                                               hdf5, vars_in_chunk)
+    var_matrices = _prepare_variation_datasets(vars_parser, hdf5,
+                                               vars_in_chunk)
 
     paths = list(var_matrices.keys())
     paths.extend(fmt_matrices.keys())
@@ -551,9 +444,9 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                 missing_val = False
             else:
                 try:
-                    dtype = vcf.metadata[grp][field]['dtype']
+                    dtype = vars_parser.metadata[grp][field]['dtype']
                 except KeyError:
-                    dtype = vcf.metadata[grp][byte_field]['dtype']
+                    dtype = vars_parser.metadata[grp][byte_field]['dtype']
                 missing_val = MISSING_VALUES[dtype]
 
             # We store the information
@@ -670,7 +563,7 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
                                                     for item in call_sample_data]
                         # In case of GL and GT [[[1,2,3],[1,2,3],[1,2,3], none]]
                         elif len(size) > 2:
-                            call_sample_data = [[missing_val]*size[-1]
+                            call_sample_data = [[missing_val] * size[-1]
                                                 if item is None else item
                                                 for item in call_sample_data]
                         if call_sample_data is not None:
@@ -699,10 +592,10 @@ def _put_vars_from_vcf(vcf, hdf5, vars_in_chunk, kept_fields=None,
         new_size[0] = snp_n
 
         resize_matrix(matrix, new_size)
-    metadata = _prepare_metadata(vcf.metadata)
+    metadata = _prepare_metadata(vars_parser.metadata)
     hdf5._set_metadata(metadata)
 
-    samples = [sample.decode('utf-8') for sample in vcf.samples]
+    samples = [sample.decode('utf-8') for sample in vars_parser.samples]
     hdf5._set_samples(samples)
 
     if hasattr(hdf5, 'flush'):
@@ -1043,7 +936,8 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 
 class VariationsH5(_VariationMatrices):
-    def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK):
+    def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
+                 ignore_alt_overflow=False):
         self._fpath = fpath
         if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
@@ -1053,12 +947,10 @@ class VariationsH5(_VariationMatrices):
         self.mode = mode
         self._h5file = h5py.File(fpath, mode)
         self._vars_in_chunk = vars_in_chunk
+        self.ignore_alt_overflow = ignore_alt_overflow
 
-    def put_vars_from_vcf(self, vcf):
-        return _put_vars_from_vcf(vcf, self, self._vars_in_chunk)
-
-    def put_vars_from_csv(self, csv):
-        return _put_vars_from_csv(csv, self, self._vars_in_chunk)
+    def put_vars(self, var_parser):
+        return _put_vars_in_mats(var_parser, self, self._vars_in_chunk)
 
     def put_vars_to_vcf(self, vcf_fhand):
         return _put_vars_to_vcf(self, vcf_fhand)
@@ -1170,14 +1062,16 @@ def select_dset_from_chunks(chunks, dset_path):
 
 
 class VariationsArrays(_VariationMatrices):
-    def __init__(self, vars_in_chunk=SNPS_PER_CHUNK):
+    def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
+                 ignore_alt_overflow=False):
         self._vars_in_chunk = vars_in_chunk
         self._hArrays = {}
         self._metadata = {}
         self._samples = []
+        self.ignore_alt_overflow = ignore_alt_overflow
 
-    def put_vars_from_vcf(self, vcf):
-        return _put_vars_from_vcf(vcf, self, self._vars_in_chunk)
+    def put_vars(self, vars_parser):
+        return _put_vars_in_mats(vars_parser, self, self._vars_in_chunk)
 
     def __getitem__(self, path):
         return self._hArrays[path]

@@ -40,7 +40,7 @@ def _create_var_mat_objs_from_vcf(vcf_fpath, kwargs, kept_fields=None,
             fhand = open(vcf_fpath, 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=100000, **kwargs)
         out_snps = _init_var_mat(klass)
-        out_snps.put_vars_from_vcf(vcf_parser)
+        out_snps.put_vars(vcf_parser)
         fhand.close()
         yield out_snps
 
@@ -55,11 +55,11 @@ class VcfH5Test(unittest.TestCase):
     def test_put_vars_hdf5_from_vcf(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
-                        max_field_lens={'alt': 4}, ignore_alt=True)
+                        max_field_lens={'alt': 4})
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
-            h5f.put_vars_from_vcf(vcf)
+            h5f.put_vars(vcf)
             assert h5f['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(h5f['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
             expected = numpy.array([48, 48, 43], dtype=numpy.int16)
@@ -70,7 +70,7 @@ class VcfH5Test(unittest.TestCase):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
         snps = VariationsArrays()
-        snps.put_vars_from_vcf(vcf)
+        snps.put_vars(vcf)
         assert snps['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
         expected = numpy.array([48, 48, 43], dtype=numpy.int16)
@@ -148,7 +148,7 @@ class VarMatsTests(unittest.TestCase):
             fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
             vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
             var_mat = _init_var_mat(klass)
-            var_mat.put_vars_from_vcf(vcf_parser)
+            var_mat.put_vars(vcf_parser)
             assert numpy.all(var_mat.allele_count == expected)
             fhand.close()
 
@@ -201,7 +201,7 @@ class VarMatsTests(unittest.TestCase):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
         snps = VariationsArrays()
-        snps.put_vars_from_vcf(vcf)
+        snps.put_vars(vcf)
         del snps['/calls/GT']
         assert '/calls/GT' not in snps.keys()
         vcf_fhand.close()
@@ -212,7 +212,7 @@ class VarMatsTests(unittest.TestCase):
             vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000,
                                    kept_fields=['/calls/GT'])
             var_mat = _init_var_mat(klass)
-            var_mat.put_vars_from_vcf(vcf_parser)
+            var_mat.put_vars(vcf_parser)
             metadata = var_mat.metadata
             assert '/variations/filter/q10' in metadata.keys()
 
@@ -230,7 +230,7 @@ class VarMatsTests(unittest.TestCase):
         fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
         h5 = VariationsH5(path, mode='w')
-        h5.put_vars_from_vcf(vcf_parser)
+        h5.put_vars(vcf_parser)
         fhand.close()
         h5 = VariationsH5(path, 'r')
         assert h5['/calls/GT'].shape == (5, 3, 2)
@@ -281,7 +281,7 @@ class VarMatsTests(unittest.TestCase):
         fhand = open(join(TEST_DATA_DIR, 'phylome.sample.vcf'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
         h5 = VariationsH5(path, mode='w')
-        h5.put_vars_from_vcf(vcf_parser)
+        h5.put_vars(vcf_parser)
         fhand.close()
         h5 = h5py.File(path, 'r')
         assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
@@ -354,10 +354,10 @@ class VcfTest(unittest.TestCase):
         vcf2 = VCFParser(vcf_fhand2, pre_read_max_size=1000,
                          ignored_fields=['/variations/qual'])
         snps = VariationsArrays()
-        snps.put_vars_from_vcf(vcf)
+        snps.put_vars(vcf)
         metadata = snps.metadata
         snps2 = VariationsArrays()
-        snps2.put_vars_from_vcf(vcf2)
+        snps2.put_vars(vcf2)
         metadata2 = snps2.metadata
         assert '/calls/HQ' in metadata.keys()
         assert '/variations/qual' not in metadata2.keys()

@@ -4,125 +4,167 @@
 # pylint: disable=R0904
 # Missing docstring
 # pylint: disable=C0111
-from csv import DictReader
+
 from itertools import chain
 from variation import MISSING_VALUES, DEF_DSET_PARAMS
 import numpy
 from variation.variations.vars_matrices import VariationsH5
 from variation.variations.vars_matrices import _create_matrix
+from variation.vcf import _do_nothing
 
 
-IUPAC = {'A': 'AA', 'T': 'TT', 'C': 'CC', 'G': 'GG',
-         'W': 'AT', 'M': 'AC', 'R': 'AG', '': '--',
-         'Y': 'TC', 'K': 'TG', 'S': 'CG', '-': '--'}
-IUPAC_CODING = 'iupac'
-STANDARD_GT = 'standard'
-DECODE = {IUPAC_CODING: lambda x: IUPAC[x],
-          STANDARD_GT: lambda x: x}
+IUPAC = {b'A': b'AA', b'T': b'TT', b'C': b'CC', b'G': b'GG',
+         b'W': b'AT', b'M': b'AC', b'R': b'AG', b'': b'-',
+         b'Y': b'TC', b'K': b'TG', b'S': b'CG', b'-': b'-'}
 
 
-class GenotypesMatrixParser():
-    def __init__(self, fhand, gt_coding, max_alt_allele, metadata_fhand=None,
-                 sep=',', id_fieldnames=None, ref_field='ref', alt_field='alt',
-                 snp_fieldnames=['id', 'chrom'], ignore_alt=False):
+MISSING_GT_VALUES = (b'-', b'', b'.', b'--')
+MISSING_ALLELE_VALUES = (ord('-'), ord('N'))
+
+
+def def_gt_allele_splitter(gt):
+    if gt in MISSING_GT_VALUES:
+        return None
+    not_missing = False
+    alleles = []
+    for allele in gt:
+        allele = allele
+        if allele in MISSING_ALLELE_VALUES:
+            allele = None
+        else:
+            not_missing = True
+        alleles.append(allele)
+    if not not_missing:
+        alleles = None
+    return tuple(alleles)
+
+
+def create_iupac_allele_splitter(ploidy=2):
+    if ploidy != 2:
+        msg = 'It is not possible to generate the genotypes for other ploidy'
+        raise ValueError(msg)
+
+    def iupac_allele_splitter(gt):
+        return def_gt_allele_splitter(IUPAC[gt])
+    return iupac_allele_splitter
+
+
+class CSVParser():
+    def __init__(self, fhand, var_info, gt_splitter=def_gt_allele_splitter,
+                 first_sample_column=1, sample_line=0, snp_id_column=0,
+                 sep=',', max_field_lens=None, max_field_str_lens=None):
+        '''It reads genotype calls from a CSV file
+
+        var_info can be either a dict or an OrderedDict with the snp_ids as
+        keys and the values should have a dict with, at least, the keys chrom
+        and pos. The rest of the key can match the VCF fields.
+
+        gt_splitter should take a genotype as it is stored in the CSV file and
+        it should return a tuple with the alleles in byte format.
+        '''
         self.fhand = fhand
-        self.ploidy = 2
-        self.ignore_alt = ignore_alt
-        self.ref_field = ref_field
-        self.alt_field = alt_field
-        self.are_ref_alt_fieldnames = True
-        if id_fieldnames is None and metadata_fhand is not None:
-            raise ValueError('id_fieldnames is required when metadata is set')
-        self.id_fieldnames = id_fieldnames
-        self.metadata_fhand = metadata_fhand
-        self.sep = sep
-        if gt_coding not in [IUPAC_CODING, STANDARD_GT]:
-            raise ValueError('Genotype coding not supported')
-        self.gt_coding = gt_coding
-        self.samples = None
-        self.max_alt_allele = max_alt_allele
-        self.snp_fieldnames = snp_fieldnames
-        print('dentro del init', self.snp_fieldnames)
-        self.snp_fieldnames_final = snp_fieldnames.copy()
-        if self.ref_field not in self.snp_fieldnames:
-            self.snp_fieldnames_final.extend([self.ref_field, self.alt_field])
-            self.are_ref_alt_fieldnames = False
-        self._create_reader()
+        self._sample_line = sample_line
+        self._first_sample_column = first_sample_column
+        self._sep = sep.encode('utf-8')
+        self._snp_id_column = snp_id_column
+        self.gt_splitter = gt_splitter
+        self._var_info = var_info
 
-    def _merge_dicts(self, dict1, dict2, id_fieldnames=['id', 'id']):
-        if dict1[id_fieldnames[0]] != dict2[id_fieldnames[1]]:
-            raise ValueError('Ids in file do not match')
+        self.samples = self._get_samples()
+        self._determine_ploidy()
+        if max_field_lens is None:
+            self.max_field_lens = {'alt': 0}
         else:
-            return {key: value for key, value in chain(dict1.items(),
-                                                       dict2.items())}
+            self.max_field_lens = max_field_lens
+        if max_field_str_lens is None:
+            self.max_field_str_lens = {'alt': 0,
+                                       'chrom': 0}
+        else:
+            self.max_field_str_lens = max_field_str_lens
+        self.metadata = {'CALLS': {b'GT': {'Description': 'Genotype',
+                                           'dtype': 'int',
+                                           'type_cast': _do_nothing}},
+                         'INFO': {}, 'FILTER': {}, 'OTHER': {},
+                         'VARIATIONS': {'alt': {'dtype': 'str'},
+                                        'chrom': {'dtype': 'str'},
+                                        'id': {'dtype': 'str'},
+                                        'pos': {'dtype': 'int32'},
+                                        'qual': {'dtype': 'float16'},
+                                        'ref': {'dtype': 'str'}}}
+        self.ignored_fields = []
+        self.kept_fields = []
 
-    def _parse_record(self, record):
-        parsed_record = {'gts': []}
-        gts = []
+    def _determine_ploidy(self):
+        read_lines = []
+        for line in self.fhand:
+            read_lines.append(line)
+            items = line.split()
+            items[-1] = items[-1].strip()
+            gts = items[self._first_sample_column:]
+            gts = [self.gt_splitter(gt) for gt in gts]
+            for gt in gts:
+                if gt is None:
+                    continue
+                else:
+                    self.ploidy = len(gt)
+                    break
+
+        self.fhand = chain(read_lines, self.fhand)
+
+    def _get_samples(self):
+        for line_num, line in enumerate(self.fhand):
+            if line_num == self._sample_line:
+                return line.strip().split(self._sep)[self._first_sample_column:]
+
+        raise RuntimeError("We didn't reach to sample line")
+
+    def _parse_gts(self, items):
+        gts = items[self._first_sample_column:]
+        recoded_gts = []
+        gts = [self.gt_splitter(gt) for gt in gts]
         alleles = set()
-        for key in self.snp_fieldnames:
-            print(key)
-            print(record[key])
-            parsed_record[key] = record[key]
-        for sample in self.samples:
-            gt = DECODE[self.gt_coding](record[sample])
-            if gt == '':
-                gt = '--'
-            if len(gt) != 2:
-                raise ValueError('Wrong gt coding given')
-            gts.append(gt)
-            alleles.add(gt[0])
-            alleles.add(gt[1])
-        alleles = sorted(list(alleles))
-        if '-' in alleles and len(alleles) > 1:
-            alleles.remove('-')
-        if self.are_ref_alt_fieldnames is False:
-            ref = alleles.pop()
-            alt = alleles
-        else:
-            ref = record[self.ref_field]
-            alleles.remove(ref)
-            alt = alleles
-        parsed_record['ref'] = ref
-        parsed_record['alt'] = alt
         for gt in gts:
-            gt_new = [0, 0]
-            if gt[0] == '-':
-                gt_new = [MISSING_VALUES[int], MISSING_VALUES[int]]
-            else:
-                for i, alt_allele in enumerate(alt):
-                    if alt_allele == gt[0]:
-                        gt_new[0] = i + 1
-                    if alt_allele == gt[1]:
-                        gt_new[1] = i + 1
-            parsed_record['gts'].append(gt_new)
+            if gt is None:
+                continue
+            for allele in gt:
+                alleles.add(allele)
+        allele_coding = {allele: idx for idx, allele in enumerate(alleles)}
+        allele_coding[None] = None
+        genotype_coding = {None: None}
+        for gt in gts:
+            try:
+                coded_gt = genotype_coding[gt]
+            except KeyError:
+                coded_gt = tuple([allele_coding[allele] for allele in gt])
+            genotype_coding[gt] = coded_gt
+            recoded_gts.append(coded_gt)
+        return (tuple([chr(allele).encode() for allele in alleles]),
+                [(b'GT', recoded_gts)])
 
-        if not parsed_record['alt']:
-            parsed_record['alt'] = [MISSING_VALUES[str]]
-        try:
-            parsed_record['pos'] = int(parsed_record['pos'])
-        except KeyError:
-            pass
-        return parsed_record
+    @property
+    def variations(self):
+        max_field_lens = self.max_field_lens
+        max_field_str_lens = self.max_field_str_lens
+        for line in self.fhand:
+            items = line.split(self._sep)
+            items[-1] = items[-1].strip()
 
-    def _create_reader(self):
-        reader = DictReader(self.fhand, delimiter=self.sep)
-        self.samples = [f for f in reader.fieldnames
-                        if f not in self.snp_fieldnames]
-        if self.metadata_fhand is not None:
-            reader = (self._merge_dicts(meta, record,
-                                        id_fieldnames=self.id_fieldnames)
-                      for meta, record in zip(DictReader(self.metadata_fhand,
-                                                         delimiter=self.sep),
-                                              reader))
-        self.reader = reader
+            snp_id = items[self._snp_id_column]
+            alleles, gts = self._parse_gts(items)
+            var_info = self._var_info[snp_id]
 
-    def __iter__(self):
-        for record in self.reader:
-            print('record', record)
-            record = self._parse_record(record)
-            if len(record['alt']) <= self.max_alt_allele:
-                yield record
+            alt_alleles = list(alleles[1:]) if len(alleles) > 1 else None
+
+            if alt_alleles:
+                if max_field_lens['alt'] < len(alt_alleles):
+                    max_field_lens['alt'] = len(alt_alleles)
+                max_len = max(len(allele) for allele in alt_alleles)
+                if max_field_str_lens['alt'] < max_len:
+                    max_field_str_lens['alt'] = max_len
+
+            variation = (var_info['chrom'], var_info['pos'], snp_id,
+                         alleles[0], alt_alleles, None, None, None, gts)
+            yield variation
 
 
 def count_compatible_snps_in_strands(variations, array_specification_matrix,
@@ -543,3 +585,4 @@ def merge_variations(variations1, variations2, merged_fpath, fields_funct={},
         merged_variations[path].resize(new_shape)
     log['total_merged_snps'] = merged_variations['/variations/pos'].shape[0]
     return merged_variations, log
+

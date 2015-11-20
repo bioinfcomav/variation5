@@ -24,7 +24,7 @@ DECODE = {IUPAC_CODING: lambda x: IUPAC[x],
 class GenotypesMatrixParser():
     def __init__(self, fhand, gt_coding, max_alt_allele, metadata_fhand=None,
                  sep=',', id_fieldnames=None, ref_field='ref', alt_field='alt',
-                 snp_fieldnames=['id', 'chrom', 'pos'], ignore_alt=False):
+                 snp_fieldnames=['id', 'chrom'], ignore_alt=False):
         self.fhand = fhand
         self.ploidy = 2
         self.ignore_alt = ignore_alt
@@ -42,6 +42,7 @@ class GenotypesMatrixParser():
         self.samples = None
         self.max_alt_allele = max_alt_allele
         self.snp_fieldnames = snp_fieldnames
+        print('dentro del init', self.snp_fieldnames)
         self.snp_fieldnames_final = snp_fieldnames.copy()
         if self.ref_field not in self.snp_fieldnames:
             self.snp_fieldnames_final.extend([self.ref_field, self.alt_field])
@@ -60,6 +61,8 @@ class GenotypesMatrixParser():
         gts = []
         alleles = set()
         for key in self.snp_fieldnames:
+            print(key)
+            print(record[key])
             parsed_record[key] = record[key]
         for sample in self.samples:
             gt = DECODE[self.gt_coding](record[sample])
@@ -116,6 +119,7 @@ class GenotypesMatrixParser():
 
     def __iter__(self):
         for record in self.reader:
+            print('record', record)
             record = self._parse_record(record)
             if len(record['alt']) <= self.max_alt_allele:
                 yield record

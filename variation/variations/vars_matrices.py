@@ -516,7 +516,7 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                             matrix[slice_] = item
                         except TypeError as error:
                             if 'broadcast' in str(error) and field == 'alt':
-                                if not ignore_alt:
+                                if field == 'alt' and not ignore_alt:
                                     msg = 'More alt alleles than expected.'
                                     msg2 = 'Expected, present: {}, {}'
                                     msg2 = msg2.format(size[1], len(item))
@@ -532,6 +532,7 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                                     if log['alt_max_detected'] < len(item):
                                         log['alt_max_detected'] = len(item)
                                     continue
+                            raise
                 elif grp == 'CALLS':
                     # store the calldata
                     gt_data = dict(gt_data)
@@ -781,7 +782,6 @@ def _put_vars_to_vcf(h5, vcf):
         # Calls gt samples ready
         snp.append(_get_calls_samples(h5, n_snp, calls_paths))
         vcf.write('\t'.join(snp)+'\n')
-
 
 
 class _VariationMatrices():

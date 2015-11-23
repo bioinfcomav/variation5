@@ -21,7 +21,7 @@ from variation.genotypes_matrix import (change_gts_chain,
                                         transform_gts_to_merge)
 
 from variation.variations.vars_matrices import VariationsH5
-from variation.genotypes_matrix import count_compatible_snps_in_strands
+from variation.genotypes_matrix import count_compatible_snps
 
 from variation.variations.stats import _remove_nans
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
@@ -31,15 +31,17 @@ class GTMatrixTest(unittest.TestCase):
     def test_count_compatible_snsp_in_strands(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
         h5 = VariationsH5(fpath, "r")
+
         custom_alleles = numpy.array([[b'G', b'T'],
                                      [b'G', b'T'],
                                      [b'G', b'T']])
         array_spec_matrix = numpy.array([[True, False, True],
                                          [True, True, False],
                                          [True, True, False]])
-        result = count_compatible_snps_in_strands(h5, array_spec_matrix,
-                                                  custom_alleles)
-        assert numpy.all(result == numpy.array([1, 0, 3]))
+        snps_check, counts = count_compatible_snps(h5, array_spec_matrix,
+                                                   custom_alleles)
+        assert counts == [1, 0, 2]
+        assert snps_check == 3
 
     def test_change_gts_chain(self):
         fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')

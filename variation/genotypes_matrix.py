@@ -11,6 +11,8 @@ from variation import MISSING_STR, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.variations.vars_matrices import VariationsH5
 from variation.variations.vars_matrices import _create_matrix
 
+COMPLEMENTARY = {b'A': b'T', b'G': b'C', b'T': b'A', b'C': b'G', b'': b''}
+
 
 def count_compatible_snps(variations, strands_to_check_matrix,
                           ref_strand_alleles, max_snps_check=None):
@@ -33,7 +35,7 @@ def count_compatible_snps(variations, strands_to_check_matrix,
             elif not strand_is_like_reference and compat_rev_ref_strand:
                 strand_counts[strand_idx] += 1
         snps_checked += 1
-        if max_snps_check is not None and max_snps_check >= snps_checked:
+        if max_snps_check is not None and max_snps_check <= snps_checked:
             break
 
     return snps_checked, strand_counts
@@ -51,11 +53,26 @@ def _check_compatible_strands(var_mat_alleles, ref_alleles):
 
 
 def _rev_compl(seq):
-    complementary = {b'A': b'T', b'G': b'C', b'T': b'A', b'C': b'G', b'': b''}
-    return numpy.array([complementary[x] for x in seq])
+    return numpy.array([COMPLEMENTARY[x] for x in seq])
 
 
-def change_gts_chain(variations, mask):
+def change_strand(variations, orig_orientation, final_orientation):
+    ref_alleles = variations['/variations/ref'][:]
+    alt_alleles = variations['/variations/alt'][:]
+    recoded_ref = []
+    recoded_alts = []
+    mask = orig_orientation == final_orientation
+    for ref, alts, mask_ in zip(ref_alleles, alt_alleles, mask):
+        if not mask_:
+            ref = COMPLEMENTARY[ref]
+            alts = _rev_compl(alts)
+        recoded_ref.append(ref)
+        recoded_alts.append(alts)
+    variations['/variations/ref'][:] = recoded_ref
+    variations['/variations/alt'][:] = recoded_alts
+
+
+def change_gts_chain_old(variations, mask):
     ref = variations['/variations/ref'][:]
     alt = variations['/variations/alt'][:]
     alleles = numpy.append(ref.reshape(ref.shape[0], 1), alt, axis=1)

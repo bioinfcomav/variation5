@@ -14,7 +14,7 @@ from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.genotypes_matrix import (change_gts_chain,
+from variation.genotypes_matrix import (change_strand,
                                         collapse_alleles,
                                         merge_sorted_variations, merge_snps,
                                         merge_alleles, merge_variations,
@@ -44,13 +44,20 @@ class GTMatrixTest(unittest.TestCase):
         assert snps_check == 3
 
     def test_change_gts_chain(self):
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
-        h5 = VariationsH5(fpath, "r")
-        mask = numpy.array([True, False, True])
-        alleles = change_gts_chain(h5, mask)
-        assert numpy.all(alleles == numpy.array([[b'A', b'C', b''],
-                                                 [b'C', b'', b''],
-                                                 [b'A', b'T', b'']]))
+        fp = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
+        with NamedTemporaryFile(suffix='.h5') as fhand, open(fp, 'rb') as fh5:
+            fhand.write(fh5.read())
+
+            h5 = VariationsH5(fhand.name, "r+")
+            original = numpy.array([True, False, True])
+            final = numpy.array([True, True, True])
+
+            change_strand(h5, original, final)
+            exp_ref = numpy.array([b'T', b'G', b'T'])
+            exp_alt = numpy.array([[b'G', b''], [b'', b''], [b'A', b'']])
+
+            assert numpy.all(exp_ref == h5['/variations/ref'][:])
+            assert numpy.all(exp_alt == h5['/variations/alt'][:])
 
     def test_collapse_alleles(self):
         alleles = numpy.array([[b'A', b'T', b'C']])

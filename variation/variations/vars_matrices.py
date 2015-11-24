@@ -56,7 +56,6 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
         meta_fld = meta[field]
         dtype = _numpy_dtype(meta_fld['dtype'], field,
                              vcf.max_field_str_lens)
-
         if field not in vcf.max_field_lens['INFO']:
             # We assume that it is not used by any SNP
             continue
@@ -66,7 +65,6 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
             msg += field.decode("utf-8")
             warnings.warn(msg, RuntimeWarning)
             continue
-
         if y_axes_size == 1:
             size = (vars_in_chunk,)
             maxshape = (None,)
@@ -84,6 +82,7 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
         path = posixpath.join(info_grp_name, str(field, 'utf-8'))
         matrix = _create_matrix(hdf5, path, **kwargs)
         info_matrices[path] = matrix
+
     return info_matrices
 
 
@@ -95,7 +94,6 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
     if vcf.kept_fields:
         fmt_fields = fmt_fields.intersection(vcf.kept_fields)
     fmt_fields = list(fmt_fields)
-
     fmt_matrices = OrderedDict()
     for field in fmt_fields:
         fmt = vcf.metadata['CALLS'][field]
@@ -128,7 +126,6 @@ def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
             size = size[:-1]
             maxshape = maxshape[:-1]
             chunks = chunks[:-1]
-
         kwargs = DEF_DSET_PARAMS.copy()
         kwargs['shape'] = size
         kwargs['dtype'] = dtype
@@ -783,7 +780,6 @@ def _put_vars_to_vcf(h5, vcf):
         snp.append(_get_calls_samples(h5, n_snp, calls_paths))
         vcf.write('\t'.join(snp)+'\n')
 
-
 class _VariationMatrices():
     def create_matrix_from_matrix(self, path, matrix):
 
@@ -1029,7 +1025,6 @@ class VariationsH5(_VariationMatrices):
         args = list(args)
         args.insert(0, dset_name)
         dset = group.create_dataset(*args, **kwargs)
-
         return dset
 
     def _set_metadata(self, metadata):

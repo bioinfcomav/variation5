@@ -108,7 +108,6 @@ class VCFParser():
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
-
         self.pre_read_max_size = pre_read_max_size
         self._variations_cache = CCache()
         self._read_snps_in_compressed_cache()
@@ -118,6 +117,9 @@ class VCFParser():
         for section in ('INFO', 'CALLS'):
             for field, meta_field in meta[section].items():
                 if isinstance(meta_field['Number'], int):
+                    self.max_field_lens[section][field] = meta_field['Number']
+                    if 'bool' in meta_field['dtype']:
+                        self.max_field_lens[section][field] = 1
                     continue
                 self.max_field_lens[section][field] = 0
                 if 'str' in meta_field['dtype']:
@@ -198,6 +200,8 @@ class VCFParser():
                             elif val == 'Float':
                                 type_cast = _to_float
                                 val2 = 'float16'
+                            elif val == 'Flag':
+                                val2 = 'bool'
                             else:
                                 type_cast = _do_nothing
                                 val2 = 'str'
@@ -260,6 +264,8 @@ class VCFParser():
                     max_str = max([len(val_) for val_ in val_to_check_len])
                     if self.max_field_str_lens['INFO'][key] < max_str:
                         self.max_field_str_lens['INFO'][key] = max_str
+                if not isinstance(val, list):
+                    val = val_to_check_len
 
             parsed_infos[key] = val
         return parsed_infos
@@ -308,16 +314,19 @@ class VCFParser():
         self._parsed_gt[gt_str] = gt
         return gt
 
-    def _parse_gts(self, fmt, gts):
+    def _parse_calls(self, fmt, calls):
         fmt = self._parse_gt_fmt(fmt)
         empty_gt = [None] * len(fmt)
-        gts = [empty_gt if gt == b'.' else gt.split(b':') for gt in gts]
-        gts = zip(*gts)
+        calls = [empty_gt if gt == b'.' else gt.split(b':') for gt in calls]
+        for call_data in calls:
+            if len(call_data) < len(fmt):
+                call_data.append(None)
+        calls = zip(*calls)
 
         parsed_gts = []
         ignored_fields = self.ignored_fields
         kept_fields = self.kept_fields
-        for fmt_data, gt_data in zip(fmt, gts):
+        for fmt_data, gt_data in zip(fmt, calls):
             if fmt_data[0] in ignored_fields:
                 continue
             if kept_fields and fmt_data[0] not in kept_fields:
@@ -351,7 +360,7 @@ class VCFParser():
 
     @property
     def variations(self):
-        snps =  chain(self._variations_cache.items, self._variations())
+        snps = chain(self._variations_cache.items, self._variations())
         if self.max_n_vars:
             snps = islice(snps, self.max_n_vars)
         return snps
@@ -361,11 +370,10 @@ class VCFParser():
             line = line[:-1]
             items = line.split(b'\t')
             chrom, pos, id_, ref, alt, qual, flt, info, fmt = items[:9]
-
             if self.max_field_str_lens['chrom'] < len(chrom):
                 self.max_field_str_lens['chrom'] = len(chrom)
 
-            gts = items[9:]
+            calls = items[9:]
             pos = int(pos)
             if id_ == b'.':
                 id_ = None
@@ -393,6 +401,6 @@ class VCFParser():
             qual = float(qual) if qual != b'.' else None
 
             info = self._parse_info(info)
-            gts = self._parse_gts(fmt, gts)
-            yield chrom, pos, id_, ref, alt, qual, flt, info, gts
+            calls = self._parse_calls(fmt, calls)
+            yield chrom, pos, id_, ref, alt, qual, flt, info, calls
 

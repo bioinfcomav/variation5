@@ -234,13 +234,15 @@ class VarMatsTests(unittest.TestCase):
         fhand.close()
         h5 = VariationsH5(path, 'r')
         assert h5['/calls/GT'].shape == (5, 3, 2)
+        assert numpy.all(h5['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
         expected = numpy.array([[[51, 51], [51, 51], [-1, -1]],
                                 [[58, 50], [65, 3], [-1, -1]],
                                 [[23, 27], [18, 2], [-1, -1]],
                                 [[56, 60], [51, 51], [-1, -1]],
-                                [[-1, -1], [-1, -1], [-1, -1]]])
-        assert numpy.all(h5['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
-        assert numpy.all(h5['/calls/HQ'] == expected)
+                                [[-1, -1], [-1, -1], [-1, -1]]],
+                               dtype=numpy.int16)
+
+        assert numpy.all(h5['/calls/HQ'][:] == expected)
         expected = numpy.array([48, 48, 43], dtype=numpy.int16)
         assert numpy.all(h5['/calls/GQ'][0, :] == expected)
 
@@ -272,7 +274,6 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/variations/info/H2'][:] == expected)
 
         os.remove(path)
-        return
         # With another file
         tmp_fhand = NamedTemporaryFile()
         path = tmp_fhand.name
@@ -365,5 +366,5 @@ class VcfTest(unittest.TestCase):
         vcf_fhand2.close()
 
 if __name__ == "__main__":
-    #import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
+    import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
     unittest.main()

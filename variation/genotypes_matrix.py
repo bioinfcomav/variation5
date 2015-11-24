@@ -5,190 +5,49 @@
 # Missing docstring
 # pylint: disable=C0111
 
-from itertools import chain
-from variation import MISSING_VALUES, DEF_DSET_PARAMS
 import numpy
+
+from variation import MISSING_STR, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.variations.vars_matrices import VariationsH5
 from variation.variations.vars_matrices import _create_matrix
-from variation.vcf import _do_nothing
 
 
-IUPAC = {b'A': b'AA', b'T': b'TT', b'C': b'CC', b'G': b'GG',
-         b'W': b'AT', b'M': b'AC', b'R': b'AG', b'': b'-',
-         b'Y': b'TC', b'K': b'TG', b'S': b'CG', b'-': b'-'}
-
-
-MISSING_GT_VALUES = (b'-', b'', b'.', b'--')
-MISSING_ALLELE_VALUES = (ord('-'), ord('N'))
-
-
-def def_gt_allele_splitter(gt):
-    if gt in MISSING_GT_VALUES:
-        return None
-    not_missing = False
-    alleles = []
-    for allele in gt:
-        allele = allele
-        if allele in MISSING_ALLELE_VALUES:
-            allele = None
-        else:
-            not_missing = True
-        alleles.append(allele)
-    if not not_missing:
-        alleles = None
-    return tuple(alleles)
-
-
-def create_iupac_allele_splitter(ploidy=2):
-    if ploidy != 2:
-        msg = 'It is not possible to generate the genotypes for other ploidy'
-        raise ValueError(msg)
-
-    def iupac_allele_splitter(gt):
-        return def_gt_allele_splitter(IUPAC[gt])
-    return iupac_allele_splitter
-
-
-class CSVParser():
-    def __init__(self, fhand, var_info, gt_splitter=def_gt_allele_splitter,
-                 first_sample_column=1, sample_line=0, snp_id_column=0,
-                 sep=',', max_field_lens=None, max_field_str_lens=None):
-        '''It reads genotype calls from a CSV file
-
-        var_info can be either a dict or an OrderedDict with the snp_ids as
-        keys and the values should have a dict with, at least, the keys chrom
-        and pos. The rest of the key can match the VCF fields.
-
-        gt_splitter should take a genotype as it is stored in the CSV file and
-        it should return a tuple with the alleles in byte format.
-        '''
-        self.fhand = fhand
-        self._sample_line = sample_line
-        self._first_sample_column = first_sample_column
-        self._sep = sep.encode('utf-8')
-        self._snp_id_column = snp_id_column
-        self.gt_splitter = gt_splitter
-        self._var_info = var_info
-
-        self.samples = self._get_samples()
-        self._determine_ploidy()
-        if max_field_lens is None:
-            self.max_field_lens = {'alt': 0}
-        else:
-            self.max_field_lens = max_field_lens
-        if max_field_str_lens is None:
-            self.max_field_str_lens = {'alt': 0,
-                                       'chrom': 0}
-        else:
-            self.max_field_str_lens = max_field_str_lens
-        self.metadata = {'CALLS': {b'GT': {'Description': 'Genotype',
-                                           'dtype': 'int',
-                                           'type_cast': _do_nothing}},
-                         'INFO': {}, 'FILTER': {}, 'OTHER': {},
-                         'VARIATIONS': {'alt': {'dtype': 'str'},
-                                        'chrom': {'dtype': 'str'},
-                                        'id': {'dtype': 'str'},
-                                        'pos': {'dtype': 'int32'},
-                                        'qual': {'dtype': 'float16'},
-                                        'ref': {'dtype': 'str'}}}
-        self.ignored_fields = []
-        self.kept_fields = []
-
-    def _determine_ploidy(self):
-        read_lines = []
-        for line in self.fhand:
-            read_lines.append(line)
-            items = line.split()
-            items[-1] = items[-1].strip()
-            gts = items[self._first_sample_column:]
-            gts = [self.gt_splitter(gt) for gt in gts]
-            for gt in gts:
-                if gt is None:
-                    continue
-                else:
-                    self.ploidy = len(gt)
-                    break
-
-        self.fhand = chain(read_lines, self.fhand)
-
-    def _get_samples(self):
-        for line_num, line in enumerate(self.fhand):
-            if line_num == self._sample_line:
-                return line.strip().split(self._sep)[self._first_sample_column:]
-
-        raise RuntimeError("We didn't reach to sample line")
-
-    def _parse_gts(self, items):
-        gts = items[self._first_sample_column:]
-        recoded_gts = []
-        gts = [self.gt_splitter(gt) for gt in gts]
-        alleles = set()
-        for gt in gts:
-            if gt is None:
-                continue
-            for allele in gt:
-                alleles.add(allele)
-        allele_coding = {allele: idx for idx, allele in enumerate(alleles)}
-        allele_coding[None] = None
-        genotype_coding = {None: None}
-        for gt in gts:
-            try:
-                coded_gt = genotype_coding[gt]
-            except KeyError:
-                coded_gt = tuple([allele_coding[allele] for allele in gt])
-            genotype_coding[gt] = coded_gt
-            recoded_gts.append(coded_gt)
-        return (tuple([chr(allele).encode() for allele in alleles]),
-                [(b'GT', recoded_gts)])
-
-    @property
-    def variations(self):
-        max_field_lens = self.max_field_lens
-        max_field_str_lens = self.max_field_str_lens
-        for line in self.fhand:
-            items = line.split(self._sep)
-            items[-1] = items[-1].strip()
-
-            snp_id = items[self._snp_id_column]
-            alleles, gts = self._parse_gts(items)
-            var_info = self._var_info[snp_id]
-
-            alt_alleles = list(alleles[1:]) if len(alleles) > 1 else None
-
-            if alt_alleles:
-                if max_field_lens['alt'] < len(alt_alleles):
-                    max_field_lens['alt'] = len(alt_alleles)
-                max_len = max(len(allele) for allele in alt_alleles)
-                if max_field_str_lens['alt'] < max_len:
-                    max_field_str_lens['alt'] = max_len
-
-            variation = (var_info['chrom'], var_info['pos'], snp_id,
-                         alleles[0], alt_alleles, None, None, None, gts)
-            yield variation
-
-
-def count_compatible_snps_in_strands(variations, array_specification_matrix,
-                                     custom_alleles, n_snps_check=10000):
+def count_compatible_snps(variations, strands_to_check_matrix,
+                          ref_strand_alleles, max_snps_check=None):
     ref = variations['/variations/ref'][:]
     alt = variations['/variations/alt'][:]
-    alleles = numpy.append(ref.reshape(ref.shape[0], 1), alt, axis=1)
-    strand_counts = numpy.array([], dtype=numpy.bool)
-    for snp_alleles, strand_alleles in zip(alleles, custom_alleles):
-        strand_counts = numpy.append(strand_counts,
-                                     _check_compatible_strand(snp_alleles,
-                                                              strand_alleles))
-        if strand_counts.shape[0] == n_snps_check:
+
+    strand_counts = [0] * strands_to_check_matrix.shape[1]
+    snps_checked = 0
+    missing_alleles = [MISSING_STR.encode()]
+    for var_mat_ref, var_mat_alt, ref_alleles, snp_strand_to_check in zip(ref, alt,
+                                                     ref_strand_alleles,
+                                                     strands_to_check_matrix):
+        var_mat_alleles = set(var_mat_alt)
+        var_mat_alleles.add(var_mat_ref)
+        var_mat_alleles = var_mat_alleles.difference(missing_alleles)
+        compat_ref_strand, compat_rev_ref_strand = _check_compatible_strands(var_mat_alleles, ref_alleles)
+        for strand_idx, strand_is_like_reference in enumerate(snp_strand_to_check):
+            if strand_is_like_reference and compat_ref_strand:
+                strand_counts[strand_idx] += 1
+            elif not strand_is_like_reference and compat_rev_ref_strand:
+                strand_counts[strand_idx] += 1
+        snps_checked += 1
+        if max_snps_check is not None and max_snps_check >= snps_checked:
             break
-    strand_counts = strand_counts.reshape((strand_counts.shape[0], 1))
-    res = strand_counts == array_specification_matrix[:strand_counts.shape[0]]
-    return res.sum(axis=0)
+
+    return snps_checked, strand_counts
 
 
-def _check_compatible_strand(alleles, strand_alleles):
-    for allele in alleles:
-        if allele not in strand_alleles and allele != b'':
-            return False
-    return True
+def _check_compatible_strands(var_mat_alleles, ref_alleles):
+    rev_comp_ref_alleles = _rev_compl(ref_alleles)
+    compatible_ref_strand = False
+    compatible_rev_ref_strand = False
+    if not var_mat_alleles.difference(ref_alleles):
+        compatible_ref_strand = True
+    if not var_mat_alleles.difference(rev_comp_ref_alleles):
+        compatible_rev_ref_strand = True
+    return compatible_ref_strand, compatible_rev_ref_strand
 
 
 def _rev_compl(seq):

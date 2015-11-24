@@ -14,10 +14,10 @@ from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.genotypes_matrix import (collapse_alleles,
-                                        merge_sorted_variations, merge_snps,
-                                        merge_alleles, merge_variations,
-                                        transform_gts_to_merge)
+from variation.variations.merge import (_collapse_alleles,
+                                        _merge_sorted_variations, _merge_snps,
+                                        _merge_alleles, merge_variations,
+                                        _transform_gts_to_merge)
 
 from variation.variations.vars_matrices import VariationsH5
 
@@ -32,7 +32,7 @@ class GTMatrixTest(unittest.TestCase):
         base_allele = b'ATCAC'
         relative_position = 1
         expected = numpy.array([[b'AACAC', b'ATCAC', b'ACCAC']])
-        result = collapse_alleles(base_allele, alleles, relative_position)
+        result = _collapse_alleles(base_allele, alleles, relative_position)
         assert numpy.all(result == expected)
 
     def test_transform_gts_to_merge(self):
@@ -43,7 +43,7 @@ class GTMatrixTest(unittest.TestCase):
         expected = numpy.array([[[2, 2], [3, 0]],
                                 [[0, 0], [2, 3]]])
         expected_alleles = numpy.array([b'AACAC', b'A', b'ACCAC', b'ATCAC'])
-        result = transform_gts_to_merge(alleles, collapsed_alleles, gts)
+        result = _transform_gts_to_merge(alleles, collapsed_alleles, gts)
         merged_alleles, gts = result
         assert numpy.all(gts == expected)
         assert numpy.all(merged_alleles == expected_alleles)
@@ -55,7 +55,7 @@ class GTMatrixTest(unittest.TestCase):
         h5_2 = VariationsH5(fpath, "r")
         expected = [[681961, 681961], [1511764, 1511764],
                     [None, 15164], [None, 15184]]
-        for snp, exp in zip(merge_sorted_variations(h5_1, h5_2, True), expected):
+        for snp, exp in zip(_merge_sorted_variations(h5_1, h5_2, True), expected):
             for x, y in zip(snp, exp):
                 try:
                     assert x['/variations/pos'][0] == y
@@ -64,7 +64,7 @@ class GTMatrixTest(unittest.TestCase):
 
         expected = [[681961, 681961], [1511764, 1511764],
                     [15164, None], [15184, None]]
-        for snp, exp in zip(merge_sorted_variations(h5_2, h5_1, True), expected):
+        for snp, exp in zip(_merge_sorted_variations(h5_2, h5_1, True), expected):
             for x, y in zip(snp, exp):
                 try:
                     assert x['/variations/pos'][0] == y
@@ -75,7 +75,7 @@ class GTMatrixTest(unittest.TestCase):
         alleles1 = numpy.array(['AT', 'TT'])
         alleles2 = numpy.array(['A', 'TT'])
         exp = numpy.array(['AT', 'TT', 'A'])
-        assert numpy.all(merge_alleles(alleles1, alleles2) == exp)
+        assert numpy.all(_merge_alleles(alleles1, alleles2) == exp)
 
     def test_merge_snps(self):
         class FakeVariation(dict):
@@ -112,7 +112,7 @@ class GTMatrixTest(unittest.TestCase):
                 '/calls/GT': numpy.array([[[1, 1], [0, 1]]])}
         snp2 = FakeVariation(snp2)
         snp2.set_samples(['s4', 's5'])
-        merge_snps(snp1, snp2, 0, merged,
+        _merge_snps(snp1, snp2, 0, merged,
                    fields_funct={'/variations/info/AF': min})
         expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
                     '/variations/pos': numpy.array([[10]]),
@@ -138,7 +138,7 @@ class GTMatrixTest(unittest.TestCase):
                   '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
                                              [-1, -1], [-1, -1]]]),
                   '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
-        merge_snps(snp1, None, 0, merged,
+        _merge_snps(snp1, None, 0, merged,
                    fields_funct={'/variations/info/AF': min})
         expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
                     '/variations/pos': numpy.array([[10]]),
@@ -163,7 +163,7 @@ class GTMatrixTest(unittest.TestCase):
                   '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
                                              [-1, -1], [-1, -1]]]),
                   '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
-        merge_snps(None, snp2, 0, merged,
+        _merge_snps(None, snp2, 0, merged,
                    fields_funct={'/variations/info/AF': min})
         expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
                     '/variations/pos': numpy.array([[11]]),

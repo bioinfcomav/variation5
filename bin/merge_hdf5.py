@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 from variation.variations.vars_matrices import VariationsH5
-from variation.genotypes_matrix import merge_variations
+from variation.variations.merge import merge_variations
 from numpy import mean
 import logging
 from os.path import join

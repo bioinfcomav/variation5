@@ -42,7 +42,7 @@ class CSVParser():
     def __init__(self, fhand, var_info, gt_splitter=def_gt_allele_splitter,
                  first_sample_column=1, first_gt_column=1,
                  sample_line=0, snp_id_column=0, sep=',', max_field_lens=None,
-                 max_field_str_lens=None):
+                 max_field_str_lens=None, ignore_empty_vars=False):
         '''It reads genotype calls from a CSV file
 
         var_info can be either a dict or an OrderedDict with the snp_ids as
@@ -60,6 +60,7 @@ class CSVParser():
         self._snp_id_column = snp_id_column
         self.gt_splitter = gt_splitter
         self._var_info = var_info
+        self._ignore_empty_vars = ignore_empty_vars
 
         self.samples = self._get_samples()
         self._determine_ploidy()
@@ -152,7 +153,13 @@ class CSVParser():
                 max_len = max(len(allele) for allele in alt_alleles)
                 if max_field_str_lens['alt'] < max_len:
                     max_field_str_lens['alt'] = max_len
-
+            if not alleles:
+                if self._ignore_empty_vars:
+                    continue
+                else:
+                    raise RuntimeError('snp {} is empty'.format(snp_id))
+#             print(snp_id, alleles, len(gts[0][1]))
             variation = (var_info['chrom'], var_info['pos'], snp_id,
                          alleles[0], alt_alleles, None, None, None, gts)
+
             yield variation

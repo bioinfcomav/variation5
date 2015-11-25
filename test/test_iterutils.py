@@ -37,5 +37,11 @@ class PeekTest(unittest.TestCase):
             pass
         assert 'a' == next(iterator)
 
+        iterator = iter(['a', 'b', 'c', 'd', 'e', 'f'])
+        iterator = PeekableIterator(iterator)
+        assert 'a' == iterator.peek()
+        assert 'a' == next(iterator)
+        assert 'b' == iterator.peek()
+
 if __name__ == '__main__':
     unittest.main()

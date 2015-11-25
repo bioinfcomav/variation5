@@ -28,7 +28,7 @@ class PeekableIterator(object):
             if self._peek_buffer_idx:
                 self._peek_buffer_idx -= 1
             return self._buffer.pop(0)
-        return self._stream.next()
+        return next(self._stream)
 
     def peek(self):
         if self._peek_buffer_idx is None:
@@ -41,13 +41,13 @@ class PeekableIterator(object):
         else:
             item = self._buffer[self._peek_buffer_idx]
             self._peek_buffer_idx += 1
-            if self._peek_buffer_idx > len(self._buffer):
+            if self._peek_buffer_idx >= len(self._buffer):
                 self._peek_buffer_idx = None
             return item
 
     def reset_peek(self):
         if not self._buffer:
-            return
+            self._peek_buffer_idx = None
         else:
             self._peek_buffer_idx = 0
 

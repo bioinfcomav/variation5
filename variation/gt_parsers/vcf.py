@@ -379,11 +379,16 @@ class VCFParser():
                 id_ = None
 
             alt = alt.split(b',')
-            if self.max_field_lens['alt'] < len(alt):
-                self.max_field_lens['alt'] = len(alt)
-            max_alt_str_len = max(len(allele) for allele in alt)
-            if self.max_field_str_lens['alt'] < max_alt_str_len:
-                self.max_field_str_lens['alt'] = max_alt_str_len
+            # there is no alternative allele
+            if alt == [b'.']:
+                alt = None
+
+            if alt is not None:
+                if self.max_field_lens['alt'] < len(alt):
+                    self.max_field_lens['alt'] = len(alt)
+                max_alt_str_len = max(len(allele) for allele in alt)
+                if self.max_field_str_lens['alt'] < max_alt_str_len:
+                    self.max_field_str_lens['alt'] = max_alt_str_len
 
             qual = float(qual) if qual != b'.' else None
 

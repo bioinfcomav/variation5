@@ -55,11 +55,17 @@ class VcfH5Test(unittest.TestCase):
     def test_put_vars_hdf5_from_vcf(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
-                        max_field_lens={'alt': 4})
+                        max_field_lens={'alt': 3})
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
             h5f.put_vars(vcf)
+            assert numpy.all(h5f['/variations/alt'][:] == [[b'A', b'', b''],
+                                                           [b'A', b'', b''],
+                                                           [b'G', b'T', b''],
+                                                           [b'', b'', b''],
+                                                           [b'G', b'GTACT',
+                                                            b'']])
             assert h5f['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(h5f['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
             expected = numpy.array([48, 48, 43], dtype=numpy.int16)
@@ -366,5 +372,5 @@ class VcfTest(unittest.TestCase):
         vcf_fhand2.close()
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
+    #import sys; sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
     unittest.main()

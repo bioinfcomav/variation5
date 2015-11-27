@@ -280,8 +280,13 @@ class VarMerger():
                              [(b'GT', var['gts'])])
                 yield variation
             else:
+
                 if not self._ignore_complex_overlaps:
-                    raise NotImplementedError('We can not merge these vars')
+                    poss1 = [(snp['chrom'], str(snp['pos'])) for snp in snps1]
+                    poss2 = [(snp['chrom'], str(snp['pos'])) for snp in snps2]
+                    msg = 'We can not merge these vars:\n'
+                    msg += '{}\n{}\n'
+                    raise NotImplementedError(msg.format(poss1, poss2))
 
     def _snps_are_mergeable(self, snps1, snps2):
         "it looks only to the conditions we have programmed"
@@ -306,7 +311,8 @@ class VarMerger():
 
     def _get_alleles(self, snp):
         alleles = [snp['ref']]
-        alleles.extend([allele for allele in snp['alt'] if allele != b''])
+        if snp['alt'] is not None:
+            alleles.extend([allele for allele in snp['alt'] if allele != b''])
         return alleles
 
     def _get_qual(self, snp1, snp2):
@@ -315,7 +321,7 @@ class VarMerger():
         else:
             return min([snp1['qual'], snp2['qual']])
 
-    def _merge_vars(self, snp1, snp2, check_ref_match=True):
+    def _merge_vars(self, snp1, snp2):
         "it assumes that the given snps are overlaping or None"
         if self._gt_shape is None:
             snp = snp1 if snp1 is not None else snp2

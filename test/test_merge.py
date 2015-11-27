@@ -7,251 +7,230 @@
 
 import os
 import unittest
-import sys
 from os.path import join
-from subprocess import check_output, CalledProcessError
 from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.variations.merge import (_collapse_alleles,
-                                        _merge_sorted_variations, _merge_snps,
-                                        _merge_alleles, merge_variations,
-                                        _transform_gts_to_merge)
+from variation.variations.merge import (_group_overlaping_vars,
+                                        VarMerger, _sort_iterators,
+                                        _get_overlapping_region,
+                                        _pos_lt_tuples)
+from variation.iterutils import PeekableIterator
+from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 
-from variation.variations.vars_matrices import VariationsH5
-
+from test.test_utils import TEST_DATA_DIR
 from variation.variations.stats import _remove_nans
-from test.test_utils import TEST_DATA_DIR, BIN_DIR
+from collections import Counter
 
 
-class GTMatrixTest(unittest.TestCase):
+class MockList(list):
+    pass
 
-    def test_collapse_alleles(self):
-        alleles = numpy.array([[b'A', b'T', b'C']])
-        base_allele = b'ATCAC'
-        relative_position = 1
-        expected = numpy.array([[b'AACAC', b'ATCAC', b'ACCAC']])
-        result = _collapse_alleles(base_allele, alleles, relative_position)
-        assert numpy.all(result == expected)
 
-    def test_transform_gts_to_merge(self):
-        alleles = numpy.array([b'AACAC', b'A'])
-        collapsed_alleles = numpy.array([b'ACCAC', b'ATCAC', b'AACAC'])
-        gts = numpy.array([[[0, 0], [1, 2]],
-                           [[2, 2], [0, 1]]])
-        expected = numpy.array([[[2, 2], [3, 0]],
-                                [[0, 0], [2, 3]]])
-        expected_alleles = numpy.array([b'AACAC', b'A', b'ACCAC', b'ATCAC'])
-        result = _transform_gts_to_merge(alleles, collapsed_alleles, gts)
-        merged_alleles, gts = result
-        assert numpy.all(gts == expected)
-        assert numpy.all(merged_alleles == expected_alleles)
+class MockMerger(dict):
+    def __init__(self, gt_shape):
+        self._gt_shape = gt_shape
+        self._gt_dtype = numpy.int32
+        self.max_field_lens = {'alt': 3}
+        self._n_samples1 = 2
+        self._n_samples2 = 2
+        self.log = Counter()
 
-    def test_merge_h5(self):
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
-        h5_1 = VariationsH5(fpath, "r")
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex2.h5')
-        h5_2 = VariationsH5(fpath, "r")
-        expected = [[681961, 681961], [1511764, 1511764],
-                    [None, 15164], [None, 15184]]
-        for snp, exp in zip(_merge_sorted_variations(h5_1, h5_2, True), expected):
-            for x, y in zip(snp, exp):
-                try:
-                    assert x['/variations/pos'][0] == y
-                except TypeError:
-                    assert x is None
+MockMerger._get_alleles = VarMerger._get_alleles
+MockMerger._get_qual = VarMerger._get_qual
+MockMerger._snps_are_mergeable = VarMerger._snps_are_mergeable
 
-        expected = [[681961, 681961], [1511764, 1511764],
-                    [15164, None], [15184, None]]
-        for snp, exp in zip(_merge_sorted_variations(h5_2, h5_1, True), expected):
-            for x, y in zip(snp, exp):
-                try:
-                    assert x['/variations/pos'][0] == y
-                except TypeError:
-                    assert x is None
 
-    def test_merge_alleles(self):
-        alleles1 = numpy.array(['AT', 'TT'])
-        alleles2 = numpy.array(['A', 'TT'])
-        exp = numpy.array(['AT', 'TT', 'A'])
-        assert numpy.all(_merge_alleles(alleles1, alleles2) == exp)
+class MergeTest(unittest.TestCase):
 
-    def test_merge_snps(self):
-        class FakeVariation(dict):
-            def set_samples(self, samples):
-                self.samples = samples
+    def test_sort_iterators(self):
+        iter1 = [{'chrom': '1', 'pos': 1}, {'chrom': '1', 'pos': 5},
+                 {'chrom': '1', 'pos': 7}, {'chrom': '1', 'pos': 10},
+                 {'chrom': '2', 'pos': 11}, {'chrom': '2', 'pos': 12}]
+        iter1 = PeekableIterator(iter(iter1))
+        iter2 = [{'chrom': '1', 'pos': 0}, {'chrom': '1', 'pos': 3},
+                 {'chrom': '1', 'pos': 6}, {'chrom': '2', 'pos': 5},
+                 {'chrom': '2', 'pos': 11}, {'chrom': '2', 'pos': 13}]
+        iter2 = PeekableIterator(iter(iter2))
+        expected = [{'chrom': '1', 'pos': 0}, {'chrom': '1', 'pos': 1},
+                    {'chrom': '1', 'pos': 3}, {'chrom': '1', 'pos': 5},
+                    {'chrom': '1', 'pos': 6}, {'chrom': '1', 'pos': 7},
+                    {'chrom': '1', 'pos': 10}, {'chrom': '2', 'pos': 5},
+                    {'chrom': '2', 'pos': 11}, {'chrom': '2', 'pos': 11},
+                    {'chrom': '2', 'pos': 12}, {'chrom': '2', 'pos': 13}]
+        for x, y in zip(_sort_iterators(iter1, iter2), expected):
+            assert x == y
 
-        merged = {'/variations/chrom': numpy.array([['']], dtype='S10'),
-                  '/variations/pos': numpy.array([[-1]]),
-                  '/variations/ref': numpy.array([['']], dtype='S10'),
-                  '/variations/alt': numpy.array([['', '', '']], dtype='S10'),
-                  '/variations/qual': numpy.array([[-1, ]]),
-                  '/variations/info/AF': numpy.array([[-1, ]]),
-                  '/variations/info/DP': numpy.array([[-1, -1]]),
-                  '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
-                                             [-1, -1], [-1, -1]]]),
-                  '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
-        snp1 = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
-                '/variations/pos': numpy.array([10]),
-                '/variations/ref': numpy.array([['AT']], dtype='S10'),
-                '/variations/alt': numpy.array([['TT', 'G']], dtype='S10'),
-                '/variations/qual': numpy.array([[120]]),
-                '/variations/info/AF': numpy.array([[15]]),
-                '/variations/info/DP': numpy.array([[200]]),
-                '/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 2]]]),
-                '/calls/DP': numpy.array([[20, 30, 10]])}
-        snp1 = FakeVariation(snp1)
-        snp1.set_samples(['s1', 's2', 's3'])
-        snp2 = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
-                '/variations/pos': numpy.array([11]),
-                '/variations/ref': numpy.array([['A']], dtype='S10'),
-                '/variations/alt': numpy.array([['T']], dtype='S10'),
-                '/variations/info/AF': numpy.array([[17]]),
-                '/variations/info/DP': numpy.array([[210]]),
-                '/calls/GT': numpy.array([[[1, 1], [0, 1]]])}
-        snp2 = FakeVariation(snp2)
-        snp2.set_samples(['s4', 's5'])
-        _merge_snps(snp1, snp2, 0, merged,
-                   fields_funct={'/variations/info/AF': min})
-        expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
-                    '/variations/pos': numpy.array([[10]]),
-                    '/variations/ref': numpy.array([['AT']], dtype='S10'),
-                    '/variations/alt': numpy.array([['TT', 'G', 'AA']],
-                                                   dtype='S10'),
-                    '/variations/qual': numpy.array([[120]]),
-                    '/variations/info/AF': numpy.array([[15]]),
-                    '/variations/info/DP': numpy.array([[200, 210]]),
-                    '/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 2],
-                                               [0, 0], [3, 0]]]),
-                    '/calls/DP': numpy.array([[20, 30, 10, -1, -1]])}
-        for key in expected.keys():
-            assert numpy.all(merged[key] == expected[key])
+    def test_group_overlaping_vars(self):
+        vars1 = [{'chrom': '1', 'pos': 1, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '1', 'pos': 5, 'ref': 'AA', 'alt': 'T'},
+                 {'chrom': '1', 'pos': 7, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '1', 'pos': 10, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '2', 'pos': 11, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '2', 'pos': 12, 'ref': 'A', 'alt': 'T'}]
+        vars2 = [{'chrom': '1', 'pos': 0, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '1', 'pos': 3, 'ref': 'AAA', 'alt': 'T'},
+                 {'chrom': '1', 'pos': 6, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '2', 'pos': 5, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '2', 'pos': 11, 'ref': 'A', 'alt': 'T'},
+                 {'chrom': '2', 'pos': 13, 'ref': 'A', 'alt': 'T'}]
+        exp = [(0, 1), (1, 0), (1, 2), (1, 0), (1, 0), (0, 1), (1, 1), (1, 0),
+               (0, 1)]
+        for (snps1, snps2), exp_ in zip(_group_overlaping_vars(vars1, vars2),
+                                        exp):
+            assert (len(snps1), len(snps2)) == exp_
 
-        merged = {'/variations/chrom': numpy.array([['']], dtype='S10'),
-                  '/variations/pos': numpy.array([[-1]]),
-                  '/variations/ref': numpy.array([['']], dtype='S10'),
-                  '/variations/alt': numpy.array([['', '']], dtype='S10'),
-                  '/variations/qual': numpy.array([[-1, ]]),
-                  '/variations/info/AF': numpy.array([[-1, ]]),
-                  '/variations/info/DP': numpy.array([[-1, -1]]),
-                  '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
-                                             [-1, -1], [-1, -1]]]),
-                  '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
-        _merge_snps(snp1, None, 0, merged,
-                   fields_funct={'/variations/info/AF': min})
-        expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
-                    '/variations/pos': numpy.array([[10]]),
-                    '/variations/ref': numpy.array([['AT']], dtype='S10'),
-                    '/variations/alt': numpy.array([['TT', 'G']], dtype='S10'),
-                    '/variations/qual': numpy.array([[120]]),
-                    '/variations/info/AF': numpy.array([[15]]),
-                    '/variations/info/DP': numpy.array([[200, -1]]),
-                    '/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 2],
-                                               [-1, -1], [-1, -1]]]),
-                    '/calls/DP': numpy.array([[20, 30, 10, -1, -1]])}
-        for key in expected.keys():
-            assert numpy.all(merged[key] == expected[key])
+    def test_pos_lt_tuples(self):
+        assert _pos_lt_tuples(('1', 3), ('1', 4))
+        assert _pos_lt_tuples(('1', 3), ('2', 1))
+        assert not _pos_lt_tuples(('2', 3), ('1', 4))
+        assert not _pos_lt_tuples(('2', 3), ('2', 3))
 
-        merged = {'/variations/chrom': numpy.array([['']], dtype='S10'),
-                  '/variations/pos': numpy.array([[-1]]),
-                  '/variations/ref': numpy.array([['']], dtype='S10'),
-                  '/variations/alt': numpy.array([['', '']], dtype='S10'),
-                  '/variations/qual': numpy.array([[-1, ]]),
-                  '/variations/info/AF': numpy.array([[-1, ]]),
-                  '/variations/info/DP': numpy.array([[-1, -1]]),
-                  '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
-                                             [-1, -1], [-1, -1]]]),
-                  '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
-        _merge_snps(None, snp2, 0, merged,
-                   fields_funct={'/variations/info/AF': min})
-        expected = {'/variations/chrom': numpy.array([['chr1']], dtype='S10'),
-                    '/variations/pos': numpy.array([[11]]),
-                    '/variations/ref': numpy.array([['A']], dtype='S10'),
-                    '/variations/alt': numpy.array([['T', '']], dtype='S10'),
-                    '/variations/info/AF': numpy.array([[17]]),
-                    '/variations/info/DP': numpy.array([[-1, 210]]),
-                    '/calls/GT': numpy.array([[[-1, -1], [-1, -1], [-1, -1],
-                                               [1, 1], [0, 1]]]),
-                    '/calls/DP': numpy.array([[-1, -1, -1, -1, -1]])}
-        for key in expected.keys():
-            assert numpy.all(merged[key] == expected[key])
+    def test_get_overlapping_region(self):
+        sorted_vars = [{'chrom': '1', 'pos': 0, 'ref': 'A', 'alt': 'T'},
+                       {'chrom': '2', 'pos': 1, 'ref': 'A', 'alt': 'T'}]
+        region = _get_overlapping_region(sorted_vars)
+        assert region == (('1', 0), ('1', 0))
+        sorted_vars = [{'chrom': '1', 'pos': 0, 'ref': 'ATTT', 'alt': 'T'},
+                       {'chrom': '2', 'pos': 1, 'ref': 'A', 'alt': 'T'}]
+        region = _get_overlapping_region(sorted_vars)
+        assert region == (('1', 0), ('1', 3))
+
+        sorted_vars = [{'chrom': '1', 'pos': 0, 'ref': 'TAAA', 'alt': 'T'},
+                       {'chrom': '1', 'pos': 1, 'ref': 'A', 'alt': 'T'},
+                       {'chrom': '1', 'pos': 3, 'ref': 'A', 'alt': 'C'},
+                       {'chrom': '1', 'pos': 5, 'ref': 'G', 'alt': 'C'}]
+        region = _get_overlapping_region(sorted_vars)
+        assert region == (('1', 0), ('1', 3))
+
+        sorted_vars = [{'chrom': '1', 'pos': 0, 'ref': 'TAAA', 'alt': 'T'},
+                       {'chrom': '1', 'pos': 1, 'ref': 'A', 'alt': 'T'},
+                       {'chrom': '1', 'pos': 3, 'ref': 'A', 'alt': 'C'}]
+        region = _get_overlapping_region(sorted_vars)
+        assert region == (('1', 0), ('1', 3))
+
+        sorted_vars = [{'chrom': '1', 'pos': 0, 'ref': 'TA', 'alt': 'T'},
+                       {'chrom': '1', 'pos': 1, 'ref': 'AAA', 'alt': 'T'},
+                       {'chrom': '1', 'pos': 3, 'ref': 'A', 'alt': 'C'}]
+        region = _get_overlapping_region(sorted_vars)
+        assert region == (('1', 0), ('1', 3))
+
+    def var_is_equal(self, var1, var2):
+        assert var1['chrom'] == var2['chrom']
+        assert var1['pos'] == var2['pos']
+        assert var1['ref'] == var2['ref']
+        assert numpy.all(var1['alt'] == var2['alt'])
+        assert var1['qual'] == var2['qual']
+        assert numpy.all(var1['gts'] == var2['gts'])
+
+    def test_merge_simple_var(self):
+
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'A', 'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]]), 'qual': 34}])
+        vars2 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'A', 'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]]), 'qual': 35}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+        merger = MockMerger(gt_shape=(4, 2))
+
+        variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
+#         merger = VarMerger(vars1, vars2)
+#         variations = merger.variations
+#         variation = next(variations)
+        exp = {'gts': [[0, 0], [1, 1], [0, 0], [1, 1]], 'pos': 1,
+               'ref': b'A', 'chrom': '1', 'alt': [b'T'], 'qual': 34}
+        self.var_is_equal(exp, variation)
+
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'A', 'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]]), 'qual': 21}])
+        vars2 = MockList([{'chrom': '1', 'pos': 2, 'ref': b'A', 'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]]), 'qual': 21}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+
+        variation = VarMerger._merge_vars(merger, vars1[0], None)
+        exp = {'gts': [[0, 0], [1, 1], [-1, -1], [-1, -1]], 'pos': 1,
+               'ref': b'A', 'chrom': '1', 'alt': [b'T'], 'qual': 21}
+        self.var_is_equal(exp, variation)
+
+        variation = VarMerger._merge_vars(merger, None, vars2[0])
+        exp = {'gts': [[-1, -1], [-1, -1], [0, 0], [1, 1]], 'pos': 2,
+               'ref': b'A', 'chrom': '1', 'alt': [b'T'], 'qual': 21}
+        self.var_is_equal(exp, variation)
+
+    def test_merge_complex_var(self):
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'ATT',
+                           'alt': [b'T'], 'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': 21}])
+        vars2 = MockList([{'chrom': '1', 'pos': 2, 'ref': b'T', 'alt': [b'A'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': None}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+        merger = MockMerger(gt_shape=(4, 2))
+        variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
+
+        exp = {'gts': [[0, 0], [1, 1], [0, 0], [2, 2]], 'pos': 1,
+               'ref': b'ATT', 'chrom': '1', 'alt': [b'T', b'AAT'],
+               'qual': None}
+        self.var_is_equal(exp, variation)
+
+    def test_snos_are_mergeable(self):
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'ATT',
+                           'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]])}])
+        vars2 = MockList([{'chrom': '1', 'pos': 2, 'ref': b'TT', 'alt': [b'A'],
+                           'gts': numpy.array([[0, 0], [1, 1]])}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+
+        merger = MockMerger((2, 2))
+
+        assert not merger._snps_are_mergeable(vars1[0], vars2[0])
 
     def test_merge_variations(self):
-        merged_fhand = NamedTemporaryFile()
-        merged_fpath = merged_fhand.name
-        merged_fhand.close()
-
-        format_array_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
-                                            'format.h5'), "r")
-        format_h5 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
-        try:
-            merge_variations(format_h5, format_array_h5, merged_fpath)
-            self.fail()
-        except ValueError:
-            pass
-        os.remove(merged_fpath)
-
-        merged_variations, log = merge_variations(format_h5, format_array_h5,
-                                                  merged_fpath,
-                                                  ignore_overlaps=True,
-                                                  ignore_2_or_more_overlaps=True)
-
-        expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
-                                        'expected_merged.h5'), 'r')
-        expected_log = {'added_new_snps': 5, 'total_merged_snps': 6,
-                        'ignored_overlap_snps': 3, 'modified_merged_snps': 1,
-                        'ignored_ref_snps': 0}
-        assert log == expected_log
-        # Dirty hack to remove tmp_path
-        try:
-            for key in merged_variations.keys():
-                if 'float' in str(merged_variations[key][:].dtype):
-                    assert numpy.all(_remove_nans(expected_h5[key][:]) ==
-                                     _remove_nans(merged_variations[key][:]))
-                else:
-                    result = merged_variations[key][:]
-                    assert numpy.all(expected_h5[key][:] == result)
-            os.remove(merged_fpath)
-        except Exception:
-            os.remove(merged_fpath)
+        h5_1 = VariationsH5(join(TEST_DATA_DIR, 'csv', 'format.h5'), "r")
+        h5_2 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
+        merger = VarMerger(h5_1, h5_2, max_field_lens={'alt': 3},
+                           ignore_complex_overlaps=True,
+                           check_ref_matches=False)
+        assert merger.ploidy == 2
+        assert merger.samples == [b'TS-1', b'TS-11', b'TS-21', b'NA00001',
+                                  b'NA00002', b'NA00003']
+        expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'expected_merged.h5'),
+                                   'r')
+        new_vars = VariationsArrays()
+        new_vars.put_vars(merger)
+        for field in new_vars.keys():
+            if 'float' in str(new_vars[field][:].dtype):
+                assert numpy.all(_remove_nans(expected_h5[field][:]) ==
+                                 _remove_nans(new_vars[field][:]))
+            else:
+                result = new_vars[field][:]
+                assert numpy.all(expected_h5[field][:] == result)
 
         # Change the order
-        merged_variations = merge_variations(format_array_h5, format_h5,
-                                             merged_fpath,
-                                             ignore_overlaps=True,
-                                             ignore_2_or_more_overlaps=True)
-        expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'csv',
-                                        'expected_merged2.h5'), 'r')
-        try:
-            for key in merged_variations.keys():
-                if 'float' in str(merged_variations[key][:].dtype):
-                    assert numpy.all(_remove_nans(expected_h5[key][:]) ==
-                                     _remove_nans(merged_variations[key][:]))
-                else:
-                    result = merged_variations[key][:]
-                    assert numpy.all(expected_h5[key][:] == result)
-            os.remove(merged_fpath)
-        except Exception:
-            os.remove(merged_fpath)
-
-    def test_merge_hdf5_bin(self):
-        merged_fhand = NamedTemporaryFile()
-        merged_fpath = merged_fhand.name
-        merged_fhand.close()
-        h5_1 = join(TEST_DATA_DIR, 'csv', 'format.h5')
-        h5_2 = join(TEST_DATA_DIR, 'format_def.h5')
-        bin_ = join(BIN_DIR, 'merge_hdf5.py')
-        cmd = [sys.executable, bin_, h5_1, h5_2, '-o', merged_fpath, '-i',
-               '-di']
-        try:
-            check_output(cmd)
-            os.remove(merged_fpath)
-            os.remove(merged_fpath + '.log')
-        except CalledProcessError:
-            os.remove(merged_fpath)
-            os.remove(merged_fpath + '.log')
-
+        h5_1 = VariationsH5(join(TEST_DATA_DIR, 'csv', 'format.h5'), "r")
+        h5_2 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
+        merger = VarMerger(h5_2, h5_1, max_field_lens={'alt': 3},
+                           ignore_complex_overlaps=True,
+                           check_ref_matches=False)
+        assert merger.ploidy == 2
+        assert merger.samples == [b'NA00001', b'NA00002', b'NA00003',
+                                  b'TS-1', b'TS-11', b'TS-21']
+        expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'expected_merged2.h5'),
+                                   'r')
+        new_vars = VariationsArrays()
+        new_vars.put_vars(merger)
+        for field in new_vars.keys():
+            if 'float' in str(new_vars[field][:].dtype):
+                assert numpy.all(_remove_nans(expected_h5[field][:]) ==
+                                 _remove_nans(new_vars[field][:]))
+            else:
+                result = new_vars[field][:]
+                assert numpy.all(expected_h5[field][:] == result)
 
 if __name__ == "__main__":
+    # import sys;sys.argv = ['', 'MergeTest.test_merge_variations']
     unittest.main()

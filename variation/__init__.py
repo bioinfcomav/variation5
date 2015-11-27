@@ -69,3 +69,13 @@ SNP_DENSITY_WINDOW_SIZE = 100
 DIVERSITY_WINDOW_SIZE = 100000
 MAX_N_ALLELES = 4
 MAX_ALLELE_COUNTS = 50
+
+DEF_METADATA = {'CALLS': {b'GT': {'Description': 'Genotype',
+                                  'dtype': 'int'}},
+                'INFO': {}, 'FILTER': {}, 'OTHER': {},
+                'VARIATIONS': {'alt': {'dtype': 'str'},
+                               'chrom': {'dtype': 'str'},
+                               'id': {'dtype': 'str'},
+                               'pos': {'dtype': 'int32'},
+                               'qual': {'dtype': 'float16'},
+                               'ref': {'dtype': 'str'}}}

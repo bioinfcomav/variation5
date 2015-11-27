@@ -780,7 +780,12 @@ def _put_vars_to_vcf(h5, vcf):
         snp.append(_get_calls_samples(h5, n_snp, calls_paths))
         vcf.write('\t'.join(snp)+'\n')
 
+
 class _VariationMatrices():
+    @property
+    def ploidy(self):
+        return self['/calls/GT'].shape[2]
+
     def create_matrix_from_matrix(self, path, matrix):
 
         result = _dset_metadata_from_matrix(matrix)

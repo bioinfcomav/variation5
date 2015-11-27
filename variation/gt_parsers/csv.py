@@ -1,6 +1,7 @@
-from itertools import chain
+import copy
 
-from variation.gt_parsers.vcf import _do_nothing
+from itertools import chain
+from variation import DEF_METADATA
 
 IUPAC = {b'A': b'AA', b'T': b'TT', b'C': b'CC', b'G': b'GG',
          b'W': b'AT', b'M': b'AC', b'R': b'AG', b'': b'-',
@@ -73,16 +74,7 @@ class CSVParser():
                                        'chrom': 0}
         else:
             self.max_field_str_lens = max_field_str_lens
-        self.metadata = {'CALLS': {b'GT': {'Description': 'Genotype',
-                                           'dtype': 'int',
-                                           'type_cast': _do_nothing}},
-                         'INFO': {}, 'FILTER': {}, 'OTHER': {},
-                         'VARIATIONS': {'alt': {'dtype': 'str'},
-                                        'chrom': {'dtype': 'str'},
-                                        'id': {'dtype': 'str'},
-                                        'pos': {'dtype': 'int32'},
-                                        'qual': {'dtype': 'float16'},
-                                        'ref': {'dtype': 'str'}}}
+        self.metadata = copy.deepcopy(DEF_METADATA)
         self.ignored_fields = []
         self.kept_fields = []
 

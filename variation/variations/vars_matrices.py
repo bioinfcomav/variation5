@@ -412,8 +412,10 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
     paths.extend(filter_matrices.keys())
 
     snp_chunks = _grouper(snps, vars_in_chunk)
+    n_snps = 0
     for chunk_i, chunk in enumerate(snp_chunks):
         chunk = list(chunk)
+        n_snps += len([c for c in chunk if c is not None])
         first_field = True
         for path in paths:
             if path in var_matrices:
@@ -447,7 +449,9 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                 missing_val = MISSING_VALUES[dtype]
 
             # We store the information
+            snp_counter = 0
             for snp_i, snp in enumerate(chunk):
+                snp_counter += 1
                 try:
                     gt_data = snp[-1]
                 except TypeError:
@@ -586,8 +590,7 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
         matrix = hdf5[path]
         size = matrix.shape
         new_size = list(size)
-        snp_n = snp_i + chunk_i * vars_in_chunk
-        new_size[0] = snp_n
+        new_size[0] = n_snps
 
         resize_matrix(matrix, new_size)
     metadata = _prepare_metadata(vars_parser.metadata)
@@ -837,6 +840,23 @@ class _VariationMatrices():
 
         if hasattr(self, 'flush'):
             self._h5file.flush()
+
+    def get_chunk(self, index):
+
+        paths = self.keys()
+
+        dsets = {field: self[field] for field in paths}
+
+        var_array = None
+        for path, dset in dsets.items():
+            matrix = dset[index]
+            if var_array is None:
+                var_array = VariationsArrays(vars_in_chunk=matrix.shape[0])
+            var_array[path] = dset[index]
+
+        var_array._set_metadata(self.metadata)
+        var_array._set_samples(self.samples)
+        return var_array
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None,
                        chunk_size=None):

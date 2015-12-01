@@ -26,7 +26,8 @@ from variation.variations.stats import (_calc_stat, calc_maf_depth_distrib,
                                         _MafCalculator,
                                         HWECalcualtor,
                                         PositionalStatsCalculator, calc_inbreeding_coeficient, calc_exp_het,
-                                        _CalledGTCalculator)
+                                        _CalledGTCalculator,
+    _calc_distribution, _calc_cum_distrib)
 from variation.plot import (plot_histogram, plot_pandas_barplot,
                             qqplot, plot_boxplot, plot_barplot, plot_hist2d,
                             plot_lines, manhattan_plot)
@@ -36,6 +37,7 @@ from itertools import combinations_with_replacement
 from scipy.stats._continuous_distns import chi2
 import sys
 import logging
+from variation.matrix.methods import calc_min_max
 
 
 def _setup_argparse(**kwargs):
@@ -447,6 +449,70 @@ def plot_dp_distrib_per_gt(h5, by_chunk, max_depth, data_dir):
         df_distrib_dp = DataFrame(distrib_dp)
         _save(fpath, df_distrib_dp)
     canvas.print_figure(fhand)
+
+
+def plot_distrib(variations, field, fhand, by_chunk=True, max_value=None, per_gt=True,
+                 figsize=(20, 10), transform_funct=None, per_sample=False):
+
+    fig = Figure(figsize=figsize)
+    canvas = FigureCanvas(fig)
+    if per_gt:
+        gs = gridspec.GridSpec(2, 2)
+        masks = [_is_het, _is_hom]
+        names = ['Heterozygous', 'Homozygous']
+        mask_field = '/calls/GT'
+        required_fields = [field, mask_field]
+        if 'calls' not in field:
+            msg = 'To calculate stats depending on genotypes the field has to'
+            msg = ' be located in /calls group'
+            raise ValueError(msg)
+    else:
+        gs = gridspec.GridSpec(2, 1)
+        masks = [None]
+        names = ['']
+        required_fields = [field]
+        mask_field=None
+
+    if transform_funct is None:
+        transform_funct = lambda x: x
+            
+    for i, (mask, mask_name) in enumerate(zip(masks, names)):
+        if max_value is None:
+            _, max_value = calc_min_max(_remove_nans(variations[field]))
+        distributions = _calc_distribution(variations,
+                                           fields=required_fields,
+                                           max_value=max_value,
+                                           by_chunk=by_chunk,
+                                           mask_function=mask,
+                                           mask_field=mask_field)
+        if not per_sample:
+            # Normal distrib
+            distributions = numpy.sum(distributions, axis=0)
+            fieldname = field.split('/')[-1]
+            title = '{} distribution {}'.format(fieldname, mask_name)
+            axes = fig.add_subplot(gs[0, i])
+            plot_barplot(numpy.arange(0, distributions.shape[0]), distributions,
+                         mpl_params={'set_xlabel': {'args': [fieldname],
+                                                    'kwargs': {}},
+                                     'set_ylabel': {'args': ['Counts'], 'kwargs': {}},
+                                     'set_title': {'args': [title], 'kwargs': {}}},
+                         axes=axes)
+            
+            # Cumulative distrib
+            cumulative_distr = _calc_cum_distrib(distributions, axis=1)
+            cumulative_distr = cumulative_distr / cumulative_distr[0] * 100
+            title = 'Cumulative {} distribution {}'.format(fieldname,
+                                                           mask_name)
+            axes = fig.add_subplot(gs[1, i])
+            plot_barplot(numpy.arange(0, cumulative_distr.shape[0]),
+                         cumulative_distr,
+                         mpl_params={'set_xlabel': {'args': ['GQ'],
+                                                    'kwargs': {}},
+                                     'set_ylabel': {'args': ['% GTs'], 'kwargs': {}},
+                                     'set_title': {'args': [title], 'kwargs': {}}},
+                         axes=axes)
+    canvas.print_figure(fhand)
+
 
 
 def plot_gq_distrib_per_gt(h5, by_chunk, data_dir, max_value=None):

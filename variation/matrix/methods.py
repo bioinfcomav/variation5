@@ -155,3 +155,8 @@ def calc_min_max(matrix):
         max_ = numpy.max(matrix)
         min_ = numpy.min(matrix)
     return min_, max_
+
+
+def is_missing(matrix, axis=1):
+    matrix = numpy.any(matrix == MISSING_VALUES[matrix.dtype], axis=axis)
+    return matrix

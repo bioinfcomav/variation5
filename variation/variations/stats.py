@@ -6,7 +6,8 @@ import operator
 
 from variation import MISSING_VALUES, MAX_N_ALLELES
 from variation.matrix.stats import counts_by_row, row_value_counter_fact
-from variation.matrix.methods import append_matrix, calc_min_max, fill_array
+from variation.matrix.methods import append_matrix, calc_min_max, fill_array,\
+    is_missing
 from variation.variations.index import PosIndex
 from scipy.stats.stats import chisquare
 
@@ -130,7 +131,7 @@ class _ObsHetCalculator:
         # TODO: min_num_genotypes
         gts = variations['/calls/GT'][:]
         is_het = _is_het(gts)
-        missing_gts = _is_missing(gts)
+        missing_gts = is_missing(gts, axis=2)
         called_gts = numpy.sum(missing_gts == 0, axis=self.axis)
         het = numpy.divide(numpy.sum(is_het, axis=self.axis), called_gts)
         return het
@@ -138,19 +139,14 @@ class _ObsHetCalculator:
 
 def _is_het(gts):
     is_het = gts[:, :, 0] != gts[:, :, 1]
-    missing_gts = _is_missing(gts)
+    missing_gts = is_missing(gts, axis=2)
     is_het[missing_gts] = False
     return is_het
 
 
-def _is_missing(gts):
-    missing_gts = numpy.any(gts == -1, axis=2)
-    return missing_gts
-
-
 def _is_hom(gts):
     is_hom = gts[:, :, 0] == gts[:, :, 1]
-    missing_gts = _is_missing(gts)
+    missing_gts = is_missing(gts, axis=2)
     is_hom[missing_gts] = False
     return is_hom
 
@@ -164,7 +160,7 @@ def _is_hom_alt(gts):
 
 
 def _is_called(gts):
-    return numpy.logical_not(_is_missing(gts))
+    return numpy.logical_not(is_missing(gts, axis=2))
 
 
 def _is_eq_hi_dp(variations, depth):
@@ -385,7 +381,7 @@ class GenotypeStatsCalculator:
     def __call__(self, variations):
         gts = variations['/calls/GT']
         het = numpy.sum(_is_het(gts), axis=0)
-        missing = numpy.sum(_is_missing(gts), axis=0)
+        missing = numpy.sum(is_missing(gts, axis=2), axis=0)
         gts_alt = numpy.copy(gts)
         gts_alt[gts_alt == 0] = -1
         alt_hom = numpy.sum(_is_hom(gts_alt), axis=0)

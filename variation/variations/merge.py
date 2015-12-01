@@ -253,15 +253,14 @@ class VarMerger():
         return max_lens
 
     def _get_samples(self, suffix):
-        samples1 = self.variations1.samples
 
         if suffix is None:
-            samples = samples1 + self.variations2.samples
+            samples = self.variations1.samples + self.variations2.samples
             return [sample.encode('utf-8') for sample in samples]
-        samples = samples1[:]
 
+        samples = self.variations1.samples[:]
         for sample in self.variations2.samples:
-            if sample in samples1:
+            if sample in self.variations1.samples:
                 sample = sample + suffix
             samples.append(sample)
         return [sample.encode('utf-8') for sample in samples]
@@ -325,8 +324,7 @@ class VarMerger():
         "it assumes that the given snps are overlaping or None"
         if self._gt_shape is None:
             snp = snp1 if snp1 is not None else snp2
-            shape = snp['gts'].shape
-            self._gt_shape = (len(self.samples), shape[1])
+            self._gt_shape = (len(self.samples), self.ploidy)
             self._gt_dtype = snp['gts'].dtype
 
         merged_gts = numpy.full(self._gt_shape, MISSING_VALUES[self._gt_dtype],
@@ -337,7 +335,7 @@ class VarMerger():
                 merged_gts[self._n_samples1:] = snp2['gts']
             else:
                 good_snp = snp1
-                merged_gts[:self._n_samples2] = snp1['gts']
+                merged_gts[:self._n_samples1] = snp1['gts']
             new_snp = good_snp.copy()
             new_snp['gts'] = merged_gts
             num_alt = 0 if good_snp['alt'] is None else len(good_snp['alt'])
@@ -377,6 +375,9 @@ class VarMerger():
             merged_gts = numpy.append(new_short_gts, snp2['gts'], axis=0)
 
         qual = self._get_qual(snp1, snp2)
+        alt = alleles_merged[1:]
+        if not alt:
+            alt = None
         return {'chrom': long_snp['chrom'], 'pos': long_snp['pos'],
-                'ref': alleles_merged[0], 'alt': alleles_merged[1:],
-                'gts': merged_gts, 'qual': qual}
+                'ref': alleles_merged[0], 'alt': alt, 'gts': merged_gts,
+                'qual': qual}

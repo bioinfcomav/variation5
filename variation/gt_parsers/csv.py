@@ -57,7 +57,7 @@ class CSVParser():
         self._sample_line = sample_line
         self._first_sample_column = first_sample_column
         self._first_gt_column = first_gt_column
-        self._sep = sep.encode('utf-8')
+        self._sep = sep
         self._snp_id_column = snp_id_column
         self.gt_splitter = gt_splitter
         self._var_info = var_info
@@ -80,7 +80,9 @@ class CSVParser():
 
     def _determine_ploidy(self):
         read_lines = []
+        one_line = False
         for line in self.fhand:
+            one_line = True
             read_lines.append(line)
             items = line.split(self._sep)
             items[-1] = items[-1].strip()
@@ -93,12 +95,17 @@ class CSVParser():
                     self.ploidy = len(gt)
                     break
 
+        if not one_line:
+            raise RuntimeError('File is empty')
+        if 'ploidy' not in dir(self):
+            raise RuntimeError('Could not determine ploidy.')
+
         self.fhand = chain(read_lines, self.fhand)
 
     def _get_samples(self):
         for line_num, line in enumerate(self.fhand):
             if line_num == self._sample_line:
-                return line.strip().split(self._sep)[self._first_sample_column:]
+                return line.rstrip().split(self._sep)[self._first_sample_column:]
 
         raise RuntimeError("We didn't reach to sample line")
 
@@ -150,7 +157,7 @@ class CSVParser():
                     continue
                 else:
                     raise RuntimeError('snp {} is empty'.format(snp_id))
-#             print(snp_id, alleles, len(gts[0][1]))
+
             variation = (var_info['chrom'], var_info['pos'], snp_id,
                          alleles[0], alt_alleles, None, None, None, gts)
 

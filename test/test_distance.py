@@ -67,10 +67,9 @@ class IndividualDistTest(unittest.TestCase):
         variations = VariationsArrays()
         variations['/calls/GT'] = gts
         expected = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
-        distance = calc_parwise_distance(variations, by_chunk=True,
-                                         chunk_size=2)
+        distance = calc_parwise_distance(variations, chunk_size=2)
         assert numpy.allclose(distance, expected)
-        distance = calc_parwise_distance(variations, by_chunk=False)
+        distance = calc_parwise_distance(variations, chunk_size=None)
         assert numpy.allclose(distance, expected)
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ class SortVariationsTest(unittest.TestCase):
         var_info = {b'solcap_snp_sl_15058': {'chrom': b'chrom2', 'pos': 345},
                     b'solcap_snp_sl_60635': {'chrom': b'chrom1', 'pos': 346},
                     b'solcap_snp_sl_60604': {'chrom': b'chrom1', 'pos': 325}}
-        parser = CSVParser(fhand, var_info, first_sample_column=1, sep='\t',
+        parser = CSVParser(fhand, var_info, first_sample_column=1, sep=b'\t',
                            max_field_lens={'alt': 3},
                            max_field_str_lens={'chrom': 10, 'alt': 10})
         variations = VariationsArrays()
@@ -27,6 +27,7 @@ class SortVariationsTest(unittest.TestCase):
         exp_pos = [325, 346, 345]
         assert numpy.all(sorted_vars['/variations/chrom'] == exp_chrom)
         assert numpy.all(sorted_vars['/variations/pos'] == exp_pos)
+        fhand.close()
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,7 @@
 import sys
 import argparse
 from argparse import ArgumentError
-from variation.vcf import VCFParser, read_gzip_file
+from variation.gt_parsers.vcf import VCFParser, read_gzip_file
 from variation.variations.vars_matrices import VariationsH5
 from variation import PRE_READ_MAX_SIZE
 
@@ -66,7 +66,7 @@ def main():
                            ignored_fields=args['ignored_fields'],
                            kept_fields=args['kept_fields'],
                            max_field_lens={'CALLS': {b'AO': args['alt_gt_num']},
-                                           'alt': args['alt_gt_num']}   )
+                                           'alt': args['alt_gt_num']})
     h5 = VariationsH5(args['out_fpath'], mode='w')
     h5.put_vars(vcf_parser)
 

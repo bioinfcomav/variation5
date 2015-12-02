@@ -392,7 +392,7 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
 def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                       ignored_fields=None):
 
-    ignore_alt = hdf5.ignore_alt_overflow
+    ignore_overflows = hdf5.ignore_overflows
     snps = vars_parser.variations
     log = {'data_no_fit': {},
            'variations_processed': 0,
@@ -517,7 +517,7 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                             matrix[slice_] = item
                         except TypeError as error:
                             if 'broadcast' in str(error) and field == 'alt':
-                                if field == 'alt' and not ignore_alt:
+                                if field == 'alt' and not ignore_overflows:
                                     msg = 'More alt alleles than expected.'
                                     msg2 = 'Expected, present: {}, {}'
                                     msg2 = msg2.format(size[1], len(item))
@@ -958,7 +958,7 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_alt_overflow=False):
+                 ignore_overflows=False):
         self._fpath = fpath
         if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
@@ -968,7 +968,7 @@ class VariationsH5(_VariationMatrices):
         self.mode = mode
         self._h5file = h5py.File(fpath, mode)
         self._vars_in_chunk = vars_in_chunk
-        self.ignore_alt_overflow = ignore_alt_overflow
+        self.ignore_overflows = ignore_overflows
 
     def put_vars(self, var_parser):
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk)
@@ -1083,12 +1083,12 @@ def select_dset_from_chunks(chunks, dset_path):
 
 class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_alt_overflow=False):
+                 ignore_overflows=False):
         self._vars_in_chunk = vars_in_chunk
         self._hArrays = {}
         self._metadata = {}
         self._samples = []
-        self.ignore_alt_overflow = ignore_alt_overflow
+        self.ignore_overflows = ignore_overflows
 
     def put_vars(self, vars_parser):
         return _put_vars_in_mats(vars_parser, self, self._vars_in_chunk)

@@ -65,7 +65,7 @@ def _calc_pairwise_distance_by_chunk(gts, chunk_size):
     return abs_distances / n_snps_matrix
 
 
-def calc_parwise_distance(variations, chunk_size=SNPS_PER_CHUNK):
+def calc_pairwise_distance(variations, chunk_size=None):
     '''It calculates the distance between individuals using the Kosman distance.
     
     The Kosman distance is explain in DOI: 10.1111/j.1365-294X.2005.02416.x

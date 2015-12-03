@@ -94,8 +94,8 @@ class VCFParser():
         else:
             user_max_field_lens = max_field_lens
         self.max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
-        self.max_field_str_lens = {'FILTER': 0, 'INFO': {}, 'chrom': 0,
-                                   'alt': 0, 'ref': 0, 'id': 10}
+        self.max_field_str_lens = {'FILTER': 0, 'INFO': {},
+                                   'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
         self._init_max_field_lens()
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
@@ -123,7 +123,7 @@ class VCFParser():
                     continue
                 self.max_field_lens[section][field] = 0
                 if 'str' in meta_field['dtype']:
-                    self.max_field_str_lens[section][field] = 0
+                    self.max_field_str_lens[section][field] = 25
 
     def _read_snps_in_compressed_cache(self):
         if not self.pre_read_max_size:
@@ -231,6 +231,8 @@ class VCFParser():
         self.metadata = metadata
 
     def _parse_info(self, info):
+        if b'.' == info:
+            return None
         infos = info.split(b';')
         parsed_infos = {}
         ignored_fields = self.ignored_fields
@@ -247,7 +249,6 @@ class VCFParser():
                 msg = 'INFO metadata was not defined in header: '
                 msg += key.decode('utf-8')
                 raise RuntimeError(msg)
-
             type_ = meta['type_cast']
             if isinstance(val, bool):
                 pass
@@ -398,7 +399,6 @@ class VCFParser():
                 flt_len = len(flt)
             if self.max_field_lens['FILTER'] < flt_len:
                 self.max_field_lens['FILTER'] = flt_len
-            qual = float(qual) if qual != b'.' else None
 
             info = self._parse_info(info)
             calls = self._parse_calls(fmt, calls)

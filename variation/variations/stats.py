@@ -632,7 +632,6 @@ def calc_hq_cumulative_distribution_per_sample(variations, by_chunk=True,
                                        max_value=max_value,
                                        by_chunk=by_chunk,
                                        mask_function=mask_function)
-    print(distributions)
     hq_cumulative_distr = _calc_cum_distrib(distributions)
     return distributions, hq_cumulative_distr
 

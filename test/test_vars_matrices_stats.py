@@ -169,7 +169,6 @@ class VarMatricesStatsTest(unittest.TestCase):
 
         distribution, cum_dist = result
 
-        print(distribution)
         assert distribution[0, -1] == 2
         assert cum_dist[0, -1] == 2
 

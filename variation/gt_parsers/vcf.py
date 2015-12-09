@@ -100,7 +100,6 @@ class VCFParser():
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
                 for key2, value2 in value1.items():
-                    print(key2, value2)
                     self.max_field_lens[key1][key2] = value2
             else:
                 self.max_field_lens[key1] = value1
@@ -123,7 +122,7 @@ class VCFParser():
                         self.max_field_lens[section][field] = 1
                     continue
                 self.max_field_lens[section][field] = 0
-                if 'str' in meta_field['dtype'] or '.' in meta_field['Number']:
+                if 'str' in meta_field['dtype']:
                     self.max_field_str_lens[section][field] = 25
 
     def _read_snps_in_compressed_cache(self):

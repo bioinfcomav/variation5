@@ -243,17 +243,13 @@ class VarMatsTests(unittest.TestCase):
         path = tmp_fhand.name
         tmp_fhand.close()
 
-        fhand = gzip.open(join(TEST_DATA_DIR,
-                               'tomato.apeki_gbs.calmd.vcf.gz'), 'rb')
-        vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000,
+        fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+        vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=10000,
                                max_field_lens={'alt': 5})
         h5 = VariationsH5(path, mode='w')
         h5.put_vars(vcf_parser)
-        input(path)
-        print(h5['/variations/info/CIGAR'])
         fhand.close()
         h5 = VariationsH5(path, 'r')
-        print(h5['/calls/GT'].shape)
         assert h5['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(h5['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
 
@@ -407,10 +403,10 @@ class VcfWrittenTest(unittest.TestCase):
 
         # With all fields available
         tmp_fhand = NamedTemporaryFile()
-        out_fpath = tmp_fhand.name
         tmp_fhand.close()
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2})
+        vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
+                        pre_read_max_size=10000)
         variations = VariationsArrays()
         variations.put_vars(vcf)
         vcf_fhand.close()
@@ -423,6 +419,8 @@ class VcfWrittenTest(unittest.TestCase):
         for line in lines:
             assert line in exp_lines
         exp_fhand.close()
+
+        # With hdf5 file
         tomato_h5 = VariationsH5(join(TEST_DATA_DIR,
                                       'tomato.apeki_gbs.calmd.h5'), "r")
         exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "r")
@@ -431,10 +429,9 @@ class VcfWrittenTest(unittest.TestCase):
         exp_lines = [line.strip() for line in exp_lines]
         i = 0
         for line in lines:
-            if i < 100:
-                assert line in exp_lines
-                i += 1
-            else:
+            assert line in exp_lines
+            i += 1
+            if i > 100:
                 break
         exp_fhand.close()
 
@@ -448,7 +445,8 @@ class VcfWrittenTest(unittest.TestCase):
                             if line.startswith(b'##')]
             vcf_fhand.close()
             vcf_fhand = open(join(TEST_DATA_DIR, file), 'rb')
-            vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2})
+            vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
+                            pre_read_max_size=10000)
             var_array = VariationsArrays()
             var_array.put_vars(vcf)
             for line in _prepare_vcf_header(var_array, vcf_format='VCFv4.0'):
@@ -456,5 +454,5 @@ class VcfWrittenTest(unittest.TestCase):
             vcf_fhand.close()
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf']
+#     import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf']
     unittest.main()

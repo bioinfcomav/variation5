@@ -62,13 +62,12 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
         if not y_axes_size:
             msg = 'This field is empty in the preread SNPs: '
             msg += field.decode("utf-8")
-            warnings.warn(msg, RuntimeWarning)
+            raise RuntimeError(msg)
         if y_axes_size == 1:
             size = (vars_in_chunk,)
             maxshape = (None,)
             chunks = (vars_in_chunk,)
         else:
-            y_axes_size = vcf.max_field_str_lens['INFO'][field]
             size = [vars_in_chunk, y_axes_size]
             maxshape = (None, y_axes_size)
             chunks = (vars_in_chunk, y_axes_size)

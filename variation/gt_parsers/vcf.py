@@ -2,7 +2,7 @@ from itertools import chain, islice
 import re
 import subprocess
 
-from variation import MISSING_VALUES
+from variation import MISSING_VALUES, MISSING_INT, MISSING_FLOAT
 from variation.utils.compressed_queue import CCache
 
 # Missing docstring
@@ -25,15 +25,26 @@ def _do_nothing(value):
     return value
 
 
+MAPPED_INTS = {str(i).encode(): i for i in range(100)}
+MAPPED_INTS[None] = MISSING_INT
+MAPPED_INTS[''] = MISSING_INT
+MAPPED_INTS[b''] = MISSING_INT
+MAPPED_INTS['.'] = MISSING_INT
+MAPPED_INTS[b'.'] = MISSING_INT
+
+
 def _to_int(string):
-    if string in ('', '.', None, b'.'):
-        return MISSING_VALUES[int]
-    return int(string)
+    try:
+        return MAPPED_INTS[string]
+    except KeyError:
+        return int(string)
 
 
 def _to_float(string):
-    if string in ('', '.', None, b'.'):
-        return MISSING_VALUES[float]
+    if string is None:
+        return MISSING_FLOAT
+    elif string in ('', '.', b'.'):
+        return MISSING_FLOAT
     return float(string)
 
 

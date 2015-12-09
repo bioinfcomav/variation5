@@ -50,7 +50,6 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
     if vcf.kept_fields:
         info_fields = info_fields.intersection(vcf.kept_fields)
     info_fields = list(info_fields)
-
     info_matrices = OrderedDict()
     for field in info_fields:
         meta_fld = meta[field]
@@ -64,16 +63,15 @@ def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
             msg = 'This field is empty in the preread SNPs: '
             msg += field.decode("utf-8")
             warnings.warn(msg, RuntimeWarning)
-            continue
         if y_axes_size == 1:
             size = (vars_in_chunk,)
             maxshape = (None,)
             chunks = (vars_in_chunk,)
         else:
+            y_axes_size = vcf.max_field_str_lens['INFO'][field]
             size = [vars_in_chunk, y_axes_size]
             maxshape = (None, y_axes_size)
             chunks = (vars_in_chunk, y_axes_size)
-
         kwargs = DEF_DSET_PARAMS.copy()
         kwargs['shape'] = size
         kwargs['dtype'] = dtype
@@ -392,7 +390,7 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
 def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                       ignored_fields=None):
 
-    ignore_alt = hdf5.ignore_alt_overflow
+    ignore_overflows = hdf5.ignore_overflows
     snps = vars_parser.variations
     log = {'data_no_fit': {},
            'variations_processed': 0,
@@ -412,8 +410,10 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
     paths.extend(filter_matrices.keys())
 
     snp_chunks = _grouper(snps, vars_in_chunk)
+    n_snps = 0
     for chunk_i, chunk in enumerate(snp_chunks):
         chunk = list(chunk)
+        n_snps += len([c for c in chunk if c is not None])
         first_field = True
         for path in paths:
             if path in var_matrices:
@@ -428,15 +428,14 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
             matrix = hdf5[path]
             # resize the dataset to fit the new chunk
             size = matrix.shape
+
             new_size = list(size)
             new_size[0] = vars_in_chunk * (chunk_i + 1)
 
             resize_matrix(matrix, new_size)
-
             field = posixpath.basename(path)
             field = _to_str(field)
             byte_field = field.encode('utf-8')
-
             if grp == 'FILTER':
                 missing_val = False
             else:
@@ -447,7 +446,9 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                 missing_val = MISSING_VALUES[dtype]
 
             # We store the information
+            snp_counter = 0
             for snp_i, snp in enumerate(chunk):
+                snp_counter += 1
                 try:
                     gt_data = snp[-1]
                 except TypeError:
@@ -474,8 +475,8 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                             log['data_no_fit'][field] += 1
                 elif grp == 'INFO':
                     info_data = snp[7]
+                    info_data = info_data.get(byte_field, None)
                     if info_data is not None:
-                        info_data = info_data.get(byte_field, None)
                         if len(size) == 1:
                             # we're expecting one item or a list with one item
                             if isinstance(info_data, (list, tuple)):
@@ -513,7 +514,7 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                             matrix[slice_] = item
                         except TypeError as error:
                             if 'broadcast' in str(error) and field == 'alt':
-                                if field == 'alt' and not ignore_alt:
+                                if field == 'alt' and not ignore_overflows:
                                     msg = 'More alt alleles than expected.'
                                     msg2 = 'Expected, present: {}, {}'
                                     msg2 = msg2.format(size[1], len(item))
@@ -586,8 +587,7 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
         matrix = hdf5[path]
         size = matrix.shape
         new_size = list(size)
-        snp_n = snp_i + chunk_i * vars_in_chunk
-        new_size[0] = snp_n
+        new_size[0] = n_snps
 
         resize_matrix(matrix, new_size)
     metadata = _prepare_metadata(vars_parser.metadata)
@@ -682,10 +682,11 @@ def _get_value_info(h5, var_index, info_paths):
                                                    x.decode('utf-8'))
             info.append(new_info)
         else:
+            new_info = ''
             # TODO: change to a more elegant way
+            value = _remove_nans(h5[key][var_index])
+            value = [str(x) for x in value]
             if 'numpy' in str(type(h5[key][var_index])):
-                value = _remove_nans(h5[key][var_index])
-                value = [str(x) for x in value]
                 if len(value) > 0:
                     val = []
                     for x in value:
@@ -698,6 +699,8 @@ def _get_value_info(h5, var_index, info_paths):
             else:
                 new_info = '{}={}'.format(key.split('/')[-1], value)
             info.append(new_info)
+    if '' in info:
+        info.remove('')
     return ';'.join(info)
 
 
@@ -816,6 +819,10 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
 
 
 class _VariationMatrices():
+    @property
+    def ploidy(self):
+        return self['/calls/GT'].shape[2]
+
     def create_matrix_from_matrix(self, path, matrix):
 
         result = _dset_metadata_from_matrix(matrix)
@@ -871,6 +878,23 @@ class _VariationMatrices():
 
         if hasattr(self, 'flush'):
             self._h5file.flush()
+
+    def get_chunk(self, index):
+
+        paths = self.keys()
+
+        dsets = {field: self[field] for field in paths}
+
+        var_array = None
+        for path, dset in dsets.items():
+            matrix = dset[index]
+            if var_array is None:
+                var_array = VariationsArrays(vars_in_chunk=matrix.shape[0])
+            var_array[path] = dset[index]
+
+        var_array._set_metadata(self.metadata)
+        var_array._set_samples(self.samples)
+        return var_array
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None,
                        chunk_size=None):
@@ -972,7 +996,7 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_alt_overflow=False):
+                 ignore_overflows=False):
         self._fpath = fpath
         if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
@@ -982,7 +1006,7 @@ class VariationsH5(_VariationMatrices):
         self.mode = mode
         self._h5file = h5py.File(fpath, mode)
         self._vars_in_chunk = vars_in_chunk
-        self.ignore_alt_overflow = ignore_alt_overflow
+        self.ignore_overflows = ignore_overflows
 
     def put_vars(self, var_parser):
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk)
@@ -1094,12 +1118,12 @@ def select_dset_from_chunks(chunks, dset_path):
 
 class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_alt_overflow=False):
+                 ignore_overflows=False):
         self._vars_in_chunk = vars_in_chunk
         self._hArrays = {}
         self._metadata = {}
         self._samples = []
-        self.ignore_alt_overflow = ignore_alt_overflow
+        self.ignore_overflows = ignore_overflows
 
     def put_vars(self, vars_parser):
         return _put_vars_in_mats(vars_parser, self, self._vars_in_chunk)

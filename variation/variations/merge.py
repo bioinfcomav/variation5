@@ -4,387 +4,380 @@
 # pylint: disable=R0904
 # Missing docstring
 # pylint: disable=C0111
+from collections import Counter
+import copy
 
 import numpy
 
-from variation import DEF_DSET_PARAMS, MISSING_VALUES
-from variation.variations.vars_matrices import VariationsH5
-from variation.variations.vars_matrices import _create_matrix
+from variation import MISSING_VALUES, MISSING_BYTE, DEF_METADATA
+from variation.iterutils import PeekableIterator
 
 
-def _max_length(chars_array):
-    return max([len(x) for x in chars_array])
-
-
-def _collapse_alleles(base_allele, alleles, position, max_allele_length=35):
-    # Type pass to str because join expected str not int(binary)
-    alleles = alleles.astype(numpy.dtype(('U', max_allele_length)))
-    collapsed_alleles = alleles[0].copy()
-    for i in range(alleles.shape[1]):
-        allele = [x for x in base_allele.decode('utf-8')]
-        if '' == alleles[0, i]:
-            continue
-        else:
-            assert len(alleles[0, i]) == 1
-        allele[position] = alleles[0, i]
-        collapsed_alleles[i] = ''.join(allele)
-    collapsed_alleles = collapsed_alleles.astype(numpy.dtype(('S',
-                                                             max_allele_length)))
-    return collapsed_alleles.reshape((1, collapsed_alleles.shape[0]))
-
-
-def _merge_alleles(alleles_vcf, alleles_collapse):
-    for allele_collapse in alleles_collapse:
-        if allele_collapse in alleles_vcf:
-            continue
-        alleles_merged = numpy.append(alleles_vcf, allele_collapse)
-    return alleles_merged
-
-
-def _get_attribute(h5_1, h5_2, path, attribute):
-    try:
-        return getattr(h5_1[path], attribute)
-    except KeyError:
-        return getattr(h5_2[path], attribute)
-
-
-def _create_variations_merged(variations_1, variations_2,
-                             fpath, ignore_fields=[]):
-    variations_merged = VariationsH5(fpath, "w")
-    h5_paths = set(variations_1.keys()+variations_2.keys())
-    h5_samples = variations_1.samples+variations_2.samples
-    for path in h5_paths:
-        continue_ = False
-        for field in ignore_fields:
-            if field in path:
-                continue_ = True
-        if continue_:
-            continue
-        kwargs = DEF_DSET_PARAMS.copy()
-        kwargs['shape'] = list(_get_attribute(variations_1, variations_2,
-                                             path, 'shape'))
-        kwargs['shape'][0] = (variations_1['/variations/pos'].shape[0] +
-                              variations_2['/variations/pos'].shape[0])
-        if 'calls' in path:
-            kwargs['shape'][1] = len(h5_samples)
-        kwargs['shape'] = tuple(kwargs['shape'])
-        kwargs['dtype'] = _get_attribute(variations_1, variations_2,
-                                        path, 'dtype')
-        kwargs['maxshape'] = _get_attribute(variations_1, variations_2,
-                                           path, 'maxshape')
-        if 'variations' in path and 'chrom' not in path and 'pos' not in path and 'ref' not in path:
-            kwargs['maxshape'] = (None, None)
-            ncols = 0
-            try:
-                ncols += variations_1[path].shape[1]
-            except (KeyError, IndexError):
-                ncols += 1
-            try:
-                ncols += variations_2[path].shape[1]
-            except (KeyError, IndexError):
-                ncols += 1
-            kwargs['shape'] = (kwargs['shape'][0], ncols)
-        _create_matrix(variations_merged, path, **kwargs)
-    return variations_merged
+def _iterate_vars(variations):
+    for var_idx in range(variations.num_variations):
+        chrom = variations['/variations/chrom'][var_idx]
+        pos = variations['/variations/pos'][var_idx]
+        ref = variations['/variations/ref'][var_idx]
+        alts = variations['/variations/alt'][var_idx]
+        alts = [alt for alt in alts if alt != MISSING_BYTE]
+        if not alts:
+            alts = None
+        try:
+            qual = variations['/variations/qual'][var_idx]
+        except KeyError:
+            qual = None
+        gts = variations['/calls/GT'][var_idx]
+        yield {'chrom': chrom, 'pos': pos, 'ref': ref, 'alt': alts,
+               'qual': qual, 'gts': gts}
 
 
 def _are_overlapping(var1, var2):
-    pos1 = var1['/variations/pos']
-    pos2 = var2['/variations/pos']
-    return (var1['/variations/chrom'] == var2['/variations/chrom'] and
-            pos2 >= pos1 and pos2 < pos1 + len(var1['/variations/ref'][0]))
+    pos1 = var1['pos']
+    pos2 = var2['pos']
+    return (var1['chrom'] == var2['chrom'] and
+            pos2 >= pos1 and pos2 < pos1 + len(var1['ref']))
 
 
-def _transform_gts_to_merge(alleles, collapsed_alleles, gts):
-    alleles_merged = alleles.copy()
-    new_gts = gts.copy()
-    for i, collapsed_allele in enumerate(collapsed_alleles):
-        for allele in alleles:
-            if collapsed_allele == allele:
-                new_gts[gts == i] = 0
-                break
+def _pos_lt_tuples(tup1, tup2):
+    chrom1 = tup1[0]
+    chrom2 = tup2[0]
+
+    if chrom1 < chrom2:
+        return True
+    elif chrom1 > chrom2:
+        return False
+    pos1 = tup1[1]
+    pos2 = tup2[1]
+
+    return True if pos1 < pos2 else False
+
+
+def _pos_le_tuples(tup1, tup2):
+    chrom1 = tup1[0]
+    chrom2 = tup2[0]
+
+    if chrom1 < chrom2:
+        return True
+    elif chrom1 > chrom2:
+        return False
+    pos1 = tup1[1]
+    pos2 = tup2[1]
+
+    return True if pos1 <= pos2 else False
+
+
+def _pos_lt(snp1, snp2):
+    tup1 = snp1['chrom'], snp1['pos']
+    tup2 = snp2['chrom'], snp2['pos']
+    return _pos_lt_tuples(tup1, tup2)
+
+
+def _sort_iterators(iter1, iter2):
+    prev_item1 = None
+    prev_item2 = None
+    while True:
+        if prev_item1:
+            item1 = prev_item1
+            prev_item1 = None
         else:
-            alleles_merged = numpy.append(alleles_merged,
-                                          collapsed_allele)
-            new_gts[gts == i] = alleles_merged.shape[0] - 1
+            try:
+                item1 = iter1.peek()
+            except StopIteration:
+                item1 = None
+        if prev_item2:
+            item2 = prev_item2
+            prev_item2 = None
+        else:
+            try:
+                item2 = iter2.peek()
+            except StopIteration:
+                item2 = None
+        if item1 is None and item2 is None:
+            break
+        if item1 is None:
+            yield item2
+        elif item2 is None:
+            yield item1
+        else:
+            if _pos_lt(item1, item2):
+                prev_item2 = item2
+                yield item1
+            else:
+                prev_item1 = item1
+                yield item2
+
+
+def _var_len(var):
+    max_len = len(var['ref'])
+    if not var['alt']:
+        return max_len
+
+    alt_len = max([len(alt_allele) for alt_allele in var['alt']])
+
+    if alt_len > max_len:
+        max_len = alt_len
+    return max_len
+
+
+def _get_overlapping_region(sorted_vars):
+    region_start = None
+    region_stop = None
+    for var in sorted_vars:
+        var_stop = var['chrom'], var['pos'] + _var_len(var) - 1
+        var_start = var['chrom'], var['pos']
+        if region_start is None:
+            region_start = var_start
+        if region_stop is None:
+            region_stop = var_stop
+        elif _pos_le_tuples(var_start, region_stop):
+            if _pos_lt_tuples(region_stop, var_stop):
+                region_stop = var_stop
+        else:
+            return (region_start, region_stop)
+    else:
+        return (region_start, region_stop)
+
+
+def _get_vars_in_region(vars_, region):
+    vars_in_region = []
+    while True:
+        try:
+            var = vars_.peek()
+        except StopIteration:
+            return vars_in_region
+
+        if _pos_le_tuples((var['chrom'], var['pos']), region[1]):
+            vars_in_region.append(next(vars_))
+        else:
+            break
+    return vars_in_region
+
+
+def _group_overlaping_vars(variations_1, variations_2,
+                           ignore_2_or_more_overlaps=False,
+                           check_ref_match=True):
+
+    if isinstance(variations_1, list) and isinstance(variations_2, list):
+        # This is intented only for testing and debugin
+        snps_1 = PeekableIterator(iter(variations_1))
+        snps_2 = PeekableIterator(iter(variations_2))
+    else:
+        snps_1 = PeekableIterator(_iterate_vars(variations_1))
+        snps_2 = PeekableIterator(_iterate_vars(variations_2))
+
+    while True:
+        sorted_vars = _sort_iterators(snps_1, snps_2)
+        region = _get_overlapping_region(sorted_vars)
+        snps_1.reset_peek()
+        snps_2.reset_peek()
+
+        snps1_in_region = _get_vars_in_region(snps_1, region)
+        snps2_in_region = _get_vars_in_region(snps_2, region)
+        snps_1.reset_peek()
+        snps_2.reset_peek()
+        if not snps1_in_region and not snps2_in_region:
+            break
+        yield (snps1_in_region, snps2_in_region)
+
+
+def _transform_alleles(base_allele, alleles, position, max_allele_length=35):
+    # Type pass to str because join expected str not int(binary)
+    new_alleles = []
+    for allele in alleles:
+        assert len(allele) == 1
+        new_allele = bytearray(base_allele)
+        new_allele[position] = allele[0]
+        new_alleles.append(bytes(new_allele))
+    return new_alleles
+
+
+def _transform_gts_to_merge(long_alleles, new_short_alleles, gts):
+    alleles_merged = long_alleles[:]
+
+    new_gts = gts.copy()
+    for old_short_idx, short_allele in enumerate(new_short_alleles):
+        try:
+            new_allele_idx = long_alleles.index(short_allele)
+        except:
+            alleles_merged.append(short_allele)
+            new_allele_idx = len(alleles_merged) - 1
+        if old_short_idx != new_allele_idx:
+            new_gts[gts == old_short_idx] = new_allele_idx
+
     return alleles_merged, new_gts
 
 
-def _merge_snps(snp1, snp2, i, merged, fields_funct={}, ignore_fields=[],
-               check_ref_match=True):
-    is_merged = 0
-    is_added = 0
-    is_ignored = 0
-    if snp1 is not None and snp2 is not None and 'ref' in snp1.keys() and 'ref' in snp2.keys():
-        if snp1['/variations/ref'] != snp2['/variations/ref']:
-            if check_ref_match:
-                raise 'The reference allele of the SNPs are not the same.'
+class VarMerger():
+    def __init__(self, variations1, variations2, suffix_for_sample2=None,
+                 ignore_complex_overlaps=False, check_ref_matches=True,
+                 max_field_lens=None):
+        '''It merges two variation matrices.
+
+        suffix for sample2 is only added to samples in variations2 also
+        found in variations1'''
+
+        self.variations1 = variations1
+        self.variations2 = variations2
+        self.log = Counter()
+        self.samples = self._get_samples(suffix_for_sample2)
+        self._ignore_complex_overlaps = ignore_complex_overlaps
+        self._check_ref_matches = check_ref_matches
+        self._gt_shape = None
+        self._gt_dtype = None
+        self._n_samples1 = len(variations1.samples)
+        self._n_samples2 = len(variations2.samples)
+        if max_field_lens is None:
+            self.max_field_lens = {'alt': 0}
+        else:
+            self.max_field_lens = max_field_lens
+
+        self.max_field_str_lens = self._get_max_field_str_lens()
+
+        if variations1.ploidy != variations2.ploidy:
+            raise ValueError('Ploidies should match')
+        self.ploidy = variations1.ploidy
+        self.metadata = copy.deepcopy(DEF_METADATA)
+        self.ignored_fields = []
+        self.kept_fields = []
+
+    def _get_max_field_str_lens(self):
+        max_lens = {}
+        fields = ['/variations/chrom', '/variations/ref',
+                  '/variations/alt']
+        for field in fields:
+            field_siz1 = int(str(self.variations1[field].dtype).split('S')[-1])
+            field_siz2 = int(str(self.variations2[field].dtype).split('S')[-1])
+            field_size = max([field_siz1, field_siz2])
+            field_name = field.split('/')[-1]
+            max_lens[field_name] = field_size
+        return max_lens
+
+    def _get_samples(self, suffix):
+
+        if suffix is None:
+            samples = self.variations1.samples + self.variations2.samples
+            return [sample.encode('utf-8') for sample in samples]
+
+        samples = self.variations1.samples[:]
+        for sample in self.variations2.samples:
+            if sample in self.variations1.samples:
+                sample = sample + suffix
+            samples.append(sample)
+        return [sample.encode('utf-8') for sample in samples]
+
+    @property
+    def variations(self):
+        for snps1, snps2 in _group_overlaping_vars(self.variations1,
+                                                   self.variations2):
+
+            if self._snps_are_mergeable(snps1, snps2):
+                snp1 = snps1[0] if snps1 else None
+                snp2 = snps2[0] if snps2 else None
+                var = self._merge_vars(snp1, snp2)
+                variation = (var['chrom'], var['pos'], None, var['ref'],
+                             var['alt'], var['qual'], [], {},
+                             [(b'GT', var['gts'])])
+                yield variation
             else:
-                # The snps have been ignored
-                is_ignored = 1
-                return is_ignored, is_merged, is_added
 
-    if '/variations/qual' not in fields_funct:
-        fields_funct['/variations/qual'] = min
-    for path in merged.keys():
-        continue_ = False
-        for field in ignore_fields:
-            if field in path:
-                continue_ = True
-        if continue_:
-            continue
-        if 'calls' in path:
-            if 'GT' in path:
-                if snp1 is not None:
-                    gts1 = snp1['/calls/GT']
-                    pos1 = snp1['/variations/pos']
-                    ref1 = snp1['/variations/ref']
-                    alt1 = snp1['/variations/alt']
-                    alleles1 = numpy.append(ref1.reshape(ref1.shape[0], 1),
-                                            alt1, axis=1)
-                    chrom1 = snp1['/variations/chrom']
+                if not self._ignore_complex_overlaps:
+                    poss1 = [(snp['chrom'], str(snp['pos'])) for snp in snps1]
+                    poss2 = [(snp['chrom'], str(snp['pos'])) for snp in snps2]
+                    msg = 'We can not merge these vars:\n'
+                    msg += '{}\n{}\n'
+                    raise NotImplementedError(msg.format(poss1, poss2))
 
-                if snp2 is not None:
-                    gts2 = snp2['/calls/GT']
-                    pos2 = snp2['/variations/pos']
-                    ref2 = snp2['/variations/ref']
-                    alt2 = snp2['/variations/alt']
-                    alleles2 = numpy.append(ref2.reshape(ref2.shape[0], 1),
-                                            alt2, axis=1)
-                    chrom2 = snp2['/variations/chrom']
+    def _snps_are_mergeable(self, snps1, snps2):
+        "it looks only to the conditions we have programmed"
+        len_snps1 = len(snps1)
+        len_snps2 = len(snps2)
 
-                if snp1 is None:
-                    merged['/variations/ref'][i] = ref2
-                    merged['/variations/alt'][i, :alt2.shape[1]] = alt2[0]
-                    merged['/variations/pos'][i] = pos2
-                    merged[path][i, -len(snp2.samples):, ] = gts2
-                    merged['/variations/chrom'][i] = chrom2
-                    continue
-                if snp2 is None:
-                    merged['/variations/ref'][i] = ref1
-                    merged['/variations/alt'][i, :alt1.shape[1]] = alt1[0]
-                    merged['/variations/pos'][i] = pos1
-                    merged[path][i, :len(snp1.samples), ] = gts1
-                    merged['/variations/chrom'][i] = chrom1
-                    continue
+        if len_snps1 > 1 or len_snps2 > 1:
+            self.log['Too_many_overlaping_vars'] += 1
+            return False
 
-                if chrom1 != chrom2:
-                    raise ValueError('Chromosome names must be equal')
-                merged['/variations/chrom'][i] = chrom1
-                if pos1 <= pos2:
-                    alleles_collapsed = _collapse_alleles(alleles1[0, 0],
-                                                         alleles2,
-                                                         pos2 - pos1)
-                    alleles_merged, gts2 = _transform_gts_to_merge(alleles1[0],
-                                                                 alleles_collapsed[0],
-                                                                 gts2)
-                    merged['/variations/ref'][i] = alleles_merged[0]
-                    merged['/variations/alt'][i, :alleles_merged.shape[0]-1] = alleles_merged[1:]
-                    merged['/variations/pos'][i] = pos1
-                    merged[path][i, :len(snp1.samples), ] = snp1[path][:]
-                    merged[path][i, -len(snp2.samples):, ] = gts2
-
-                else:
-                    alleles_collapsed = _collapse_alleles(alleles2[0, 0],
-                                                         alleles1,
-                                                         pos1 - pos2)
-                    alleles_merged, gts1 = _transform_gts_to_merge(alleles2[0],
-                                                                 alleles_collapsed[0],
-                                                                 gts1)
-                    merged['/variations/ref'][i] = alleles_merged[0]
-                    merged['/variations/alt'][i, :alleles_merged.shape[0]-1] = alleles_merged[1:]
-                    merged['/variations/pos'][i] = pos2
-                    merged[path][i, :len(snp1.samples), ] = gts1
-                    merged[path][i, -len(snp2.samples):, ] = snp2[path][:]
-
-            elif snp1 is not None:
-                try:
-                    merged[path][i, :len(snp1.samples), ] = snp1[path][:]
-                except KeyError:
-                    pass
-            elif snp2 is not None:
-                try:
-                    merged[path][i, -len(snp2.samples):, ] = snp2[path][:]
-                except KeyError:
-                    pass
-        else:
-            if 'ref' not in path and 'alt' not in path and 'pos' not in path and 'chrom' not in path:
-                missing = numpy.array(MISSING_VALUES[merged[path].dtype])
-                if path in fields_funct:
-                    # if one snp is None and the other has not a path
-                    try:
-                        try:
-                            try:
-                                merged_values = fields_funct[path](snp1[path],
-                                                                   snp2[path])
-                                merged[path][i] = merged_values
-                            except (KeyError, TypeError):
-                                merged[path][i] = snp1[path]
-                        except (KeyError, TypeError):
-                            merged[path][i] = snp2[path]
-                    except (KeyError, TypeError):
-                        merged[path][i] = missing
-                else:
-                    try:
-                        try:
-                            try:
-                                merged[path][i, ] = numpy.append(snp1[path],
-                                                                 snp2[path])
-                            except (KeyError, TypeError):
-                                merged[path][i, ] = numpy.append(snp1[path],
-                                                                 missing)
-                        except (KeyError, TypeError):
-                            merged[path][i, ] = numpy.append(missing,
-                                                             snp2[path])
-                    except (KeyError, TypeError):
-                        merged[path][i, ] = numpy.full(merged[path][i, ].shape,
-                                                       missing,
-                                                       dtype=merged[path][i,].dtype)
-    # The snps have been merged succesfully
-    if snp1 is not None and snp2 is not None:
-        is_merged = 1
-        is_added = 0
-        return is_ignored, is_merged, is_added
-    else:
-        is_merged = 0
-        is_added = 1
-        return is_ignored, is_merged, is_added
-
-
-def _merge_sorted_variations(variations_1, variations_2,
-                            ignore_2_or_more_overlaps=False,
-                            check_ref_match=True):
-    snps_1 = iter(variations_1.iterate_chunks(chunk_size=1))
-    snps_2 = iter(variations_2.iterate_chunks(chunk_size=1))
-    snp_1 = next(snps_1)
-    snp_2 = next(snps_2)
-    stop = ""
-    are_snps1 = False
-    prev_chrom = None
-    while True:
-        pos1 = snp_1['/variations/pos']
-        pos2 = snp_2['/variations/pos']
-
-        if snp_1['/variations/chrom'] == snp_2['/variations/chrom']:
-            if _are_overlapping(snp_1, snp_2) or _are_overlapping(snp_2, snp_1):
-                result = snp_1, snp_2
-                try:
-                    snp_1 = next(snps_1)
-                except StopIteration:
-                    stop = snps_2
-                    yield result
-                    break
-                try:
-                    snp_2 = next(snps_2)
-                except StopIteration:
-                    stop = snps_1
-                    are_snps1 = True
-                    yield result
-                    break
-                overlap = False
-                try:
-                    while _are_overlapping(result[0], snp_2):
-                        snp_2 = next(snps_2)
-                        overlap = True
-                        if not ignore_2_or_more_overlaps:
-                            msg = 'More than 2 variations are overlapping'
-                            raise ValueError(msg)
-                except StopIteration:
-                    stop = snps_1
-                    are_snps1 = True
-                    break
-                try:
-                    while _are_overlapping(result[1], snp_1):
-                        snp_1 = next(snps_1)
-                        overlap = True
-                        if not ignore_2_or_more_overlaps:
-                            msg = 'More than 2 variations are overlapping'
-                            raise ValueError(msg)
-                except StopIteration:
-                    stop = snps_2
-                    break
-                if not overlap:
-                    yield result
-            elif pos1 < pos2:
-                yield snp_1, None
-                try:
-                    snp_1 = next(snps_1)
-                except StopIteration:
-                    stop = snps_2
-                    break
-            elif pos2 < pos1:
-                yield None, snp_2
-                try:
-                    snp_2 = next(snps_2)
-                except StopIteration:
-                    stop = snps_1
-                    are_snps1 = True
-                    break
-            prev_chrom = snp_1['/variations/chrom']
-        else:
-            if snp_1['/variations/chrom'] == prev_chrom:
-                yield snp_1, None
-                try:
-                    snp_1 = next(snps_1)
-                except StopIteration:
-                    stop = snps_2
-                    break
+        if len_snps1 == 1 or len_snps1 == 1:
+            if _var_len(snps1[0]) > 1 and _var_len(snps2[0]) > 1:
+                self.log['overlaping_complex'] += 1
+                return False
             else:
-                yield None, snp_2
-                try:
-                    snp_2 = next(snps_2)
-                except StopIteration:
-                    stop = snps_1
-                    are_snps1 = True
-                    break
-    if are_snps1:
-        yield snp_1, None
-    for snp in stop:
-        if are_snps1:
-            yield snp, None
+                return True
+
+        if ((len_snps1 == 1 and len_snps2 == 0) or
+                (len_snps1 == 0 and len_snps2 == 1)):
+            return True
+        raise RuntimeError("We shouldn't be here")
+
+    def _get_alleles(self, snp):
+        alleles = [snp['ref']]
+        if snp['alt'] is not None:
+            alleles.extend([allele for allele in snp['alt'] if allele != b''])
+        return alleles
+
+    def _get_qual(self, snp1, snp2):
+        if snp1['qual'] is None or snp2['qual'] is None:
+            return None
         else:
-            yield None, snp
+            return min([snp1['qual'], snp2['qual']])
 
+    def _merge_vars(self, snp1, snp2):
+        "it assumes that the given snps are overlaping or None"
+        if self._gt_shape is None:
+            snp = snp1 if snp1 is not None else snp2
+            self._gt_shape = (len(self.samples), self.ploidy)
+            self._gt_dtype = snp['gts'].dtype
 
-def merge_variations(variations1, variations2, merged_fpath, fields_funct={},
-                     ignore_overlaps=False, ignore_2_or_more_overlaps=False,
-                     ignore_fields=[], check_ref_match=True):
-    merged_variations = _create_variations_merged(variations1, variations2,
-                                                 merged_fpath,
-                                                 ignore_fields=ignore_fields)
-    num_snp1 = variations1['/variations/pos'].shape[0]
-    num_snp2 = variations2['/variations/pos'].shape[0]
-    log = {'total_merged_snps': 0,
-           'modified_merged_snps': 0,
-           'added_new_snps': 0,
-           'ignored_ref_snps': 0,
-           'ignored_overlap_snps': 0}
-    prev_snp1, prev_snp2 = None, None
-    for i, (snp1, snp2) in enumerate(_merge_sorted_variations(variations1,
-                                                             variations2,
-                        ignore_2_or_more_overlaps=ignore_2_or_more_overlaps)):
-        if not ignore_overlaps:
-            if prev_snp1 is not None and snp1 is not None and _are_overlapping(prev_snp1, snp1):
-                raise ValueError('Overlapping variations in variations 1')
-            if prev_snp2 is not None and snp2 is not None and _are_overlapping(prev_snp2, snp2):
-                raise ValueError('Overlapping variations in variations 2')
-        result = _merge_snps(snp1, snp2, i, merged_variations,
-                            fields_funct=fields_funct,
-                            ignore_fields=ignore_fields,
-                            check_ref_match=check_ref_match)
-        ignored_snps, merged_snps, added_snps = result
-        log['ignored_ref_snps'] += ignored_snps
-        log['modified_merged_snps'] += merged_snps
-        log['added_new_snps'] += added_snps
-        if snp1 is not None:
-            num_snp1 -= 1
-            prev_snp1 = snp1
-        if snp2 is not None:
-            num_snp2 -= 1
-            prev_snp2 = snp2
-    log['ignored_overlap_snps'] = num_snp1 + num_snp2
-    for path in merged_variations.keys():
-        new_shape = (i+1, ) + merged_variations[path].shape[1:]
-        merged_variations[path].resize(new_shape)
-    log['total_merged_snps'] = merged_variations['/variations/pos'].shape[0]
-    return merged_variations, log
+        merged_gts = numpy.full(self._gt_shape, MISSING_VALUES[self._gt_dtype],
+                                self._gt_dtype)
+        if snp1 is None or snp2 is None:
+            if snp1 is None:
+                good_snp = snp2
+                merged_gts[self._n_samples1:] = snp2['gts']
+            else:
+                good_snp = snp1
+                merged_gts[:self._n_samples1] = snp1['gts']
+            new_snp = good_snp.copy()
+            new_snp['gts'] = merged_gts
+            num_alt = 0 if good_snp['alt'] is None else len(good_snp['alt'])
+            if num_alt > self.max_field_lens['alt']:
+                self.max_field_lens['alt'] = num_alt
+            return new_snp
+
+        if len(snp1['ref']) >= len(snp2['ref']):
+            long_snp = snp1
+            short_snp = snp2
+            vars1_first = True
+        else:
+            long_snp = snp2
+            short_snp = snp1
+            vars1_first = False
+
+        short_alleles = self._get_alleles(short_snp)
+        position = short_snp['pos'] - long_snp['pos']
+        new_short_alleles = _transform_alleles(long_snp['ref'], short_alleles,
+                                               position)
+        new_short_ref = new_short_alleles[0]
+
+        if new_short_ref != long_snp['ref'] and self._check_ref_matches:
+            raise ValueError('Reference alleles do not match')
+        long_alleles = self._get_alleles(long_snp)
+
+        alleles_merged, new_short_gts = _transform_gts_to_merge(long_alleles,
+                                                                new_short_alleles,
+                                                                short_snp['gts'])
+        num_alt = len(alleles_merged) - 1
+        if num_alt > self.max_field_lens['alt']:
+            self.max_field_lens['alt'] = num_alt
+
+        if vars1_first:
+            merged_gts = numpy.append(snp1['gts'], new_short_gts, axis=0)
+        else:
+            merged_gts = numpy.append(new_short_gts, snp2['gts'], axis=0)
+
+        qual = self._get_qual(snp1, snp2)
+        alt = alleles_merged[1:]
+        if not alt:
+            alt = None
+        return {'chrom': long_snp['chrom'], 'pos': long_snp['pos'],
+                'ref': alleles_merged[0], 'alt': alt, 'gts': merged_gts,
+                'qual': qual}

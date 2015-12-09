@@ -56,11 +56,17 @@ class VcfH5Test(unittest.TestCase):
     def test_put_vars_hdf5_from_vcf(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
-                        max_field_lens={'alt': 4})
+                        max_field_lens={'alt': 3})
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
             os.remove(fhand.name)
             h5f = VariationsH5(fhand.name, 'w')
             h5f.put_vars(vcf)
+            assert numpy.all(h5f['/variations/alt'][:] == [[b'A', b'', b''],
+                                                           [b'A', b'', b''],
+                                                           [b'G', b'T', b''],
+                                                           [b'', b'', b''],
+                                                           [b'G', b'GTACT',
+                                                            b'']])
             assert h5f['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(h5f['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
             expected = numpy.array([48, 48, 43], dtype=numpy.int16)
@@ -237,7 +243,8 @@ class VarMatsTests(unittest.TestCase):
         path = tmp_fhand.name
         tmp_fhand.close()
 
-        fhand = gzip.open(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz'), 'rb')
+        fhand = gzip.open(join(TEST_DATA_DIR,
+                               'tomato.apeki_gbs.calmd.vcf.gz'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000,
                                max_field_lens={'alt': 5})
         h5 = VariationsH5(path, mode='w')
@@ -246,6 +253,7 @@ class VarMatsTests(unittest.TestCase):
         print(h5['/variations/info/CIGAR'])
         fhand.close()
         h5 = VariationsH5(path, 'r')
+        print(h5['/calls/GT'].shape)
         assert h5['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(h5['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
 
@@ -423,7 +431,6 @@ class VcfWrittenTest(unittest.TestCase):
         exp_lines = [line.strip() for line in exp_lines]
         i = 0
         for line in lines:
-            print(line)
             if i < 100:
                 assert line in exp_lines
                 i += 1

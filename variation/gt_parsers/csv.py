@@ -1,6 +1,7 @@
-from itertools import chain
+import copy
 
-from variation.gt_parsers.vcf import _do_nothing
+from itertools import chain
+from variation import DEF_METADATA
 
 IUPAC = {b'A': b'AA', b'T': b'TT', b'C': b'CC', b'G': b'GG',
          b'W': b'AT', b'M': b'AC', b'R': b'AG', b'': b'-',
@@ -42,7 +43,7 @@ class CSVParser():
     def __init__(self, fhand, var_info, gt_splitter=def_gt_allele_splitter,
                  first_sample_column=1, first_gt_column=1,
                  sample_line=0, snp_id_column=0, sep=',', max_field_lens=None,
-                 max_field_str_lens=None):
+                 max_field_str_lens=None, ignore_empty_vars=False):
         '''It reads genotype calls from a CSV file
 
         var_info can be either a dict or an OrderedDict with the snp_ids as
@@ -56,10 +57,11 @@ class CSVParser():
         self._sample_line = sample_line
         self._first_sample_column = first_sample_column
         self._first_gt_column = first_gt_column
-        self._sep = sep.encode('utf-8')
+        self._sep = sep
         self._snp_id_column = snp_id_column
         self.gt_splitter = gt_splitter
         self._var_info = var_info
+        self._ignore_empty_vars = ignore_empty_vars
 
         self.samples = self._get_samples()
         self._determine_ploidy()
@@ -72,22 +74,15 @@ class CSVParser():
                                        'chrom': 0}
         else:
             self.max_field_str_lens = max_field_str_lens
-        self.metadata = {'CALLS': {b'GT': {'Description': 'Genotype',
-                                           'dtype': 'int',
-                                           'type_cast': _do_nothing}},
-                         'INFO': {}, 'FILTER': {}, 'OTHER': {},
-                         'VARIATIONS': {'alt': {'dtype': 'str'},
-                                        'chrom': {'dtype': 'str'},
-                                        'id': {'dtype': 'str'},
-                                        'pos': {'dtype': 'int32'},
-                                        'qual': {'dtype': 'float16'},
-                                        'ref': {'dtype': 'str'}}}
+        self.metadata = copy.deepcopy(DEF_METADATA)
         self.ignored_fields = []
         self.kept_fields = []
 
     def _determine_ploidy(self):
         read_lines = []
+        one_line = False
         for line in self.fhand:
+            one_line = True
             read_lines.append(line)
             items = line.split(self._sep)
             items[-1] = items[-1].strip()
@@ -100,12 +95,17 @@ class CSVParser():
                     self.ploidy = len(gt)
                     break
 
+        if not one_line:
+            raise RuntimeError('File is empty')
+        if 'ploidy' not in dir(self):
+            raise RuntimeError('Could not determine ploidy.')
+
         self.fhand = chain(read_lines, self.fhand)
 
     def _get_samples(self):
         for line_num, line in enumerate(self.fhand):
             if line_num == self._sample_line:
-                return line.strip().split(self._sep)[self._first_sample_column:]
+                return line.rstrip().split(self._sep)[self._first_sample_column:]
 
         raise RuntimeError("We didn't reach to sample line")
 
@@ -152,7 +152,13 @@ class CSVParser():
                 max_len = max(len(allele) for allele in alt_alleles)
                 if max_field_str_lens['alt'] < max_len:
                     max_field_str_lens['alt'] = max_len
+            if not alleles:
+                if self._ignore_empty_vars:
+                    continue
+                else:
+                    raise RuntimeError('snp {} is empty'.format(snp_id))
 
             variation = (var_info['chrom'], var_info['pos'], snp_id,
                          alleles[0], alt_alleles, None, None, None, gts)
+
             yield variation

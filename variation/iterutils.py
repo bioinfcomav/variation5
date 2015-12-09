@@ -13,3 +13,41 @@ def group_items(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return zip_longest(fillvalue=fillvalue, *args)
 
+
+class PeekableIterator(object):
+    def __init__(self, iterable):
+        self._stream = iterable
+        self._buffer = []
+        self._peek_buffer_idx = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._buffer:
+            if self._peek_buffer_idx:
+                self._peek_buffer_idx -= 1
+            return self._buffer.pop(0)
+        return next(self._stream)
+
+    def peek(self):
+        if self._peek_buffer_idx is None:
+            try:
+                item = next(self._stream)
+            except StopIteration:
+                raise
+            self._buffer.append(item)
+            return item
+        else:
+            item = self._buffer[self._peek_buffer_idx]
+            self._peek_buffer_idx += 1
+            if self._peek_buffer_idx >= len(self._buffer):
+                self._peek_buffer_idx = None
+            return item
+
+    def reset_peek(self):
+        if not self._buffer:
+            self._peek_buffer_idx = None
+        else:
+            self._peek_buffer_idx = 0
+

@@ -54,7 +54,7 @@ class CSVParserTest(unittest.TestCase):
                     b'solcap_snp_sl_60635': {'chrom': b'chrom1', 'pos': 346},
                     b'solcap_snp_sl_60604': {'chrom': b'chrom1', 'pos': 347}}
         parser = CSVParser(fhand, var_info, first_sample_column=1,
-                           sep='\t')
+                           sep=b'\t')
         expected = [(b'chrom1', 345, b'solcap_snp_sl_15058', b'A',
                      [b'C', b'G'], None, None, None, [(b'GT', [(0, 0), (0, 0),
                                                                (0, 0), (0, 1),
@@ -81,7 +81,7 @@ class CSVParserTest(unittest.TestCase):
                     b'3': {'chrom': b'SL2.40ch02', 'pos': 1511764}}
 
         parser = CSVParser(fhand, var_info, first_sample_column=3,
-                           first_gt_column=3, sep='\t',
+                           first_gt_column=3, sep=b'\t',
                            gt_splitter=create_iupac_allele_splitter())
 
         expected = [(b'SL2.40ch02', 331954, b'1', b'T', [b'G'], None, None,
@@ -106,7 +106,7 @@ class CSVParserTest(unittest.TestCase):
                     b'solcap_snp_sl_60635': {'chrom': b'chrom1', 'pos': 346},
                     b'solcap_snp_sl_60604': {'chrom': b'chrom1', 'pos': 347}}
 
-        parser = CSVParser(fhand, var_info, first_sample_column=0, sep='\t')
+        parser = CSVParser(fhand, var_info, first_sample_column=0, sep=b'\t')
         expected = [(b'chrom1', 345, b'solcap_snp_sl_15058', b'A',
                      [b'C', b'G'], None, None, None, [(b'GT', [(0, 0), (0, 0),
                                                                (0, 0), (0, 1),
@@ -132,7 +132,7 @@ class CSVParserTest(unittest.TestCase):
                     b'2': {'chrom': b'SL2.40ch02', 'pos': 681961},
                     b'3': {'chrom': b'SL2.40ch02', 'pos': 1511764}}
         parser = CSVParser(fhand_ex, var_info, first_sample_column=3,
-                           first_gt_column=3, sep='\t',
+                           first_gt_column=3, sep=b'\t',
                            gt_splitter=create_iupac_allele_splitter(),
                            max_field_lens={'alt': 1},
                            max_field_str_lens={'alt': 1, 'chrom':20})
@@ -170,7 +170,7 @@ class CSVParserTest(unittest.TestCase):
                     b'2': {'chrom': b'SL2.40ch02', 'pos': 681961},
                     b'3': {'chrom': b'SL2.40ch02', 'pos': 1511764}}
         parser = CSVParser(fhand_ex, var_info, first_sample_column=3,
-                           first_gt_column=3, sep='\t',
+                           first_gt_column=3, sep=b'\t',
                            max_field_lens={'alt': 1},
                            max_field_str_lens={'alt': 1, 'chrom':20})
 

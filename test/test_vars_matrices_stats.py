@@ -166,7 +166,10 @@ class VarMatricesStatsTest(unittest.TestCase):
         snps.put_chunks(hdf5.iterate_chunks())
         result = calc_hq_cumulative_distribution_per_sample(hdf5,
                                                             by_chunk=True)
+
         distribution, cum_dist = result
+
+        print(distribution)
         assert distribution[0, -1] == 2
         assert cum_dist[0, -1] == 2
 
@@ -455,5 +458,5 @@ class VarMatricesStatsTest(unittest.TestCase):
             check_output(cmd)
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snv_density_distribution']
+    import sys;sys.argv = ['', 'VarMatricesStatsTest.test_calc_snv_density_distribution']
     unittest.main()

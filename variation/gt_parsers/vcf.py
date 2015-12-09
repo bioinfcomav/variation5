@@ -100,6 +100,7 @@ class VCFParser():
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
                 for key2, value2 in value1.items():
+                    print(key2, value2)
                     self.max_field_lens[key1][key2] = value2
             else:
                 self.max_field_lens[key1] = value1
@@ -122,7 +123,7 @@ class VCFParser():
                         self.max_field_lens[section][field] = 1
                     continue
                 self.max_field_lens[section][field] = 0
-                if 'str' in meta_field['dtype']:
+                if 'str' in meta_field['dtype'] or '.' in meta_field['Number']:
                     self.max_field_str_lens[section][field] = 25
 
     def _read_snps_in_compressed_cache(self):
@@ -380,11 +381,16 @@ class VCFParser():
                 id_ = None
 
             alt = alt.split(b',')
-            if self.max_field_lens['alt'] < len(alt):
-                self.max_field_lens['alt'] = len(alt)
-            max_alt_str_len = max(len(allele) for allele in alt)
-            if self.max_field_str_lens['alt'] < max_alt_str_len:
-                self.max_field_str_lens['alt'] = max_alt_str_len
+            # there is no alternative allele
+            if alt == [b'.']:
+                alt = None
+
+            if alt is not None:
+                if self.max_field_lens['alt'] < len(alt):
+                    self.max_field_lens['alt'] = len(alt)
+                max_alt_str_len = max(len(allele) for allele in alt)
+                if self.max_field_str_lens['alt'] < max_alt_str_len:
+                    self.max_field_str_lens['alt'] = max_alt_str_len
 
             qual = float(qual) if qual != b'.' else None
 

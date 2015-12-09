@@ -128,9 +128,8 @@ def num_variations(matrix):
     return matrix.shape[0]
 
 
-def iterate_matrix_chunks(matrix):
+def iterate_matrix_chunks(matrix, chunk_size=SNPS_PER_CHUNK):
     nsnps = num_variations(matrix)
-    chunk_size = SNPS_PER_CHUNK
     for start in range(0, nsnps, chunk_size):
         stop = start + chunk_size
         if stop > nsnps:
@@ -155,3 +154,8 @@ def calc_min_max(matrix):
         max_ = numpy.max(matrix)
         min_ = numpy.min(matrix)
     return min_, max_
+
+
+def is_missing(matrix, axis=1):
+    matrix = numpy.any(matrix == MISSING_VALUES[matrix.dtype], axis=axis)
+    return matrix

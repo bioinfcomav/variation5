@@ -163,7 +163,7 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
         str_field = _to_str(field)
         if field in one_item_fields:
             size = [vars_in_chunk]
-            maxshape = (None,)  # is resizable, we can add SNPs
+            maxshape = (None,) # is resizable, we can add SNPs
             chunks = (vars_in_chunk,)
         else:
             y_axes_size = vcf.max_field_lens[str_field]
@@ -172,8 +172,8 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
                 msg += field
                 raise RuntimeError(msg)
             size = [vars_in_chunk, y_axes_size]
-            maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
-            chunks = (vars_in_chunk,  y_axes_size)
+            maxshape = (None, y_axes_size) # is resizable, we can add SNPs
+            chunks = (vars_in_chunk, y_axes_size)
 
         dtype = meta[str_field]['dtype']
         dtype = _numpy_dtype(meta[str_field]['dtype'], field,
@@ -260,7 +260,7 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
         except KeyError:
             grp = hdf5.create_group(grp_name)
         shape = list(matrix.shape)
-        shape[0] = 0    # No snps yet
+        shape[0] = 0 # No snps yet
         shape, dtype, chunks, maxshape = _dset_metadata_from_matrix(matrix,
                                                                     vars_in_chunk)
         dset = grp.create_dataset(name, shape=shape,
@@ -361,7 +361,7 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
     for field in fields:
         if field in one_item_fields:
             size = [vars_in_chunk]
-            maxshape = (None,)  # is resizable, we can add SNPs
+            maxshape = (None,) # is resizable, we can add SNPs
             chunks = (vars_in_chunk,)
         else:
             y_axes_size = csv.max_alt_allele
@@ -370,8 +370,8 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
                 msg += field
                 raise RuntimeError(msg)
             size = [vars_in_chunk, y_axes_size]
-            maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
-            chunks = (vars_in_chunk,  y_axes_size)
+            maxshape = (None, y_axes_size) # is resizable, we can add SNPs
+            chunks = (vars_in_chunk, y_axes_size)
         dtype = _numpy_dtype('str', field, {field: 20})
         if 'pos' in field:
             dtype = _numpy_dtype('int32', field, {field: 20})
@@ -741,7 +741,8 @@ def _preprocess_format_calls_paths(variations, var_index, format_paths,
     new_format_paths, new_calls_paths = [], []
     for key in calls_paths:
         values = _remove_nans(variations[key][var_index])
-        if not numpy.all(values == MISSING_VALUES[values.dtype]) and values.shape[0] != 0:
+        if (not numpy.all(values == MISSING_VALUES[values.dtype]) and
+                values.shape[0] != 0):
             new_calls_paths.append(key)
             new_format_paths.append(key.split('/')[-1])
     return new_calls_paths, new_format_paths
@@ -801,7 +802,6 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
         else:
             var['FILTER'] = _get_value_filter(variations, var_index,
                                               filter_paths)
-
         if len(info_paths) == 0:
             var['INFO'] = '.'
         else:

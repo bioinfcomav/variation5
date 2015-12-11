@@ -13,7 +13,7 @@ from tempfile import NamedTemporaryFile
 
 import numpy
 
-from variation.plot import (_calc_boxplot_stats, plot_boxplot,
+from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             qqplot, manhattan_plot, plot_barplot, plot_distrib,
                             plot_hist2d)
 
@@ -37,12 +37,8 @@ class PlotTest(unittest.TestCase):
                       'set_ylabel': {'args': ['Depth'],
                                      'kwargs': {}}}
         with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_boxplot(distribs, fhand=fhand, mpl_params=mpl_params)
-
-    def test_plot_histogram(self):
-        x = numpy.array(list(range(1, 11)))
-        with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_histogram(x, fhand=fhand)
+            plot_boxplot_from_distribs(distribs, fhand=fhand,
+                                       mpl_params=mpl_params)
 
     def test_plot_distrib(self):
         x = numpy.array(list(range(1, 11)))

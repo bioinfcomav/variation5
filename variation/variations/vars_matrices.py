@@ -14,7 +14,7 @@ from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import (append_matrix, is_dataset, resize_matrix)
-from variation.variations.stats import _remove_nans
+from variation.utils.misc import remove_nans
 # Missing docstring
 # pylint: disable=C0111
 
@@ -166,7 +166,7 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
         str_field = _to_str(field)
         if field in one_item_fields:
             size = [vars_in_chunk]
-            maxshape = (None,)  # is resizable, we can add SNPs
+            maxshape = (None,) # is resizable, we can add SNPs
             chunks = (vars_in_chunk,)
         else:
             y_axes_size = vcf.max_field_lens[str_field]
@@ -175,8 +175,8 @@ def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
                 msg += field
                 raise RuntimeError(msg)
             size = [vars_in_chunk, y_axes_size]
-            maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
-            chunks = (vars_in_chunk,  y_axes_size)
+            maxshape = (None, y_axes_size) # is resizable, we can add SNPs
+            chunks = (vars_in_chunk, y_axes_size)
 
         dtype = meta[str_field]['dtype']
         dtype = _numpy_dtype(meta[str_field]['dtype'], field,
@@ -263,7 +263,7 @@ def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
         except KeyError:
             grp = hdf5.create_group(grp_name)
         shape = list(matrix.shape)
-        shape[0] = 0    # No snps yet
+        shape[0] = 0 # No snps yet
         shape, dtype, chunks, maxshape = _dset_metadata_from_matrix(matrix,
                                                                     vars_in_chunk)
         dset = grp.create_dataset(name, shape=shape,
@@ -364,7 +364,7 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
     for field in fields:
         if field in one_item_fields:
             size = [vars_in_chunk]
-            maxshape = (None,)  # is resizable, we can add SNPs
+            maxshape = (None,) # is resizable, we can add SNPs
             chunks = (vars_in_chunk,)
         else:
             y_axes_size = csv.max_alt_allele
@@ -373,8 +373,8 @@ def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
                 msg += field
                 raise RuntimeError(msg)
             size = [vars_in_chunk, y_axes_size]
-            maxshape = (None, y_axes_size)  # is resizable, we can add SNPs
-            chunks = (vars_in_chunk,  y_axes_size)
+            maxshape = (None, y_axes_size) # is resizable, we can add SNPs
+            chunks = (vars_in_chunk, y_axes_size)
         dtype = _numpy_dtype('str', field, {field: 20})
         if 'pos' in field:
             dtype = _numpy_dtype('int32', field, {field: 20})
@@ -679,7 +679,7 @@ def _get_value_info(h5, n_snp, info_paths):
                 info.append(new_info)
         else:
             if 'numpy' in str(type(h5[key][n_snp])):
-                value = _remove_nans(h5[key][n_snp])
+                value = remove_nans(h5[key][n_snp])
                 value = [str(x) for x in value]
                 value = ','.join(value)
                 new_info = '{}={}'.format(key.split('/')[-1],
@@ -734,8 +734,8 @@ def _preprocess_format_calls_paths(h5, n_snp, format_paths, calls_paths):
 
 def _put_vars_to_vcf(h5, vcf):
     for line in _get_vcf_header(h5, vcf_format='VCFv4.0'):
-        vcf.write(line+'\n')
-    vcf.write(_get_fieldnames_line(h5)+'\n')
+        vcf.write(line + '\n')
+    vcf.write(_get_fieldnames_line(h5) + '\n')
     filter_paths = ['/variations/filter/q10', '/variations/filter/s50',
                     '/variations/filter/no_filters']
     info_paths = []
@@ -781,7 +781,7 @@ def _put_vars_to_vcf(h5, vcf):
         snp.append(':'.join(format_paths))
         # Calls gt samples ready
         snp.append(_get_calls_samples(h5, n_snp, calls_paths))
-        vcf.write('\t'.join(snp)+'\n')
+        vcf.write('\t'.join(snp) + '\n')
 
 
 class _VariationMatrices():

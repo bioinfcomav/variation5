@@ -96,9 +96,7 @@ def calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     # To avoid problems with NaNs
     with numpy.errstate(invalid='ignore'):
         mafs_gt = max_ / sum_
-
-    mafs_gt[sum_ < min_num_genotypes] = numpy.nan
-    return mafs_gt
+    return _mask_stats_with_few_samples(mafs_gt, variations, min_num_genotypes)
 
 
 def calc_depth(variations):
@@ -244,8 +242,8 @@ def _calc_obs_het(variations, axis):
 
 def _mask_stats_with_few_samples(stats, variations, min_num_genotypes):
     if min_num_genotypes:
-        num_missing_gts = calc_missing_gt(variations, rates=False)
-        stats[num_missing_gts < min_num_genotypes] = numpy.NaN
+        num_called_gts = calc_called_gt(variations, rates=False)
+        stats[num_called_gts < min_num_genotypes] = numpy.NaN
     return stats
 
 

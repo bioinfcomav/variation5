@@ -31,11 +31,12 @@ from variation.variations.stats import (calc_maf, histogram,
 from test.test_utils import TEST_DATA_DIR
 
 
-class MafTest(unittest.TestCase):
+class StatsTest(unittest.TestCase):
     def test_maf(self):
-        gts = numpy.array([[0, 0, 0, 0], [0, 0, 1, 1], [0, 0, 0, 1],
-                           [-1, -1, -1, -1]])
-        varis = {'/calls/GT': gts}
+        gts = numpy.array([[[0], [0], [0], [0]], [[0], [0], [1], [1]],
+                           [[0], [0], [0], [1]], [[-1], [-1], [-1], [-1]]])
+        varis = VariationsArrays() 
+        varis['/calls/GT'] = gts
         mafs = calc_maf(varis, min_num_genotypes=1)
         assert numpy.allclose(mafs, numpy.array([1., 0.5, 0.75, numpy.NaN]),
                               equal_nan=True)
@@ -45,9 +46,10 @@ class MafTest(unittest.TestCase):
         assert mafs.shape == (943,)
 
     def test_calc_maf_distrib(self):
-        gts = numpy.array([[0, 0, 0, 0], [0, 0, 1, 1], [0, 0, 0, 1],
-                           [-1, -1, -1, -1]])
-        varis = {'/calls/GT': gts}
+        gts = numpy.array([[[0], [0], [0], [0]], [[0], [0], [1], [1]],
+                           [[0], [0], [0], [1]], [[-1], [-1], [-1], [-1]]])
+        varis = VariationsArrays() 
+        varis['/calls/GT'] = gts
         mafs = calc_maf(varis, min_num_genotypes=1)
         distrib, bins = histogram(mafs, n_bins=10)
         dist_expected = [1, 0, 0, 0, 0, 1, 0, 0, 0, 1]
@@ -77,8 +79,6 @@ class MafTest(unittest.TestCase):
         assert numpy.allclose(bins, bins_expected)
         assert numpy.allclose(distrib, dist_expected)
 
-
-class StatsTest(unittest.TestCase):
     def test_calculate_maf_depth(self):
         variations = {'/calls/AO': numpy.array([[[0, 0], [5, 0], [-1, -1],
                                                  [0, -1], [0, 0], [0, 10],
@@ -148,7 +148,7 @@ class StatsTest(unittest.TestCase):
         het_h5 = calc_obs_het(hdf5, min_num_genotypes=0)
         het_array = calc_obs_het(snps, min_num_genotypes=0)
         assert numpy.all(het_array == het_h5)
-
+ 
         gts = numpy.array([[[0, 0], [0, 1], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]]])
 
@@ -415,5 +415,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_missing_gt_rates']
+    # import sys;sys.argv = ['', 'StatsTest.test_maf']
     unittest.main()

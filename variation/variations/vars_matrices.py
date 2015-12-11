@@ -1,27 +1,19 @@
-
 from itertools import zip_longest
-import warnings
 import posixpath
 import json
 import copy
+from collections import Counter
 
 import numpy
 import h5py
-from collections import OrderedDict
 
-from variation import SNPS_PER_CHUNK, DEF_DSET_PARAMS, MISSING_VALUES,\
-    VCF_FORMAT
+from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT)
 from variation.iterutils import first
 from variation.matrix.stats import counts_by_row
-from variation.matrix.methods import (append_matrix, is_dataset, resize_matrix)
+from variation.matrix.methods import append_matrix, is_dataset
 from variation.variations.stats import _remove_nans
 # Missing docstring
 # pylint: disable=C0111
-
-
-def _grouper(iterable, n, fillvalue=None):
-    args = [iter(iterable)] * n
-    return zip_longest(*args, fillvalue=fillvalue)
 
 
 TYPES = {'int16': numpy.int16,
@@ -30,165 +22,9 @@ TYPES = {'int16': numpy.int16,
          'bool': numpy.bool}
 
 
-def _numpy_dtype(dtype, field, max_field_str_lens):
-    if 'str' in dtype:
-        if field in max_field_str_lens:
-            dtype = 'S{}'.format(max_field_str_lens[field] + 5)
-        else:
-            # the field is empty
-            dtype = 'S1'
-    else:
-        dtype = TYPES[dtype]
-    return dtype
-
-
-def _prepare_info_datasets(vcf, hdf5, vars_in_chunk):
-    meta = vcf.metadata['INFO']
-    info_grp_name = '/variations/info'
-    info_fields = meta.keys()
-    info_fields = set(info_fields).difference(vcf.ignored_fields)
-    if vcf.kept_fields:
-        info_fields = info_fields.intersection(vcf.kept_fields)
-    info_fields = list(info_fields)
-    info_matrices = OrderedDict()
-    for field in info_fields:
-        meta_fld = meta[field]
-        dtype = _numpy_dtype(meta_fld['dtype'], field,
-                             vcf.max_field_str_lens['INFO'])
-        if field not in vcf.max_field_lens['INFO']:
-            # We assume that it is not used by any SNP
-            continue
-        y_axes_size = vcf.max_field_lens['INFO'][field]
-        if not y_axes_size:
-            msg = 'This field is empty in the preread SNPs: '
-            msg += field.decode("utf-8")
-            raise RuntimeError(msg)
-        if y_axes_size == 1:
-            size = (vars_in_chunk,)
-            maxshape = (None,)
-            chunks = (vars_in_chunk,)
-        else:
-            size = [vars_in_chunk, y_axes_size]
-            maxshape = (None, y_axes_size)
-            chunks = (vars_in_chunk, y_axes_size)
-        kwargs = DEF_DSET_PARAMS.copy()
-        kwargs['shape'] = size
-        kwargs['dtype'] = dtype
-        kwargs['maxshape'] = maxshape
-        kwargs['chunks'] = chunks
-        path = posixpath.join(info_grp_name, str(field, 'utf-8'))
-        matrix = _create_matrix(hdf5, path, **kwargs)
-        info_matrices[path] = matrix
-
-    return info_matrices
-
-
-def _prepate_call_datasets(vcf, hdf5, vars_in_chunk):
-    n_samples = len(vcf.samples)
-    ploidy = vcf.ploidy
-    fmt_fields = vcf.metadata['CALLS'].keys()
-    fmt_fields = set(fmt_fields).difference(vcf.ignored_fields)
-    if vcf.kept_fields:
-        fmt_fields = fmt_fields.intersection(vcf.kept_fields)
-    fmt_fields = list(fmt_fields)
-    fmt_matrices = OrderedDict()
-    for field in fmt_fields:
-        fmt = vcf.metadata['CALLS'][field]
-        if field == b'GT':
-            z_axes_size = ploidy
-            dtype = numpy.int8
-        else:
-            dtype = _numpy_dtype(fmt['dtype'], field, vcf.max_field_str_lens)
-            if isinstance(fmt['Number'], int):
-                z_axes_size = fmt['Number']
-            else:
-                if field == b'GT':
-                    z_axes_size = vcf.ploidy
-                else:
-                    z_axes_size = vcf.max_field_lens['CALLS'][field]
-                    if not z_axes_size:
-                        msg = 'This field is empty in the preread SNPs: '
-                        # msg += field.decode("utf-8")
-                        msg += 'CALLS/' + field.decode("utf-8")
-                        warnings.warn(msg, RuntimeWarning)
-                        continue
-
-        size = [vars_in_chunk, n_samples, z_axes_size]
-        maxshape = (None, None, z_axes_size)
-        chunks = (vars_in_chunk, n_samples, z_axes_size)
-
-        # If the last dimension only has one of len we can work with only
-        # two dimensions (variations x samples)
-        if size[-1] == 1:
-            size = size[:-1]
-            maxshape = maxshape[:-1]
-            chunks = chunks[:-1]
-        kwargs = DEF_DSET_PARAMS.copy()
-        kwargs['shape'] = size
-        kwargs['dtype'] = dtype
-        kwargs['maxshape'] = maxshape
-        kwargs['chunks'] = chunks
-        path = posixpath.join('/calls', str(field, 'utf-8'))
-        matrix = _create_matrix(hdf5, path, **kwargs)
-        fmt_matrices[path] = matrix
-
-    return fmt_matrices
-
-
-def _create_matrix(var_matrices, path, **kwargs):
-    fillvalue = MISSING_VALUES[kwargs['dtype']]
-    kwargs['fillvalue'] = fillvalue
-
-    try:
-        matrix = var_matrices._create_matrix(path, **kwargs)
-    except TypeError:
-        dtype = kwargs['dtype']
-        fillvalue = MISSING_VALUES[dtype]
-        shape = kwargs['shape']
-        matrix = var_matrices._create_matrix(path, dtype=dtype,
-                                             fillvalue=fillvalue,
-                                             shape=shape)
-    return matrix
-
-
-def _prepare_variation_datasets(vcf, hdf5, vars_in_chunk):
-
-    meta = vcf.metadata['VARIATIONS']
-    var_grp_name = '/variations'
-    one_item_fields = ['chrom', 'pos', 'id', 'ref', 'qual']
-    multi_item_fields = ['alt']
-    fields = one_item_fields + multi_item_fields
-    var_matrices = OrderedDict()
-    for field in fields:
-        str_field = _to_str(field)
-        if field in one_item_fields:
-            size = [vars_in_chunk]
-            maxshape = (None,) # is resizable, we can add SNPs
-            chunks = (vars_in_chunk,)
-        else:
-            y_axes_size = vcf.max_field_lens[str_field]
-            if not y_axes_size:
-                msg = 'No max size for field. Try prereading some SNPs: '
-                msg += field
-                raise RuntimeError(msg)
-            size = [vars_in_chunk, y_axes_size]
-            maxshape = (None, y_axes_size) # is resizable, we can add SNPs
-            chunks = (vars_in_chunk, y_axes_size)
-
-        dtype = meta[str_field]['dtype']
-        dtype = _numpy_dtype(meta[str_field]['dtype'], field,
-                             vcf.max_field_str_lens)
-
-        kwargs = DEF_DSET_PARAMS.copy()
-        kwargs['shape'] = size
-        kwargs['dtype'] = dtype
-        kwargs['maxshape'] = maxshape
-        kwargs['chunks'] = chunks
-        path = posixpath.join(var_grp_name, field)
-        matrix = _create_matrix(hdf5, path, **kwargs)
-        var_matrices[path] = matrix
-
-    return var_matrices
+def _grouper(iterable, n, fillvalue=None):
+    args = [iter(iterable)] * n
+    return zip_longest(*args, fillvalue=fillvalue)
 
 
 def _to_str(str_or_byte):
@@ -197,40 +33,6 @@ def _to_str(str_or_byte):
     except TypeError:
         str_ = str_or_byte
     return str_
-
-
-def _prepare_filter_datasets(vcf, hdf5, vars_in_chunk):
-
-    filter_grp_name = '/variations/filter'
-    meta = vcf.metadata['FILTER']
-    filter_fields = set(meta.keys()).difference(vcf.ignored_fields)
-    filter_fields = list(filter_fields)
-
-    filter_matrices = OrderedDict()
-    if not filter_fields:
-        return filter_matrices
-
-    filter_fields.append('no_filters')
-    for field in filter_fields:
-        dtype = numpy.bool_
-
-        size = (vars_in_chunk,)
-        maxshape = (None,)
-        chunks = (vars_in_chunk,)
-
-        kwargs = DEF_DSET_PARAMS.copy()
-        kwargs['shape'] = size
-        kwargs['dtype'] = dtype
-        kwargs['maxshape'] = maxshape
-        kwargs['chunks'] = chunks
-        path = posixpath.join(filter_grp_name, _to_str(field))
-        matrix = _create_matrix(hdf5, path, **kwargs)
-        filter_matrices[path] = matrix
-
-    return filter_matrices
-
-
-_MISSING_ITEMS = {}
 
 
 def _dset_metadata_from_matrix(mat):
@@ -251,66 +53,11 @@ def _dset_metadata_from_matrix(mat):
     return shape, dtype, chunks, maxshape, fillvalue
 
 
-def _create_dsets_from_chunks(hdf5, dset_chunks, vars_in_chunk):
-    dsets = {}
-    for path, matrix in dset_chunks.items():
-        grp_name, name = posixpath.split(path)
-        try:
-            grp = hdf5[grp_name]
-        except KeyError:
-            grp = hdf5.create_group(grp_name)
-        shape = list(matrix.shape)
-        shape[0] = 0 # No snps yet
-        shape, dtype, chunks, maxshape = _dset_metadata_from_matrix(matrix,
-                                                                    vars_in_chunk)
-        dset = grp.create_dataset(name, shape=shape,
-                                  dtype=dtype,
-                                  chunks=chunks,
-                                  maxshape=maxshape)
-        dsets[path] = dset
-
-    return dsets
-
-
-def _size_recur(size, item):
-    if hasattr(item, '__len__') and not isinstance(item, (str, bytes)):
-        is_list = True
-    else:
-        is_list = False
-    if is_list:
-        size.append(len(item))
-        _size_recur(size, item[0])
-
-
-def _size(item):
-    size = []
-    _size_recur(size, item)
-
-    if not size:
-        return None
-    else:
-        return size
-
-
-def _create_slice(snp_n, item):
-    size = _size(item)
-    if size is None:
-        return snp_n
-    else:
-        slice_ = [snp_n]
-        slice_.extend([slice(dim_len) for dim_len in size])
-        return tuple(slice_)
-
-
 def _prepare_metadata(vcf_metadata):
-    unwanted_fields = ['dtype', 'type_cast']
     groups = ['INFO', 'FILTER', 'CALLS', 'OTHER']
     meta = {}
     for group in groups:
         for field, field_meta in vcf_metadata[group].items():
-            for ufield in unwanted_fields:
-                if ufield in field_meta:
-                    del field_meta[ufield]
             if group == 'INFO':
                 dir_ = '/variations/info'
             elif group == 'FILTER':
@@ -324,280 +71,272 @@ def _prepare_metadata(vcf_metadata):
     return meta
 
 
-def _prepare_gt_dataset(csv, hdf5, vars_in_chunk):
-    n_samples = len(csv.samples)
-    ploidy = csv.ploidy
-    field = 'GT'
-    dtype = numpy.int8
-    size = [vars_in_chunk, n_samples, ploidy]
-    maxshape = (None, None, ploidy)
-    chunks = (vars_in_chunk, n_samples, ploidy)
-    # If the last dimension only has one of len we can work with only
-    # two dimensions (variations x samples)
-    if size[-1] == 1:
-        size = size[:-1]
-        maxshape = maxshape[:-1]
-        chunks = chunks[:-1]
+def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
+                             ignored_fields, ignore_undefined_fields, log):
+    structure = {}
+    metadata = vars_parser.metadata
+    n_samples = len(vars_parser.samples)
+    ploidy = vars_parser.ploidy
 
-    kwargs = DEF_DSET_PARAMS.copy()
-    kwargs['shape'] = size
-    kwargs['dtype'] = dtype
-    kwargs['maxshape'] = maxshape
-    kwargs['chunks'] = chunks
-    path = posixpath.join('/calls', field)
-    matrix = _create_matrix(hdf5, path, **kwargs)
-    return {path: matrix}
+    # filters
+    filters = list(metadata['FILTER'].keys())
+    if filters:
+        filters.append(b'PASS')
+        for field in filters:
+            path = posixpath.join('/variations/filter', field.decode())
+            structure[path] = {'dtype': numpy.bool, 'shape': (vars_in_chunk,),
+                               'missing_value': False, 'missing_item': False,
+                               'basepath': 'FILTER', 'field': field}
+
+    for basepath in metadata:
+        if basepath in ('OTHER', 'FILTER'):
+            continue
+        for field in metadata[basepath]:
+            try:
+                field_str = field.decode()
+            except AttributeError:
+                field_str = field
+
+            basepath_ = basepath.lower()
+            if basepath_ == 'info':
+                basepath_ = '/variations/info'
+            path = posixpath.join('/', basepath_, field_str)
+
+            # dtype
+            dtype = getattr(numpy, metadata[basepath][field]['dtype'])
+            if path == '/calls/GT':
+                dtype = numpy.int8
+            missing_value = MISSING_VALUES[dtype]
+            if 'str' in str(dtype):
+                if basepath in ('INFO', 'CALLS'):
+                    max_field_str_lens = vars_parser.max_field_str_lens[basepath]
+                else:
+                    max_field_str_lens = vars_parser.max_field_str_lens
+
+                try:
+                    str_len = max_field_str_lens[field]
+                except KeyError:
+                    if not ignore_undefined_fields:
+                        msg = 'No str len defined for field: {}'.format(field)
+                        raise RuntimeError(msg)
+                    log['undefined_fields'].append(path)
+                    continue
+                dtype = numpy.dtype((bytes, str_len))
+            # extra dimension
+            number_dims = metadata[basepath][field].get('Number', '')
+            try:
+                if path == '/calls/GT':
+                    number_dims = ploidy
+                if path in ('/variations/pos', '/variations/ref',
+                            '/variations/qual', '/variations/chrom',
+                            '/variations/id'):
+                    number_dims = 1
+                else:
+                    number_dims = int(number_dims)
+            except ValueError:
+                try:
+                    if basepath in ('INFO', 'CALLS'):
+                        number_dims = vars_parser.max_field_lens[basepath][field]
+                    else:
+                        number_dims = vars_parser.max_field_lens[field]
+                except KeyError:
+                    if not ignore_undefined_fields:
+                        msg = 'No len defined for field: {}'.format(field)
+                        raise RuntimeError(msg)
+                    log['undefined_fields'].append(path)
+                    continue
+            # shape
+            if basepath == 'VARIATIONS':
+                if field == 'alt':
+                    shape = (vars_in_chunk, number_dims)
+                else:
+                    shape = (vars_in_chunk,)
+            elif basepath == 'CALLS':
+                if number_dims > 1:
+                    shape = (vars_in_chunk, n_samples, number_dims)
+                else:
+                    shape = (vars_in_chunk, n_samples)
+            else:
+                if number_dims > 1:
+                    shape = (vars_in_chunk, number_dims)
+                else:
+                    shape = (vars_in_chunk,)
+
+            if len(shape) == 2:
+                missing_item = missing_value
+            elif len(shape) == 3:
+                missing_item = [missing_value] * (shape[-1])
+                if len(missing_item) == 1:
+                    missing_item = missing_item[0]
+            else:
+                missing_item = missing_value
+
+            structure[path] = {'dtype': dtype, 'shape': shape,
+                               'missing_value': missing_value,
+                               'missing_item': missing_item,
+                               'basepath': basepath, 'field': field}
+
+    fields = set(structure.keys())
+    if ignored_fields:
+        fields = fields.difference(ignored_fields)
+    if kept_fields:
+        fields = fields.intersection(kept_fields)
+
+    structure = {fld: struct
+                 for fld, struct in structure.items() if fld in fields}
+    return structure
 
 
-def _prepare_snp_info_datasets(csv, hdf5, vars_in_chunk):
-    var_grp_name = '/variations'
-    one_item_fields = csv.snp_fieldnames_final
-    multi_item_fields = []
-    if csv.alt_field in one_item_fields:
-        one_item_fields.remove(csv.alt_field)
-        multi_item_fields = [csv.alt_field]
-    fields = one_item_fields + multi_item_fields
-    var_matrices = OrderedDict()
-    for field in fields:
-        if field in one_item_fields:
-            size = [vars_in_chunk]
-            maxshape = (None,) # is resizable, we can add SNPs
-            chunks = (vars_in_chunk,)
-        else:
-            y_axes_size = csv.max_alt_allele
-            if not y_axes_size:
-                msg = 'No max size for field. Try prereading some SNPs: '
-                msg += field
-                raise RuntimeError(msg)
-            size = [vars_in_chunk, y_axes_size]
-            maxshape = (None, y_axes_size) # is resizable, we can add SNPs
-            chunks = (vars_in_chunk, y_axes_size)
-        dtype = _numpy_dtype('str', field, {field: 20})
-        if 'pos' in field:
-            dtype = _numpy_dtype('int32', field, {field: 20})
-        kwargs = DEF_DSET_PARAMS.copy()
-        kwargs['shape'] = size
-        kwargs['dtype'] = dtype
-        kwargs['maxshape'] = maxshape
-        kwargs['chunks'] = chunks
-        path = posixpath.join(var_grp_name, field)
-        matrix = _create_matrix(hdf5, path, **kwargs)
-        var_matrices[path] = matrix
-    return var_matrices
+class _ChunkGenerator:
+    def __init__(self, vars_parser, hdf5, vars_in_chunk, kept_fields=None,
+                 ignored_fields=None):
+        self.vars_parser = vars_parser
+        self.hdf5 = hdf5
+        self.vars_in_chunk = vars_in_chunk
+        self.kept_fields = kept_fields
+        self.ignored_fields = ignored_fields
+        self.log = {'data_no_fit': Counter(),
+                    'variations_processed': 0,
+                    'variations_stored': 0,
+                    'undefined_fields': []}
+
+    @property
+    def chunks(self):
+
+        vars_parser = self.vars_parser
+        hdf5 = self.hdf5
+        vars_in_chunk = self.vars_in_chunk
+        kept_fields = self.kept_fields
+        ignored_fields = self.ignored_fields
+        log = self.log
+
+        ignore_overflows = hdf5.ignore_overflows
+        snps = vars_parser.variations
+
+        mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
+                                                 kept_fields, ignored_fields,
+                                                 hdf5.ignore_undefined_fields,
+                                                 log)
+
+        for chunk in _grouper(snps, vars_in_chunk):
+            mats = {}
+            for path, struct in mat_structure.items():
+                mat = numpy.full(struct['shape'], struct['missing_value'],
+                                 struct['dtype'])
+                mats[path] = mat
+
+            good_snp_idxs = []
+            for idx, snp in enumerate(chunk):
+                if snp is None:
+                    break
+                log['variations_processed'] += 1
+
+                filters = snp[6]
+                info = snp[7]
+                calls = snp[8]
+                info = dict(info) if info else {}
+                calls = dict(calls) if info else {}
+                ignore_snp = False
+                for path, struct in mat_structure.items():
+                    basepath = struct['basepath']
+                    if path == '/variations/chrom':
+                        item = snp[0]
+                    elif path == '/variations/pos':
+                        item = snp[1]
+                    elif path == '/variations/id':
+                        item = snp[2]
+                    elif path == '/variations/ref':
+                        item = snp[3]
+                    elif path == '/variations/alt':
+                        item = snp[4]
+                    elif path == '/variations/qual':
+                        item = snp[5]
+                    elif basepath == 'FILTER':
+                        if struct['field'] == b'PASS':
+                            item = False if filters is None else True
+                        else:
+                            item = struct['field'] in filters
+                    elif basepath == 'INFO':
+                        item = info.get(struct['field'], None)
+                    elif basepath == 'CALLS':
+                        item = calls.get(struct['field'], None)
+
+                    shape = struct['shape']
+
+                    if item is not None:
+                        n_dims = len(shape)
+                        mat = mats[path]
+                        if n_dims == 1:
+                            try:
+                                mat[idx] = item
+                            except ValueError:
+                                if hasattr(item, '__len__'):
+                                    if len(item) == 1:
+                                        mat[idx] = item[0]
+                                    else:
+                                        log['data_no_fit'][path] += 1
+                                        break
+                                else:
+                                    raise
+                        elif n_dims == 2:
+                            if len(item) > mat.shape[1]:
+                                if ignore_overflows:
+                                    ignore_snp = True
+                                    log['data_no_fit'][path] += 1
+                                    break
+                                else:
+                                    msg = 'Data no fit in field:'
+                                    msg += path
+                                    msg += '\n'
+                                    msg += str(item)
+                                    raise RuntimeError(msg)
+                            try:
+                                mat[idx, 0:len(item)] = item
+                            except (ValueError, TypeError):
+                                item = [struct['missing_item'] if val is None else val[0] for val in item]
+                                mat[idx, 0:len(item)] = item
+
+                        elif n_dims == 3:
+                            if basepath == 'CALLS':
+                                item = [struct['missing_item'] if call is None else call for call in item]
+                            if len(item[0]) > mat.shape[2]:
+                                if ignore_overflows:
+                                    ignore_snp = True
+                                    log['data_no_fit'][path] += 1
+                                    break
+                                else:
+                                    msg = 'Data no fit in field:'
+                                    msg += path
+                                    msg += '\n'
+                                    msg += str(item)
+                                    raise RuntimeError(msg)
+                            mat[idx, :, 0:len(item[0])] = item
+
+                        else:
+                            raise RuntimeError('Fixme, we should not be here.')
+                if not ignore_snp:
+                    good_snp_idxs.append(idx)
+                    log['variations_stored'] += 1
+
+            varis = VariationsArrays()
+            for path, mat in mats.items():
+                varis[path] = mat[good_snp_idxs]
+            samples = [sample.decode() for sample in vars_parser.samples]
+            varis.samples = samples
+
+            metadata = _prepare_metadata(vars_parser.metadata)
+            varis._set_metadata(metadata)
+
+            yield varis
 
 
 def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                       ignored_fields=None):
-
-    ignore_overflows = hdf5.ignore_overflows
-    snps = vars_parser.variations
-    log = {'data_no_fit': {},
-           'variations_processed': 0,
-           'alt_max_detected': 0,
-           'num_alt_item_descarted': 0}
-
-    fmt_matrices = _prepate_call_datasets(vars_parser, hdf5, vars_in_chunk)
-    info_matrices = _prepare_info_datasets(vars_parser, hdf5, vars_in_chunk)
-    filter_matrices = _prepare_filter_datasets(vars_parser,
-                                               hdf5, vars_in_chunk)
-    var_matrices = _prepare_variation_datasets(vars_parser, hdf5,
-                                               vars_in_chunk)
-
-    paths = list(var_matrices.keys())
-    paths.extend(fmt_matrices.keys())
-    paths.extend(info_matrices.keys())
-    paths.extend(filter_matrices.keys())
-
-    snp_chunks = _grouper(snps, vars_in_chunk)
-    n_snps = 0
-    for chunk_i, chunk in enumerate(snp_chunks):
-        chunk = list(chunk)
-        n_snps += len([c for c in chunk if c is not None])
-        first_field = True
-        for path in paths:
-            if path in var_matrices:
-                grp = 'VARIATIONS'
-            elif path in info_matrices:
-                grp = 'INFO'
-            elif path in filter_matrices:
-                grp = 'FILTER'
-            else:
-                grp = 'CALLS'
-
-            matrix = hdf5[path]
-            # resize the dataset to fit the new chunk
-            size = matrix.shape
-
-            new_size = list(size)
-            new_size[0] = vars_in_chunk * (chunk_i + 1)
-
-            resize_matrix(matrix, new_size)
-            field = posixpath.basename(path)
-            field = _to_str(field)
-            byte_field = field.encode('utf-8')
-            if grp == 'FILTER':
-                missing_val = False
-            else:
-                try:
-                    dtype = vars_parser.metadata[grp][field]['dtype']
-                except KeyError:
-                    dtype = vars_parser.metadata[grp][byte_field]['dtype']
-                missing_val = MISSING_VALUES[dtype]
-
-            # We store the information
-            snp_counter = 0
-            for snp_i, snp in enumerate(chunk):
-                snp_counter += 1
-                try:
-                    gt_data = snp[-1]
-                except TypeError:
-                    # SNP is None
-                    break
-                if first_field:
-                    log['variations_processed'] += 1
-                # snp_n es el indice que se moverá en cada array
-                snp_n = snp_i + chunk_i * vars_in_chunk
-                if grp == 'FILTER':
-                    data = snp[6]
-                    data = [x.decode('utf-8') for x in data]
-                    if field == 'no_filters':
-                        data = data is None
-                    else:
-                        data = field in data
-                    try:
-                        slice_ = _create_slice(snp_n, data)
-                        matrix[slice_] = data
-                    except TypeError as error:
-                        if 'broadcast' in str(error):
-                            if field not in log['data_no_fit']:
-                                log['data_no_fit'][field] = 0
-                            log['data_no_fit'][field] += 1
-                elif grp == 'INFO':
-                    info_data = snp[7]
-                    info_data = info_data.get(byte_field, None)
-                    if info_data is not None:
-                        if len(size) == 1:
-                            # we're expecting one item or a list with one item
-                            if isinstance(info_data, (list, tuple)):
-                                if len(info_data) != 1:
-                                    if field not in log['data_no_fit']:
-                                        log['data_no_fit'][field] = 0
-                                    log['data_no_fit'][field] += 1
-                                info_data = info_data[0]
-
-                        try:
-                            slice_ = _create_slice(snp_n, info_data)
-                            matrix[slice_] = info_data
-                        except TypeError as error:
-                            if 'broadcast' in str(error):
-                                if field not in log['data_no_fit']:
-                                    log['data_no_fit'][field] = 0
-                                log['data_no_fit'][field] += 1
-                    # TODO: FIXME=1
-                elif grp == 'VARIATIONS':
-                    if field == 'chrom':
-                        item = snp[0]
-                    elif field == 'pos':
-                        item = snp[1]
-                    elif field == 'id':
-                        item = snp[2]
-                    elif field == 'ref':
-                        item = snp[3]
-                    elif field == 'alt':
-                        item = snp[4]
-                    elif field == 'qual':
-                        item = snp[5]
-                    if item is not None:
-                        try:
-                            slice_ = _create_slice(snp_n, item)
-                            matrix[slice_] = item
-                        except TypeError as error:
-                            if 'broadcast' in str(error) and field == 'alt':
-                                if field == 'alt' and not ignore_overflows:
-                                    msg = 'More alt alleles than expected.'
-                                    msg2 = 'Expected, present: {}, {}'
-                                    msg2 = msg2.format(size[1], len(item))
-                                    msg += msg2
-                                    msg = '\nYou might fix it prereading more'
-                                    msg += ' SNPs, or passing: '
-                                    msg += 'max_field_lens={'
-                                    msg += '"alt":{}'.format(len(item))
-                                    msg += '}\nto VCF reader'
-                                    raise TypeError(msg)
-                                else:
-                                    log['num_alt_item_descarted'] += 1
-                                    if log['alt_max_detected'] < len(item):
-                                        log['alt_max_detected'] = len(item)
-                                    continue
-                            raise
-                elif grp == 'CALLS':
-                    # store the calldata
-                    gt_data = dict(gt_data)
-                    call_sample_data = gt_data.get(byte_field, None)
-                    if call_sample_data is not None:
-                        if len(size) == 2:
-                            # we're expecting a single item or a list with one item
-                            try:
-                                one_element = first(filter(lambda x: x is not None,
-                                                           call_sample_data))
-                            except ValueError:
-                                one_element = None
-                            if isinstance(one_element, (list, tuple)):
-                                # We have a list in each item
-                                # we're assuming that all items have length 1
-                                if max([len(cll) for cll in call_sample_data
-                                        if cll is not None]) == 1:
-                                    call_sample_data = [missing_val if item is None
-                                                        else item[0]
-                                                        for item in call_sample_data]
-                                else:
-                                    if field not in log['data_no_fit']:
-                                        log['data_no_fit'][field] = 0
-                                    log['data_no_fit'][field] += 1
-                                    call_sample_data = None
-                            else:
-                                call_sample_data = [missing_val if item is None
-                                                    else item
-                                                    for item in call_sample_data]
-                        # In case of GL and GT [[[1,2,3],[1,2,3],[1,2,3], none]]
-                        elif len(size) > 2:
-                            call_sample_data = [[missing_val] * size[-1]
-                                                if item is None else item
-                                                for item in call_sample_data]
-                        if call_sample_data is not None:
-
-                            try:
-                                slice_ = _create_slice(snp_n, call_sample_data)
-                                matrix[slice_] = call_sample_data
-                            except TypeError as error:
-                                if 'broadcast' in str(error):
-                                    if field not in log['data_no_fit']:
-                                        log['data_no_fit'][field] = 0
-                                    log['data_no_fit'][field] += 1
-                            except:
-                                print('snp_id', snp_i)
-                                print('field', field)
-                                print('failed data', call_sample_data)
-                                raise
-            first_field = False
-    # we have to remove the empty snps from the last chunk
-
-    for path in paths:
-        matrix = hdf5[path]
-        size = matrix.shape
-        new_size = list(size)
-        new_size[0] = n_snps
-
-        resize_matrix(matrix, new_size)
-    metadata = _prepare_metadata(vars_parser.metadata)
-    hdf5._set_metadata(metadata)
-
-    samples = [sample.decode('utf-8') for sample in vars_parser.samples]
-    hdf5._set_samples(samples)
-
-    if hasattr(hdf5, 'flush'):
-        hdf5.flush()
-    return log
+    chunker = _ChunkGenerator(vars_parser, hdf5, vars_in_chunk,
+                              kept_fields=kept_fields,
+                              ignored_fields=ignored_fields)
+    hdf5.put_chunks(chunker.chunks)
+    return chunker.log
 
 
 def _preprocess_header_line(h5, _id, record, group=None):
@@ -995,7 +734,7 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False):
+                 ignore_overflows=False, ignore_undefined_fields=False):
         self._fpath = fpath
         if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
@@ -1006,6 +745,7 @@ class VariationsH5(_VariationMatrices):
         self._h5file = h5py.File(fpath, mode)
         self._vars_in_chunk = vars_in_chunk
         self.ignore_overflows = ignore_overflows
+        self.ignore_undefined_fields = ignore_undefined_fields
 
     def put_vars(self, var_parser):
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk)
@@ -1117,12 +857,13 @@ def select_dset_from_chunks(chunks, dset_path):
 
 class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False):
+                 ignore_overflows=False, ignore_undefined_fields=False):
         self._vars_in_chunk = vars_in_chunk
         self._hArrays = {}
         self._metadata = {}
         self._samples = []
         self.ignore_overflows = ignore_overflows
+        self.ignore_undefined_fields = ignore_undefined_fields
 
     def put_vars(self, vars_parser):
         return _put_vars_in_mats(vars_parser, self, self._vars_in_chunk)

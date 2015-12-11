@@ -23,6 +23,8 @@ from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
 from variation.variations.stats import _remove_nans
 
+VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
+
 
 def _create_var_mat_objs_from_h5(h5_fpath):
     in_snps = VariationsH5(h5_fpath, mode='r')
@@ -59,7 +61,7 @@ class VcfH5Test(unittest.TestCase):
                         max_field_lens={'alt': 3})
         with NamedTemporaryFile(suffix='.hdf5') as fhand:
             os.remove(fhand.name)
-            h5f = VariationsH5(fhand.name, 'w')
+            h5f = VariationsH5(fhand.name, 'w', ignore_undefined_fields=True)
             h5f.put_vars(vcf)
             assert numpy.all(h5f['/variations/alt'][:] == [[b'A', b'', b''],
                                                            [b'A', b'', b''],
@@ -76,7 +78,7 @@ class VcfH5Test(unittest.TestCase):
     def test_put_vars_arrays_from_vcf(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
-        snps = VariationsArrays()
+        snps = VariationsArrays(ignore_undefined_fields=True)
         snps.put_vars(vcf)
         assert snps['/calls/GT'].shape == (5, 3, 2)
         assert numpy.all(snps['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
@@ -109,17 +111,15 @@ class VcfH5Test(unittest.TestCase):
         finally:
             os.remove(out_fpath)
 
-VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
-
 
 def _init_var_mat(klass):
     if klass is VariationsH5:
         fhand = NamedTemporaryFile(suffix='.h5')
         fpath = fhand.name
         fhand.close()
-        var_mat = klass(fpath, mode='w')
+        var_mat = klass(fpath, mode='w', ignore_undefined_fields=True)
     else:
-        var_mat = klass()
+        var_mat = klass(ignore_undefined_fields=True)
     return var_mat
 
 
@@ -207,7 +207,7 @@ class VarMatsTests(unittest.TestCase):
     def test_delete_item_from_variationArray(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
-        snps = VariationsArrays()
+        snps = VariationsArrays(ignore_undefined_fields=True)
         snps.put_vars(vcf)
         del snps['/calls/GT']
         assert '/calls/GT' not in snps.keys()
@@ -246,7 +246,7 @@ class VarMatsTests(unittest.TestCase):
         fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=10000,
                                max_field_lens={'alt': 5})
-        h5 = VariationsH5(path, mode='w')
+        h5 = VariationsH5(path, mode='w', ignore_undefined_fields=True)
         h5.put_vars(vcf_parser)
         fhand.close()
         h5 = VariationsH5(path, 'r')
@@ -269,7 +269,8 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/variations/filter/q10'][:] == expected)
         expected = numpy.array([False, False, False, False, False])
         assert numpy.all(h5['/variations/filter/s50'][:] == expected)
-        assert numpy.all(h5['/variations/filter/no_filters'][:] == expected)
+        expected = [True, True, True, True, True]
+        assert numpy.all(h5['/variations/filter/PASS'][:] == expected)
 
         # Variations info fields
         expected = _remove_nans(numpy.array([[0.5, numpy.nan],
@@ -278,14 +279,13 @@ class VarMatsTests(unittest.TestCase):
                                              [numpy.nan, numpy.nan],
                                              [numpy.nan, numpy.nan]],
                                             dtype=numpy.float16))
+
         af = _remove_nans(h5['/variations/info/AF'][:])
         assert numpy.all(af == expected)
         expected = numpy.array([3, 3, 2, 3, 3])
         assert numpy.all(h5['/variations/info/NS'][:] == expected)
         expected = numpy.array([14, 11, 10, 13, 9])
         assert numpy.all(h5['/variations/info/DP'][:] == expected)
-        expected = numpy.array([b'', b'', b'T', b'T', b'G'])
-        assert numpy.all(h5['/variations/info/AA'][:] == expected)
         expected = numpy.array([True, False, True, False, False])
         assert numpy.all(h5['/variations/info/DB'][:] == expected)
         expected = numpy.array([True, False, False, False, False])
@@ -299,10 +299,11 @@ class VarMatsTests(unittest.TestCase):
 
         fhand = open(join(TEST_DATA_DIR, 'phylome.sample.vcf'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
-        h5 = VariationsH5(path, mode='w')
+        h5 = VariationsH5(path, mode='w', ignore_undefined_fields=True)
         h5.put_vars(vcf_parser)
         fhand.close()
         h5 = h5py.File(path, 'r')
+
         assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
         assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
@@ -366,12 +367,13 @@ class VcfTest(unittest.TestCase):
                         kept_fields=['/variations/qual'])
         vcf2 = VCFParser(vcf_fhand2, pre_read_max_size=1000,
                          ignored_fields=['/variations/qual'])
-        snps = VariationsArrays()
+        snps = VariationsArrays(ignore_undefined_fields=True)
         snps.put_vars(vcf)
         metadata = snps.metadata
-        snps2 = VariationsArrays()
+        snps2 = VariationsArrays(ignore_undefined_fields=True)
         snps2.put_vars(vcf2)
         metadata2 = snps2.metadata
+        print(metadata)
         assert '/calls/HQ' in metadata.keys()
         assert '/variations/qual' not in metadata2.keys()
         vcf_fhand.close()
@@ -447,12 +449,12 @@ class VcfWrittenTest(unittest.TestCase):
             vcf_fhand = open(join(TEST_DATA_DIR, file), 'rb')
             vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
                             pre_read_max_size=10000)
-            var_array = VariationsArrays()
+            var_array = VariationsArrays(ignore_undefined_fields=True)
             var_array.put_vars(vcf)
             for line in _prepare_vcf_header(var_array, vcf_format='VCFv4.0'):
                 assert line.encode() in header_lines
             vcf_fhand.close()
 
 if __name__ == "__main__":
-#     import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_iterate_chunks']
     unittest.main()

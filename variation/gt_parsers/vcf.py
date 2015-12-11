@@ -2,6 +2,8 @@ from itertools import chain, islice
 import re
 import subprocess
 
+import numpy
+
 from variation import MISSING_VALUES, MISSING_INT, MISSING_FLOAT
 from variation.utils.compressed_queue import CCache
 
@@ -19,10 +21,6 @@ def read_gzip_file(fpath, pgiz=False):
     gz_process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     for line in gz_process.stdout:
         yield line
-
-
-def _do_nothing(value):
-    return value
 
 
 MAPPED_INTS = {str(i).encode(): i for i in range(100)}
@@ -46,6 +44,25 @@ def _to_float(string):
     elif string in ('', '.', b'.'):
         return MISSING_FLOAT
     return float(string)
+
+
+TYPE_CASTS = {int: _to_int,
+              float: _to_float,
+              numpy.int8: _to_int, 'int8': _to_int,
+              numpy.int16: _to_int, 'int16': _to_int,
+              numpy.int32: _to_int, 'int32': _to_int,
+              numpy.float16: _to_float, 'float16': _to_float,
+              numpy.float32: _to_float, 'float32': _to_float}
+
+
+def _get_type_cast(dtype):
+    if dtype == 'str':
+        type_ = None
+    elif dtype == 'bool':
+        type_ = None
+    else:
+        type_ = TYPE_CASTS[dtype]
+    return type_
 
 
 def _gt_data_to_list(mapper_function, sample_gt):
@@ -199,6 +216,7 @@ class VCFParser():
                 items = re.findall(r'(?:[^,"]|"(?:\\.|[^"])*")+',
                                    line)
                 id_ = None
+
                 for item in items:
                     key, val = item.split('=', 1)
                     if key == 'ID':
@@ -206,18 +224,14 @@ class VCFParser():
                     else:
                         if key == 'Type':
                             if val == 'Integer':
-                                type_cast = _to_int
                                 val2 = 'int16'
                             elif val == 'Float':
-                                type_cast = _to_float
                                 val2 = 'float16'
                             elif val == 'Flag':
                                 val2 = 'bool'
                             else:
-                                type_cast = _do_nothing
                                 val2 = 'str'
                             meta['dtype'] = val2
-                            meta['type_cast'] = type_cast
                         val = val.strip('"')
                         meta[key] = val
                 if id_ is None:
@@ -233,6 +247,7 @@ class VCFParser():
                     continue
                 meta_kind = 'OTHER'
             id_ = id_.encode('utf-8')
+
             metadata[meta_kind][id_] = meta
 
         self.kept_fields = _detect_fields_in_vcf(metadata, self.kept_fields)
@@ -242,6 +257,7 @@ class VCFParser():
         self.metadata = metadata
 
     def _parse_info(self, info):
+
         if b'.' == info:
             return None
         infos = info.split(b';')
@@ -260,14 +276,25 @@ class VCFParser():
                 msg = 'INFO metadata was not defined in header: '
                 msg += key.decode('utf-8')
                 raise RuntimeError(msg)
-            type_ = meta['type_cast']
+            try:
+                type_ = _get_type_cast(meta['dtype'])
+            except KeyError:
+                print(info)
+                print(self.metadata['INFO'])
+                print(meta)
+                raise
+
             if isinstance(val, bool):
                 pass
             elif b',' in val:
-                val = [type_(val) for val in val.split(b',')]
+                if type_ is None:
+                    val = val.split(b',')
+                else:
+                    val = [type_(val) for val in val.split(b',')]
                 val_to_check_len = val
             else:
-                val = type_(val)
+                if type_ is not None:
+                    val = type_(val)
                 val_to_check_len = [val]
             if not isinstance(meta['Number'], int):
                 if self.max_field_lens['INFO'][key] < len(val_to_check_len):
@@ -298,7 +325,8 @@ class VCFParser():
                 msg = 'FORMAT metadata was not defined in header: '
                 msg += fmt.decode('utf-8')
                 raise RuntimeError(msg)
-            format_.append((fmt, fmt_meta['type_cast'],
+            type_cast = _get_type_cast(fmt_meta['dtype'])
+            format_.append((fmt, type_cast,
                             fmt_meta['Number'] != 1,  # Is list
                             fmt_meta,
                             MISSING_VALUES[fmt_meta['dtype']]))
@@ -415,8 +443,6 @@ class VCFParser():
                 flt_len = len(flt)
             if self.max_field_lens['FILTER'] < flt_len:
                 self.max_field_lens['FILTER'] = flt_len
-
             info = self._parse_info(info)
             calls = self._parse_calls(fmt, calls)
             yield chrom, pos, id_, ref, alt, qual, flt, info, calls
-

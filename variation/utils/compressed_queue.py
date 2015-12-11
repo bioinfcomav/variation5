@@ -36,7 +36,7 @@ class CCache():
             try:
                 item = pickle.load(self._cache_to_read)
             except EOFError:
-                raise StopIteration()
+                return
             yield item
 
 

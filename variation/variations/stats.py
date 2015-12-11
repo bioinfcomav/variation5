@@ -187,21 +187,18 @@ def calc_called_gts_distrib_per_depth(variations, depths,
         return _calc_called_gts_distrib_per_depth(variations, depths)
 
 
-def _missing_gt_counts(chunk):
-    count_missing = row_value_counter_fact(MISSING_VALUES[int], ratio=False)
-    return count_missing(chunk)
-
-
 def _calc_items_in_row(mat):
     num_items_per_row = reduce(operator.mul, mat.shape[1:], 1)
     return num_items_per_row
 
 
-def calc_missing_gt(variations, rates=True):
+def calc_missing_gt(variations, rates=True, axis=1):
     gts = variations[GT_FIELD]
-    missing = _missing_gt_counts(gts)
+    if is_dataset(gts):
+        gts = gts[:]
+    missing = numpy.any(gts == MISSING_VALUES[int], axis=2).sum(axis=axis) 
     if rates:
-        num_items_per_row = _calc_items_in_row(gts)
+        num_items_per_row = gts.shape[axis]
         result = missing / num_items_per_row
     else:
         result = missing

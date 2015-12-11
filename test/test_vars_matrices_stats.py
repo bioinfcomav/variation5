@@ -124,23 +124,23 @@ class StatsTest(unittest.TestCase):
         assert numpy.min(rates) == 0
         assert numpy.all(rates <= 1)
 
-        gts = numpy.array([[0, 0, 0, 0], [0, 0, 1, -1], [0, 0, -1, -1],
-                           [-1, -1, -1, -1]])
+        gts = numpy.array([[[0, 0], [0, 0]], [[0, 0], [-1, -1]],
+                           [[0, 0], [-1, -1]], [[-1, -1], [-1, -1]]])
         varis = {'/calls/GT': gts}
-        rates = calc_missing_gt(varis)
-        expected = numpy.array([0, 0.25, 0.5, 1])
-        assert numpy.allclose(rates, expected)
+        expected = numpy.array([2, 1, 1, 0])
+        called_vars = calc_called_gt(varis, rates=False)
+        assert numpy.all(called_vars == expected)
+        
+        missing_vars = calc_missing_gt(varis, rates=False)
+        assert numpy.all(missing_vars == 2 - expected)
 
+        expected = numpy.array([0, 0.5, 0.5, 1])
         rates = calc_called_gt(varis)
         assert numpy.allclose(rates, 1 - expected)
 
-        rates = calc_missing_gt(varis, rates=False)
-        expected = numpy.array([0, 1, 2, 4])
+        rates = calc_missing_gt(varis)
         assert numpy.allclose(rates, expected)
-
-        rates = calc_called_gt(varis, rates=False)
-        assert numpy.allclose(rates, 4 - expected)
-
+        
     def test_calc_obs_het(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
@@ -415,5 +415,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_missing_gt_rates']
     unittest.main()

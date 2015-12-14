@@ -373,7 +373,6 @@ class VcfTest(unittest.TestCase):
         snps2 = VariationsArrays(ignore_undefined_fields=True)
         snps2.put_vars(vcf2)
         metadata2 = snps2.metadata
-        print(metadata)
         assert '/calls/HQ' in metadata.keys()
         assert '/variations/qual' not in metadata2.keys()
         vcf_fhand.close()

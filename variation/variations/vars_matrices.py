@@ -288,28 +288,24 @@ class _ChunkGenerator:
                                 mat[idx, 0:len(item)] = item
 
                         elif n_dims == 3:
-                            no_fit_item = False
-                            for sample_idx in range(mat.shape[1]):
-                                subitem = item[sample_idx]
-                                if subitem is None:
-                                    continue
+                            if len(item[0]) > mat.shape[2]:
+                                if ignore_overflows:
+                                    ignore_snp = True
+                                    log['data_no_fit'][path] += 1
+                                    break
+                                else:
+                                    msg = 'Data no fit in field:'
+                                    msg += path
+                                    msg += '\n'
+                                    msg += str(item)
+                                    raise RuntimeError(msg)
+                            # mat[idx, :, 0:len(item[0])] = item
+                            try:
+                                mat[idx, :, 0:len(item[0])] = item
+                            except ValueError:
+                                print(path, item)
+                                raise
 
-                                if len(subitem) > mat.shape[2]:
-                                    if ignore_overflows:
-                                        ignore_snp = True
-                                        log['data_no_fit'][path] += 1
-                                        no_fit_item = True
-                                        break
-                                    else:
-                                        msg = 'Data no fit in field:'
-                                        msg += path
-                                        msg += '\n'
-                                        msg += str(item)
-                                        raise RuntimeError(msg)
-                                mat[idx, sample_idx, 0:len(subitem)] = subitem
-
-                            if no_fit_item:
-                                break
                         else:
                             raise RuntimeError('Fixme, we should not be here.')
                 if not ignore_snp:

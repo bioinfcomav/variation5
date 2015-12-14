@@ -65,7 +65,7 @@ def _get_type_cast(dtype):
     return type_
 
 
-def _gt_data_to_list(mapper_function, sample_gt):
+def _gt_data_to_list_old(mapper_function, sample_gt):
     if sample_gt is None:
         # we cannot now at this point how many items compose a gt for a sample
         # so we cannot return [missing_data]
@@ -74,6 +74,35 @@ def _gt_data_to_list(mapper_function, sample_gt):
     sample_gt = sample_gt.split(b',')
     sample_gt = [mapper_function(item) for item in sample_gt]
     return sample_gt
+
+
+def _gt_data_to_list(gt_data, mapper_function, missing_val, max_len_tip=1):
+    max_len = None
+
+    gt_parsed_data = []
+    for gt_sample_data in gt_data:
+        if max_len is None:
+            # we're in the first item
+            if gt_sample_data is None:
+                # it might be just one. that works in our data most of the time
+                max_len = max_len_tip
+                missing_item = [missing_val] * max_len
+            else:
+                gt_sample_data_parsed = gt_sample_data.split(b',')
+                max_len = len(gt_sample_data_parsed)
+                missing_item = [missing_val] * max_len
+        if gt_sample_data is None:
+            gt_sample_data = missing_item
+        else:
+            gt_sample_data = gt_sample_data.split(b',')
+            gt_sample_data = [mapper_function(item) for item in gt_sample_data]
+            if len(gt_sample_data) > max_len:
+                max_len = len(gt_sample_data)
+                missing_item = [missing_val] * max_len
+                return _gt_data_to_list(gt_data, mapper_function, missing_val,
+                                        max_len_tip=max_len)
+        gt_parsed_data.append(gt_sample_data)
+    return gt_parsed_data
 
 
 def _detect_fields_in_vcf(metadata, fields):
@@ -350,7 +379,7 @@ class VCFParser():
             gt = gt.split(b'/')
         if gt is not None:
 
-            gt = [MISSING_VALUES[int] if allele == b'.' else int(allele) for allele in gt]
+            gt = [MISSING_INT if allele == b'.' else int(allele) for allele in gt]
         self._parsed_gt[gt_str] = gt
         return gt
 
@@ -374,9 +403,11 @@ class VCFParser():
             if fmt_data[0] == b'GT':
                 gt_data = [self._parse_gt(sample_gt) for sample_gt in gt_data]
             else:
-                if fmt_data[2]:  # the info for a sample in this field is or should
-                            # be a list
-                    gt_data = [_gt_data_to_list(fmt_data[1], sample_gt) for sample_gt in gt_data]
+                if fmt_data[2]:  # the info for a sample in this field is
+                                # or should be a list
+                    # gt_data = [_gt_data_to_list(fmt_data[1], sample_gt) for sample_gt in gt_data]
+                    gt_data = _gt_data_to_list(gt_data, fmt_data[1],
+                                               fmt_data[4])
                 else:
                     gt_data = [fmt_data[1](sample_gt) for sample_gt in gt_data]
 

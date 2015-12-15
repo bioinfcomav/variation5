@@ -1,11 +1,16 @@
 from itertools import chain, islice
 import re
 import subprocess
+from functools import partial
+from multiprocessing import Pool
 
 import numpy
 
-from variation import MISSING_VALUES, MISSING_INT, MISSING_FLOAT
+from variation import (MISSING_VALUES, MISSING_INT, MISSING_FLOAT,
+                       SNPS_PER_CHUNK)
 from variation.utils.compressed_queue import CCache
+from variation.iterutils import group_items
+from Cython.Build.Cythonize import multiprocessing
 
 # Missing docstring
 # pylint: disable=C0111
@@ -123,12 +128,14 @@ class VCFParser():
 
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
-                 max_field_lens=None, max_n_vars=None):
+                 max_field_lens=None, max_n_vars=None,
+                 n_threads=None):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
             raise ValueError(msg)
         self._fhand = fhand
+        self.n_threads = n_threads
         self.max_n_vars = max_n_vars
         self.metadata = None
         self.vcf_format = None
@@ -150,18 +157,16 @@ class VCFParser():
             user_max_field_lens = {}
         else:
             user_max_field_lens = max_field_lens
-        self.max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
-        self.max_field_str_lens = {'FILTER': 0, 'INFO': {},
+        self._max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
+        self._max_field_str_lens = {'FILTER': 0, 'INFO': {},
                                    'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
         self._init_max_field_lens()
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
                 for key2, value2 in value1.items():
-                    self.max_field_lens[key1][key2] = value2
+                    self._max_field_lens[key1][key2] = value2
             else:
-                self.max_field_lens[key1] = value1
-
-#         self.max_field_lens.update(user_max_field_lens)
+                self._max_field_lens[key1] = value1
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
@@ -169,23 +174,41 @@ class VCFParser():
         self._variations_cache = CCache()
         self._read_snps_in_compressed_cache()
 
+    @property
+    def max_field_lens(self):
+        if self.n_threads is not None:
+            msg = 'We do not know how to share dict between processes'
+            raise NotImplementedError(msg)
+        return self._max_field_lens
+
+    @property
+    def max_field_str_lens(self):
+        if self.n_threads is not None:
+            msg = 'We do not know how to share dict between processes'
+            raise NotImplementedError(msg)
+        return self._max_field_str_lens
+
     def _init_max_field_lens(self):
         meta = self.metadata
         for section in ('INFO', 'CALLS'):
             for field, meta_field in meta[section].items():
+
                 if isinstance(meta_field['Number'], int):
-                    self.max_field_lens[section][field] = meta_field['Number']
+                    self._max_field_lens[section][field] = meta_field['Number']
                     if 'bool' in meta_field['dtype']:
-                        self.max_field_lens[section][field] = 1
+                        self._max_field_lens[section][field] = 1
                     continue
-                self.max_field_lens[section][field] = 0
+                self._max_field_lens[section][field] = 0
                 if 'str' in meta_field['dtype']:
-                    self.max_field_str_lens[section][field] = 25
+                    self._max_field_str_lens[section][field] = 0
 
     def _read_snps_in_compressed_cache(self):
         if not self.pre_read_max_size:
             return
-        self._variations_cache.put_iterable(self._variations(),
+
+        snps = self._variations_for_cache()
+        # we store some snps in the cache
+        self._variations_cache.put_iterable(snps,
                                             max_size=self.pre_read_max_size)
 
     def _determine_ploidy(self):
@@ -285,195 +308,266 @@ class VCFParser():
 
         self.metadata = metadata
 
-    def _parse_info(self, info):
-
-        if b'.' == info:
-            return None
-        infos = info.split(b';')
-        parsed_infos = {}
-        ignored_fields = self.ignored_fields
-        for info in infos:
-            if b'=' in info:
-                key, val = info.split(b'=', 1)
-            else:
-                key, val = info, True
-            if key in ignored_fields:
-                continue
-            try:
-                meta = self.metadata['INFO'][key]
-            except KeyError:
-                msg = 'INFO metadata was not defined in header: '
-                msg += key.decode('utf-8')
-                raise RuntimeError(msg)
-            try:
-                type_ = _get_type_cast(meta['dtype'])
-            except KeyError:
-                print(info)
-                print(self.metadata['INFO'])
-                print(meta)
-                raise
-
-            if isinstance(val, bool):
-                pass
-            elif b',' in val:
-                if type_ is None:
-                    val = val.split(b',')
-                else:
-                    val = [type_(val) for val in val.split(b',')]
-                val_to_check_len = val
-            else:
-                if type_ is not None:
-                    val = type_(val)
-                val_to_check_len = [val]
-            if not isinstance(meta['Number'], int):
-                if self.max_field_lens['INFO'][key] < len(val_to_check_len):
-                    self.max_field_lens['INFO'][key] = len(val_to_check_len)
-                if 'str' in meta['dtype']:
-                    max_str = max([len(val_) for val_ in val_to_check_len])
-                    if self.max_field_str_lens['INFO'][key] < max_str:
-                        self.max_field_str_lens['INFO'][key] = max_str
-                if not isinstance(val, list):
-                    val = val_to_check_len
-
-            parsed_infos[key] = val
-        return parsed_infos
-
-    def _parse_gt_fmt(self, fmt):
-        orig_fmt = fmt
-        try:
-            return self._parsed_gt_fmts[fmt]
-        except KeyError:
-            pass
-
-        meta = self.metadata['CALLS']
-        format_ = []
-        for fmt in fmt.split(b':'):
-            try:
-                fmt_meta = meta[fmt]
-            except KeyError:
-                msg = 'FORMAT metadata was not defined in header: '
-                msg += fmt.decode('utf-8')
-                raise RuntimeError(msg)
-            type_cast = _get_type_cast(fmt_meta['dtype'])
-            format_.append((fmt, type_cast,
-                            fmt_meta['Number'] != 1,  # Is list
-                            fmt_meta,
-                            MISSING_VALUES[fmt_meta['dtype']]))
-        self._parsed_gt_fmts[orig_fmt] = format_
-        return format_
-
-    def _parse_gt(self, gt):
-        gt_str = gt
-        try:
-            return self._parsed_gt[gt]
-        except KeyError:
-            pass
-
-        if gt is None:
-            gt = self._empty_gt
-        elif b'|' in gt:
-            is_phased = True
-            gt = gt.split(b'|')
-        else:
-            is_phased = False
-            gt = gt.split(b'/')
-        if gt is not None:
-
-            gt = [MISSING_INT if allele == b'.' else int(allele) for allele in gt]
-        self._parsed_gt[gt_str] = gt
-        return gt
-
-    def _parse_calls(self, fmt, calls):
-        fmt = self._parse_gt_fmt(fmt)
-        empty_gt = [None] * len(fmt)
-        calls = [empty_gt if gt == b'.' else gt.split(b':') for gt in calls]
-        for call_data in calls:
-            if len(call_data) < len(fmt):
-                call_data.append(None)
-        calls = zip(*calls)
-
-        parsed_gts = []
-        ignored_fields = self.ignored_fields
-        kept_fields = self.kept_fields
-        for fmt_data, gt_data in zip(fmt, calls):
-            if fmt_data[0] in ignored_fields:
-                continue
-            if kept_fields and fmt_data[0] not in kept_fields:
-                continue
-            if fmt_data[0] == b'GT':
-                gt_data = [self._parse_gt(sample_gt) for sample_gt in gt_data]
-            else:
-                if fmt_data[2]:  # the info for a sample in this field is
-                                # or should be a list
-                    # gt_data = [_gt_data_to_list(fmt_data[1], sample_gt) for sample_gt in gt_data]
-                    gt_data = _gt_data_to_list(gt_data, fmt_data[1],
-                                               fmt_data[4])
-                else:
-                    gt_data = [fmt_data[1](sample_gt) for sample_gt in gt_data]
-
-            meta = fmt_data[3]
-            if not isinstance(meta['Number'], int):
-                max_len = max([0 if data is None else len(data) for data in gt_data])
-                if self.max_field_lens['CALLS'][fmt_data[0]] < max_len:
-                    self.max_field_lens['CALLS'][fmt_data[0]] = max_len
-                if 'str' in meta['dtype'] and fmt_data[0] != b'GT':
-                    # if your file has variable length str fields you
-                    # should check and fix the following part of the code
-                    raise NotImplementedError('Fixme')
-                    max_len = max([len(val) for smpl_data in gt_data for val in smpl_data])
-                    max_str = max([len(val) for val_ in val])
-                    if self.max_field_str_lens['CALLS'][key] < max_str:
-                        self.max_field_str_lens['CALLS'][key] = max_str
-
-            parsed_gts.append((fmt_data[0], gt_data))
-
-        return parsed_gts
-
     @property
     def variations(self):
-        snps = chain(self._variations_cache.items, self._variations())
+        snps = chain(self._variations_cache.items,
+                     self._variations(self.n_threads))
         if self.max_n_vars:
             snps = islice(snps, self.max_n_vars)
         return snps
 
-    def _variations(self):
+    def _variations_for_cache(self):
+        parser_args = {'max_field_lens': self._max_field_lens,
+                       'max_field_str_lens': self._max_field_str_lens,
+                       'ignored_fields': self.ignored_fields,
+                       'kept_fields': self.kept_fields,
+                       'metadata': self.metadata,
+                       'empty_gt': self._empty_gt,
+                       }
+        line_parser = VCFLineParser(**parser_args)
         for line in self._fhand:
-            line = line[:-1]
-            items = line.split(b'\t')
-            chrom, pos, id_, ref, alt, qual, flt, info, fmt = items[:9]
-            if self.max_field_str_lens['chrom'] < len(chrom):
-                self.max_field_str_lens['chrom'] = len(chrom)
+            snp = line_parser(line)
+            yield snp
 
-            calls = items[9:]
-            pos = int(pos)
-            if id_ == b'.':
-                id_ = None
+    def _variations(self, n_threads):
+        lines_chunks = group_items(self._fhand, SNPS_PER_CHUNK)
+        if n_threads:
+            pool = Pool(self.n_threads)
+            chunk_size = int(SNPS_PER_CHUNK / (2 * n_threads))
+        else:
+            pool = None
 
-            alt = alt.split(b',')
-            # there is no alternative allele
-            if alt == [b'.']:
-                alt = None
-
-            if alt is not None:
-                if self.max_field_lens['alt'] < len(alt):
-                    self.max_field_lens['alt'] = len(alt)
-                max_alt_str_len = max(len(allele) for allele in alt)
-                if self.max_field_str_lens['alt'] < max_alt_str_len:
-                    self.max_field_str_lens['alt'] = max_alt_str_len
-
-            qual = float(qual) if qual != b'.' else None
-
-            if flt == b'PASS':
-                flt = []
-                flt_len = 0
-            elif flt == b'.':
-                flt = None
-                flt_len = 0
+        parser_args = {'max_field_lens': self._max_field_lens,
+                       'max_field_str_lens': self._max_field_str_lens,
+                       'ignored_fields': self.ignored_fields,
+                       'kept_fields': self.kept_fields,
+                       'metadata': self.metadata,
+                       'empty_gt': self._empty_gt}
+        line_parser = VCFLineParser(**parser_args)
+        for lines_chunk in lines_chunks:
+            lines_chunk = list(lines_chunk)
+            if n_threads:
+                snps = pool.map(line_parser, lines_chunk, chunksize=chunk_size)
             else:
-                flt = flt.split(b';')
-                flt_len = len(flt)
-            if self.max_field_lens['FILTER'] < flt_len:
-                self.max_field_lens['FILTER'] = flt_len
-            info = self._parse_info(info)
-            calls = self._parse_calls(fmt, calls)
-            yield chrom, pos, id_, ref, alt, qual, flt, info, calls
+                snps = map(line_parser, lines_chunk)
+
+            for snp in snps:
+                if snp is None:
+                    continue
+                yield snp
+
+
+PARSED_GT_FMT_CACHE = {}
+
+
+def _parse_gt_fmt(fmt, metadata):
+    global PARSED_GT_FMT_CACHE
+    orig_fmt = fmt
+    try:
+        return PARSED_GT_FMT_CACHE[fmt]
+    except KeyError:
+        pass
+
+    meta = metadata['CALLS']
+    format_ = []
+    for fmt in fmt.split(b':'):
+        try:
+            fmt_meta = meta[fmt]
+        except KeyError:
+            msg = 'FORMAT metadata was not defined in header: '
+            msg += fmt.decode('utf-8')
+            raise RuntimeError(msg)
+        type_cast = _get_type_cast(fmt_meta['dtype'])
+        format_.append((fmt, type_cast,
+                        fmt_meta['Number'] != 1,  # Is list
+                        fmt_meta,
+                        MISSING_VALUES[fmt_meta['dtype']]))
+    PARSED_GT_FMT_CACHE[orig_fmt] = format_
+    return format_
+
+PARSED_GT_CACHE = {}
+
+
+def _parse_gt(gt, empty_gt):
+    global PARSED_GT_CACHE
+    gt_str = gt
+    try:
+        return PARSED_GT_CACHE[gt]
+    except KeyError:
+        pass
+
+    if gt is None:
+        gt = empty_gt
+    elif b'|' in gt:
+        is_phased = True
+        gt = gt.split(b'|')
+    else:
+        is_phased = False
+        gt = gt.split(b'/')
+    if gt is not None:
+        gt = [MISSING_INT if allele == b'.' else int(allele) for allele in gt]
+    PARSED_GT_CACHE[gt_str] = gt
+    return gt
+
+
+def _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
+                 metadata, empty_gt):
+    fmt = _parse_gt_fmt(fmt, metadata)
+    empty_call = [None] * len(fmt)
+    calls = [empty_call if gt == b'.' else gt.split(b':') for gt in calls]
+    for call_data in calls:
+        if len(call_data) < len(fmt):
+            call_data.append(None)
+    calls = zip(*calls)
+
+    parsed_gts = []
+    ignored_fields = ignored_fields
+    kept_fields = kept_fields
+    for fmt_data, gt_data in zip(fmt, calls):
+        if fmt_data[0] in ignored_fields:
+            continue
+        if kept_fields and fmt_data[0] not in kept_fields:
+            continue
+        if fmt_data[0] == b'GT':
+            gt_data = [_parse_gt(sample_gt, empty_gt) for sample_gt in gt_data]
+        else:
+            if fmt_data[2]:  # the info for a sample in this field is
+                            # or should be a list
+                # gt_data = [_gt_data_to_list(fmt_data[1], sample_gt) for sample_gt in gt_data]
+                gt_data = _gt_data_to_list(gt_data, fmt_data[1],
+                                           fmt_data[4])
+            else:
+                gt_data = [fmt_data[1](sample_gt) for sample_gt in gt_data]
+
+        meta = fmt_data[3]
+        if not isinstance(meta['Number'], int):
+            max_len = max([0 if data is None else len(data) for data in gt_data])
+            if max_field_lens['CALLS'][fmt_data[0]] < max_len:
+                max_field_lens['CALLS'][fmt_data[0]] = max_len
+            if 'str' in meta['dtype'] and fmt_data[0] != b'GT':
+                # if your file has variable length str fields you
+                # should check and fix the following part of the code
+                raise NotImplementedError('Fixme')
+
+        parsed_gts.append((fmt_data[0], gt_data))
+
+    return parsed_gts
+
+
+def _parse_info(info, ignored_fields, metadata, max_field_lens,
+                max_field_str_lens):
+
+    if b'.' == info:
+        return None
+    infos = info.split(b';')
+    parsed_infos = {}
+    for info in infos:
+        if b'=' in info:
+            key, val = info.split(b'=', 1)
+        else:
+            key, val = info, True
+        if key in ignored_fields:
+            continue
+        try:
+            meta = metadata['INFO'][key]
+        except KeyError:
+            msg = 'INFO metadata was not defined in header: '
+            msg += key.decode('utf-8')
+            raise RuntimeError(msg)
+        try:
+            type_ = _get_type_cast(meta['dtype'])
+        except KeyError:
+            print(info)
+            print(metadata['INFO'])
+            print(meta)
+            raise
+
+        if isinstance(val, bool):
+            pass
+        elif b',' in val:
+            if type_ is None:
+                val = val.split(b',')
+            else:
+                val = [type_(val) for val in val.split(b',')]
+            val_to_check_len = val
+        else:
+            if type_ is not None:
+                val = type_(val)
+            val_to_check_len = [val]
+        if not isinstance(meta['Number'], int):
+            if max_field_lens['INFO'][key] < len(val_to_check_len):
+                max_field_lens['INFO'][key] = len(val_to_check_len)
+            if 'str' in meta['dtype']:
+                max_str = max([len(val_) for val_ in val_to_check_len])
+                if max_field_str_lens['INFO'][key] < max_str:
+                    max_field_str_lens['INFO'][key] = max_str
+            if not isinstance(val, list):
+                val = val_to_check_len
+
+        parsed_infos[key] = val
+    return parsed_infos
+
+
+class VCFLineParser:
+
+    def __init__(self, max_field_lens, max_field_str_lens, ignored_fields,
+                 kept_fields, metadata, empty_gt):
+        self.max_field_lens = max_field_lens
+        self.max_field_str_lens = max_field_str_lens
+        self.ignored_fields = ignored_fields
+        self.kept_fields = kept_fields
+        self.metadata = metadata
+        self.empty_gt = empty_gt
+
+    def __call__(self, line):
+        if line is None:
+            return None
+
+        max_field_lens = self.max_field_lens
+        max_field_str_lens = self.max_field_str_lens
+        ignored_fields = self.ignored_fields
+        kept_fields = self.kept_fields
+        metadata = self.metadata
+        empty_gt = self.empty_gt
+
+        line = line[:-1]
+        items = line.split(b'\t')
+        chrom, pos, id_, ref, alt, qual, flt, info, fmt = items[:9]
+        if max_field_str_lens['chrom'] < len(chrom):
+            max_field_str_lens['chrom'] = len(chrom)
+
+        calls = items[9:]
+        pos = int(pos)
+        if id_ == b'.':
+            id_ = None
+
+        alt = alt.split(b',')
+        # there is no alternative allele
+        if alt == [b'.']:
+            alt = None
+
+        if alt is not None:
+            if max_field_lens['alt'] < len(alt):
+                max_field_lens['alt'] = len(alt)
+            max_alt_str_len = max(len(allele) for allele in alt)
+            if max_field_str_lens['alt'] < max_alt_str_len:
+                max_field_str_lens['alt'] = max_alt_str_len
+
+        qual = float(qual) if qual != b'.' else None
+
+        if flt == b'PASS':
+            flt = []
+            flt_len = 0
+        elif flt == b'.':
+            flt = None
+            flt_len = 0
+        else:
+            flt = flt.split(b';')
+            flt_len = len(flt)
+        if max_field_lens['FILTER'] < flt_len:
+            max_field_lens['FILTER'] = flt_len
+        info = _parse_info(info, ignored_fields, metadata, max_field_lens,
+                           max_field_str_lens)
+        calls = _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
+                             metadata, empty_gt)
+        return chrom, pos, id_, ref, alt, qual, flt, info, calls

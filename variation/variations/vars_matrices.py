@@ -1,4 +1,3 @@
-from itertools import zip_longest
 import posixpath
 import json
 import copy
@@ -8,7 +7,7 @@ import numpy
 import h5py
 
 from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT)
-from variation.iterutils import first
+from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
 from variation.variations.stats import _remove_nans
@@ -20,11 +19,6 @@ TYPES = {'int16': numpy.int16,
          'int32': numpy.int32,
          'float16': numpy.float16,
          'bool': numpy.bool}
-
-
-def _grouper(iterable, n, fillvalue=None):
-    args = [iter(iterable)] * n
-    return zip_longest(*args, fillvalue=fillvalue)
 
 
 def _to_str(str_or_byte):
@@ -72,11 +66,17 @@ def _prepare_metadata(vcf_metadata):
 
 
 def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
-                             ignored_fields, ignore_undefined_fields, log):
+                             ignored_fields, ignore_undefined_fields, log,
+                             max_field_lens, max_field_str_lens):
     structure = {}
     metadata = vars_parser.metadata
     n_samples = len(vars_parser.samples)
     ploidy = vars_parser.ploidy
+
+    if max_field_lens is None:
+        max_field_lens = vars_parser.max_field_lens
+    if max_field_str_lens is None:
+        max_field_str_lens = vars_parser.max_field_str_lens
 
     # filters
     filters = list(metadata['FILTER'].keys())
@@ -109,12 +109,12 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
             missing_value = MISSING_VALUES[dtype]
             if 'str' in str(dtype):
                 if basepath in ('INFO', 'CALLS'):
-                    max_field_str_lens = vars_parser.max_field_str_lens[basepath]
+                    max_field_str_lens_ = max_field_str_lens[basepath]
                 else:
-                    max_field_str_lens = vars_parser.max_field_str_lens
+                    max_field_str_lens_ = max_field_str_lens
 
                 try:
-                    str_len = max_field_str_lens[field]
+                    str_len = max_field_str_lens_[field]
                 except KeyError:
                     if not ignore_undefined_fields:
                         msg = 'No str len defined for field: {}'.format(field)
@@ -136,9 +136,9 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
             except ValueError:
                 try:
                     if basepath in ('INFO', 'CALLS'):
-                        number_dims = vars_parser.max_field_lens[basepath][field]
+                        number_dims = max_field_lens[basepath][field]
                     else:
-                        number_dims = vars_parser.max_field_lens[field]
+                        number_dims = max_field_lens[field]
                 except KeyError:
                     if not ignore_undefined_fields:
                         msg = 'No len defined for field: {}'.format(field)
@@ -179,7 +179,8 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
 
 class _ChunkGenerator:
     def __init__(self, vars_parser, hdf5, vars_in_chunk, kept_fields=None,
-                 ignored_fields=None):
+                 ignored_fields=None, max_field_lens=None,
+                 max_field_str_lens=None):
         self.vars_parser = vars_parser
         self.hdf5 = hdf5
         self.vars_in_chunk = vars_in_chunk
@@ -189,6 +190,8 @@ class _ChunkGenerator:
                     'variations_processed': 0,
                     'variations_stored': 0,
                     'undefined_fields': []}
+        self.max_field_lens = max_field_lens
+        self.max_field_str_lens = max_field_str_lens
 
     @property
     def chunks(self):
@@ -198,6 +201,8 @@ class _ChunkGenerator:
         vars_in_chunk = self.vars_in_chunk
         kept_fields = self.kept_fields
         ignored_fields = self.ignored_fields
+        max_field_lens = self.max_field_lens
+        max_field_str_lens = self.max_field_str_lens
         log = self.log
 
         ignore_overflows = hdf5.ignore_overflows
@@ -206,15 +211,14 @@ class _ChunkGenerator:
         mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
                                                  kept_fields, ignored_fields,
                                                  hdf5.ignore_undefined_fields,
-                                                 log)
-
-        for chunk in _grouper(snps, vars_in_chunk):
+                                                 log, max_field_lens,
+                                                 max_field_str_lens)
+        for chunk in group_items(snps, vars_in_chunk):
             mats = {}
             for path, struct in mat_structure.items():
                 mat = numpy.full(struct['shape'], struct['missing_value'],
                                  struct['dtype'])
                 mats[path] = mat
-
             good_snp_idxs = []
             for idx, snp in enumerate(chunk):
                 if snp is None:
@@ -325,10 +329,13 @@ class _ChunkGenerator:
 
 
 def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
-                      ignored_fields=None):
+                      ignored_fields=None, max_field_lens=None,
+                      max_field_str_lens=None):
     chunker = _ChunkGenerator(vars_parser, hdf5, vars_in_chunk,
                               kept_fields=kept_fields,
-                              ignored_fields=ignored_fields)
+                              ignored_fields=ignored_fields,
+                              max_field_lens=max_field_lens,
+                              max_field_str_lens=max_field_str_lens)
     hdf5.put_chunks(chunker.chunks)
     return chunker.log
 
@@ -700,6 +707,12 @@ class _VariationMatrices():
         one_mat = self[one_path]
         return one_mat.shape[0]
 
+    def put_vars(self, var_parser, max_field_lens=None,
+                 max_field_str_lens=None):
+        return _put_vars_in_mats(var_parser, self, self._vars_in_chunk,
+                                 max_field_lens=max_field_lens,
+                                 max_field_str_lens=max_field_str_lens)
+
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
     if var_mat is not None:
@@ -740,9 +753,6 @@ class VariationsH5(_VariationMatrices):
         self._vars_in_chunk = vars_in_chunk
         self.ignore_overflows = ignore_overflows
         self.ignore_undefined_fields = ignore_undefined_fields
-
-    def put_vars(self, var_parser):
-        return _put_vars_in_mats(var_parser, self, self._vars_in_chunk)
 
     def __getitem__(self, path):
         return self._h5file[path]
@@ -858,9 +868,6 @@ class VariationsArrays(_VariationMatrices):
         self._samples = []
         self.ignore_overflows = ignore_overflows
         self.ignore_undefined_fields = ignore_undefined_fields
-
-    def put_vars(self, vars_parser):
-        return _put_vars_in_mats(vars_parser, self, self._vars_in_chunk)
 
     def __getitem__(self, path):
         return self._hArrays[path]

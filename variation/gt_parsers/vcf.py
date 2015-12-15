@@ -1,7 +1,6 @@
 from itertools import chain, islice
 import re
 import subprocess
-from functools import partial
 from multiprocessing import Pool
 
 import numpy
@@ -10,7 +9,6 @@ from variation import (MISSING_VALUES, MISSING_INT, MISSING_FLOAT,
                        SNPS_PER_CHUNK)
 from variation.utils.compressed_queue import CCache
 from variation.iterutils import group_items
-from Cython.Build.Cythonize import multiprocessing
 
 # Missing docstring
 # pylint: disable=C0111

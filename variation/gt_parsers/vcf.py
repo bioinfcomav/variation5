@@ -35,6 +35,12 @@ MAPPED_INTS[b''] = MISSING_INT
 MAPPED_INTS['.'] = MISSING_INT
 MAPPED_INTS[b'.'] = MISSING_INT
 
+MAPPED_FLOATS = {}
+MAPPED_FLOATS[None] = MISSING_FLOAT
+MAPPED_FLOATS[''] = MISSING_FLOAT
+MAPPED_FLOATS['.'] = MISSING_FLOAT
+MAPPED_FLOATS[b'.'] = MISSING_FLOAT
+
 
 def _to_int(string):
     try:
@@ -44,11 +50,10 @@ def _to_int(string):
 
 
 def _to_float(string):
-    if string is None:
-        return MISSING_FLOAT
-    elif string in ('', '.', b'.'):
-        return MISSING_FLOAT
-    return float(string)
+    try:
+        return MAPPED_FLOATS[string]
+    except KeyError:
+        return float(string)
 
 
 TYPE_CASTS = {int: _to_int,

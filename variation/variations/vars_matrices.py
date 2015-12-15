@@ -2,6 +2,8 @@ import posixpath
 import json
 import copy
 from collections import Counter
+from functools import partial
+from multiprocessing import Pool
 
 import numpy
 import h5py
@@ -177,10 +179,128 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
     return structure
 
 
+def _create_vararry_from_parsed_snps(snps, mat_structure, log,
+                                     ignore_overflows, samples, metadata):
+    if snps is None:
+        return None
+    mats = {}
+    for path, struct in mat_structure.items():
+        mat = numpy.full(struct['shape'], struct['missing_value'],
+                         struct['dtype'])
+        mats[path] = mat
+    good_snp_idxs = []
+    for idx, snp in enumerate(snps):
+        if snp is None:
+            break
+        log['variations_processed'] += 1
+
+        filters = snp[6]
+        info = snp[7]
+        calls = snp[8]
+        info = dict(info) if info else {}
+        calls = dict(calls) if info else {}
+        ignore_snp = False
+        for path, struct in mat_structure.items():
+            basepath = struct['basepath']
+            if path == '/variations/chrom':
+                item = snp[0]
+            elif path == '/variations/pos':
+                item = snp[1]
+            elif path == '/variations/id':
+                item = snp[2]
+            elif path == '/variations/ref':
+                item = snp[3]
+            elif path == '/variations/alt':
+                item = snp[4]
+            elif path == '/variations/qual':
+                item = snp[5]
+            elif basepath == 'FILTER':
+                if struct['field'] == b'PASS':
+                    item = False if filters is None else True
+                else:
+                    item = struct['field'] in filters
+            elif basepath == 'INFO':
+                item = info.get(struct['field'], None)
+            elif basepath == 'CALLS':
+                item = calls.get(struct['field'], None)
+
+            shape = struct['shape']
+
+            if item is not None:
+                n_dims = len(shape)
+                mat = mats[path]
+                if n_dims == 1:
+                    try:
+                        mat[idx] = item
+                    except ValueError:
+                        if hasattr(item, '__len__'):
+                            if len(item) == 1:
+                                mat[idx] = item[0]
+                            else:
+                                log['data_no_fit'][path] += 1
+                                break
+                        else:
+                            raise
+                elif n_dims == 2:
+                    if len(item) > mat.shape[1]:
+                        if ignore_overflows:
+                            ignore_snp = True
+                            log['data_no_fit'][path] += 1
+                            break
+                        else:
+                            msg = 'Data no fit in field:'
+                            msg += path
+                            msg += '\n'
+                            msg += str(item)
+                            raise RuntimeError(msg)
+                    try:
+                        mat[idx, 0:len(item)] = item
+                    except (ValueError, TypeError):
+                        missing_val = struct['missing_value']
+                        item = [missing_val if val is None else val[0] for val in item]
+                        mat[idx, 0:len(item)] = item
+
+                elif n_dims == 3:
+                    if len(item[0]) > mat.shape[2]:
+                        if ignore_overflows:
+                            ignore_snp = True
+                            log['data_no_fit'][path] += 1
+                            break
+                        else:
+                            msg = 'Data no fit in field:'
+                            msg += path
+                            msg += '\n'
+                            msg += str(item)
+                            raise RuntimeError(msg)
+                    # mat[idx, :, 0:len(item[0])] = item
+                    try:
+                        mat[idx, :, 0:len(item[0])] = item
+                    except ValueError:
+                        print(path, item)
+                        raise
+
+                else:
+                    raise RuntimeError('Fixme, we should not be here.')
+        if not ignore_snp:
+            good_snp_idxs.append(idx)
+            log['variations_stored'] += 1
+
+    varis = VariationsArrays()
+    for path, mat in mats.items():
+        varis[path] = mat[good_snp_idxs]
+    samples = [sample.decode() for sample in samples]
+    varis.samples = samples
+
+    metadata = _prepare_metadata(metadata)
+    varis._set_metadata(metadata)
+
+    return varis
+
+
 class _ChunkGenerator:
     def __init__(self, vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                  ignored_fields=None, max_field_lens=None,
-                 max_field_str_lens=None):
+                 max_field_str_lens=None, n_threads=1):
         self.vars_parser = vars_parser
         self.hdf5 = hdf5
         self.vars_in_chunk = vars_in_chunk
@@ -192,6 +312,7 @@ class _ChunkGenerator:
                     'undefined_fields': []}
         self.max_field_lens = max_field_lens
         self.max_field_str_lens = max_field_str_lens
+        self.n_threads = n_threads
 
     @property
     def chunks(self):
@@ -213,129 +334,40 @@ class _ChunkGenerator:
                                                  hdf5.ignore_undefined_fields,
                                                  log, max_field_lens,
                                                  max_field_str_lens)
-        for chunk in group_items(snps, vars_in_chunk):
-            mats = {}
-            for path, struct in mat_structure.items():
-                mat = numpy.full(struct['shape'], struct['missing_value'],
-                                 struct['dtype'])
-                mats[path] = mat
-            good_snp_idxs = []
-            for idx, snp in enumerate(chunk):
-                if snp is None:
-                    break
-                log['variations_processed'] += 1
+        _to_array = partial(_create_vararry_from_parsed_snps,
+                            mat_structure=mat_structure, log=log,
+                            ignore_overflows=ignore_overflows,
+                            samples=vars_parser.samples,
+                            metadata=vars_parser.metadata)
+        chunks = group_items(snps, vars_in_chunk)
 
-                filters = snp[6]
-                info = snp[7]
-                calls = snp[8]
-                info = dict(info) if info else {}
-                calls = dict(calls) if info else {}
-                ignore_snp = False
-                for path, struct in mat_structure.items():
-                    basepath = struct['basepath']
-                    if path == '/variations/chrom':
-                        item = snp[0]
-                    elif path == '/variations/pos':
-                        item = snp[1]
-                    elif path == '/variations/id':
-                        item = snp[2]
-                    elif path == '/variations/ref':
-                        item = snp[3]
-                    elif path == '/variations/alt':
-                        item = snp[4]
-                    elif path == '/variations/qual':
-                        item = snp[5]
-                    elif basepath == 'FILTER':
-                        if struct['field'] == b'PASS':
-                            item = False if filters is None else True
-                        else:
-                            item = struct['field'] in filters
-                    elif basepath == 'INFO':
-                        item = info.get(struct['field'], None)
-                    elif basepath == 'CALLS':
-                        item = calls.get(struct['field'], None)
+        # we have to group the chunks to be able to run in parallel with
+        # pool.map becasue pool.imap does not work
 
-                    shape = struct['shape']
+        chunks_of_chunks = group_items(chunks, self.n_threads * 2)
 
-                    if item is not None:
-                        n_dims = len(shape)
-                        mat = mats[path]
-                        if n_dims == 1:
-                            try:
-                                mat[idx] = item
-                            except ValueError:
-                                if hasattr(item, '__len__'):
-                                    if len(item) == 1:
-                                        mat[idx] = item[0]
-                                    else:
-                                        log['data_no_fit'][path] += 1
-                                        break
-                                else:
-                                    raise
-                        elif n_dims == 2:
-                            if len(item) > mat.shape[1]:
-                                if ignore_overflows:
-                                    ignore_snp = True
-                                    log['data_no_fit'][path] += 1
-                                    break
-                                else:
-                                    msg = 'Data no fit in field:'
-                                    msg += path
-                                    msg += '\n'
-                                    msg += str(item)
-                                    raise RuntimeError(msg)
-                            try:
-                                mat[idx, 0:len(item)] = item
-                            except (ValueError, TypeError):
-                                missing_val = struct['missing_value']
-                                item = [missing_val if val is None else val[0] for val in item]
-                                mat[idx, 0:len(item)] = item
+        if self.n_threads > 1:
+            pool = Pool(self.n_threads)
 
-                        elif n_dims == 3:
-                            if len(item[0]) > mat.shape[2]:
-                                if ignore_overflows:
-                                    ignore_snp = True
-                                    log['data_no_fit'][path] += 1
-                                    break
-                                else:
-                                    msg = 'Data no fit in field:'
-                                    msg += path
-                                    msg += '\n'
-                                    msg += str(item)
-                                    raise RuntimeError(msg)
-                            # mat[idx, :, 0:len(item[0])] = item
-                            try:
-                                mat[idx, :, 0:len(item[0])] = item
-                            except ValueError:
-                                print(path, item)
-                                raise
-
-                        else:
-                            raise RuntimeError('Fixme, we should not be here.')
-                if not ignore_snp:
-                    good_snp_idxs.append(idx)
-                    log['variations_stored'] += 1
-
-            varis = VariationsArrays()
-            for path, mat in mats.items():
-                varis[path] = mat[good_snp_idxs]
-            samples = [sample.decode() for sample in vars_parser.samples]
-            varis.samples = samples
-
-            metadata = _prepare_metadata(vars_parser.metadata)
-            varis._set_metadata(metadata)
-
-            yield varis
+        for chunks_for_threads in chunks_of_chunks:
+            if self.n_threads > 1:
+                arrays = pool.map(_to_array, chunks_for_threads)
+            else:
+                arrays = map(_to_array, chunks_for_threads)
+            for array in arrays:
+                if array is not None:
+                    yield array
 
 
 def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                       ignored_fields=None, max_field_lens=None,
-                      max_field_str_lens=None):
+                      max_field_str_lens=None, n_threads=1):
     chunker = _ChunkGenerator(vars_parser, hdf5, vars_in_chunk,
                               kept_fields=kept_fields,
                               ignored_fields=ignored_fields,
                               max_field_lens=max_field_lens,
-                              max_field_str_lens=max_field_str_lens)
+                              max_field_str_lens=max_field_str_lens,
+                              n_threads=n_threads)
     hdf5.put_chunks(chunker.chunks)
     return chunker.log
 
@@ -708,10 +740,11 @@ class _VariationMatrices():
         return one_mat.shape[0]
 
     def put_vars(self, var_parser, max_field_lens=None,
-                 max_field_str_lens=None):
+                 max_field_str_lens=None, n_threads=1):
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk,
                                  max_field_lens=max_field_lens,
-                                 max_field_str_lens=max_field_str_lens)
+                                 max_field_str_lens=max_field_str_lens,
+                                 n_threads=n_threads)
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):

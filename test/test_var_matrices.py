@@ -227,6 +227,8 @@ class VarMatsTests(unittest.TestCase):
                 out_snps = _init_var_mat(klass)
                 out_snps.put_chunks(var_mat.iterate_chunks())
                 assert '/variations/filter/q10' in out_snps.keys()
+                out_snps.put_chunks(var_mat.iterate_chunks())
+
             fhand.close()
 
     def test_max_field_str_len(self):

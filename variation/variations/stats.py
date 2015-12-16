@@ -240,13 +240,13 @@ def calc_missing_gt(variations, rates=True, axis=1):
     return result
 
 
-def calc_called_gt(variations, rates=True):
-    missing = calc_missing_gt(variations, rates=rates)
+def calc_called_gt(variations, rates=True, axis=1):
+    missing = calc_missing_gt(variations, rates=rates, axis=axis)
     if rates:
         return 1 - missing
     else:
-        n_samples = variations[GT_FIELD].shape[1]
-        return n_samples - missing
+        total = variations[GT_FIELD].shape[axis]
+        return total - missing
 
 
 def call_is_het(gts):
@@ -274,33 +274,60 @@ def call_is_hom_alt(gts):
     return numpy.logical_and(call_is_hom(gts), gts[:, :, 0] != 0)
 
 
-def _calc_obs_het(variations, axis):
-    gts = variations['/calls/GT'][:]
+def _calc_obs_het_counts(variations, axis):
+    gts = variations[GT_FIELD]
+    if is_dataset(gts):
+        gts = gts[:]
     is_het = call_is_het(gts)
-    missing_gts = is_missing(gts, axis=2)
-    called_gts = numpy.sum(missing_gts == 0, axis=axis)
-    # To avoid problems with NaNs
-    with numpy.errstate(invalid='ignore'):
-        het = numpy.divide(numpy.sum(is_het, axis=axis), called_gts)
-    return het
+    return numpy.sum(is_het, axis=axis)
 
 
-def _mask_stats_with_few_samples(stats, variations, min_num_genotypes):
+def _mask_stats_with_few_samples(stats, variations, min_num_genotypes,
+                                 num_called_gts=None):
     if min_num_genotypes:
-        num_called_gts = calc_called_gt(variations, rates=False)
+        if num_called_gts is None:
+            num_called_gts = calc_called_gt(variations, rates=False)
         stats[num_called_gts < min_num_genotypes] = numpy.NaN
     return stats
 
 
 def calc_obs_het(variations,
                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
-    het = _calc_obs_het(variations, axis=1)
-    return _mask_stats_with_few_samples(het, variations, min_num_genotypes)
+    het = _calc_obs_het_counts(variations, axis=1)
+    called_gts = calc_called_gt(variations, rates=False)
+    # To avoid problems with NaNs
+    with numpy.errstate(invalid='ignore'):
+        het = het / called_gts
+    return _mask_stats_with_few_samples(het, variations, min_num_genotypes,
+                                        num_called_gts=called_gts)
 
 
-def calc_obs_het_by_sample(variations):
-    return _calc_obs_het(variations, axis=0)
+def _calc_obs_het_by_sample(variations):
+    return _calc_obs_het_counts(variations, axis=0)
 
+
+def calc_obs_het_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=chunk_size)
+    obs_het_by_sample = None
+    called_gts = None
+    for chunk in chunks:
+        chunk_obs_het_by_sample = _calc_obs_het_by_sample(chunk)
+        chunk_called_gts = calc_called_gt(chunk, rates=False,
+                                          axis=0)
+        if called_gts is None:
+            obs_het_by_sample = chunk_obs_het_by_sample
+            called_gts = chunk_called_gts
+        else:
+            obs_het_by_sample += chunk_obs_het_by_sample
+            called_gts += chunk_called_gts
+    with numpy.errstate(invalid='ignore'):
+        obs_het_by_sample = obs_het_by_sample / called_gts
+    return obs_het_by_sample
+            
 
 def _calc_gt_type_stats(variations):
     gts = variations[GT_FIELD]
@@ -568,12 +595,12 @@ def hist2d_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
                                mask_func=None, chunk_size=SNPS_PER_CHUNK):
     if chunk_size:
         return _hist2d_allele_observations_by_chunk(variations,
-                                                    n_bins=DEF_NUM_BINS,
+                                                    n_bins=n_bins,
                                                     range_=range_,
                                                     mask_func=mask_func,
                                                     chunk_size=chunk_size)
     else:
-        return _hist2d_allele_observations(variations, n_bins=DEF_NUM_BINS,
+        return _hist2d_allele_observations(variations, n_bins=n_bins,
                                            range_=range_, mask_func=mask_func)
 
 
@@ -589,13 +616,13 @@ def hist2d_gq_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
 
     if chunk_size:
         res = _hist2d_allele_observations_by_chunk(variations,
-                                                   n_bins=DEF_NUM_BINS,
+                                                   n_bins=n_bins,
                                                    range_=range_,
                                                    mask_func=mask_func,
                                                    weights_field=GQ_FIELD,
                                                    chunk_size=chunk_size)
     else:
-        res = _hist2d_allele_observations(variations, n_bins=DEF_NUM_BINS,
+        res = _hist2d_allele_observations(variations, n_bins=n_bins,
                                           range_=range_, mask_func=mask_func,
                                           weights_field=GQ_FIELD)
     hist, xbins, ybins = res

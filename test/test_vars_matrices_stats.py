@@ -186,7 +186,7 @@ class StatsTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 0], [-1, -1]]])
 
         varis = {'/calls/GT': gts}
-        het = calc_obs_het_by_sample(varis)
+        het = calc_obs_het_by_sample(varis, chunk_size=None)
         assert numpy.allclose(het, [0, 1 / 3, 0, numpy.NaN], equal_nan=True)
 
     def test_calc_gt_type_stats(self):
@@ -470,5 +470,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_cum_distrib']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_obs_het_sample']
     unittest.main()

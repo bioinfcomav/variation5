@@ -18,9 +18,9 @@ from variation import (SNPS_PER_CHUNK, STATS_DEPTHS, MAX_DEPTH,
                        SNP_DENSITY_WINDOW_SIZE, MIN_N_GENOTYPES,
                        MAX_N_ALLELES, MAX_ALLELE_COUNTS,
                        MANHATTAN_WINDOW_SIZE, DEF_MIN_DEPTH)
-from variation.plot import (plot_barplot, plot_hist2d,
-                            manhattan_plot, plot_distrib,
-                            plot_boxplot_from_distribs)
+from variation.plot import (plot_barplot, plot_hist2d, manhattan_plot,
+                            plot_distrib, plot_boxplot_from_distribs,
+    plot_boxplot_from_distribs_series)
 from variation.matrix.methods import  is_dataset
 from variation.variations.index import MIN_NUM_GENOTYPES_FOR_POP_STAT
 from variation.variations.stats import (calc_maf, histogram_for_chunks,
@@ -40,6 +40,7 @@ from variation.variations.stats import (calc_maf, histogram_for_chunks,
                                         calc_inbreeding_coef, GQ_FIELD,
                                         calc_hwe_chi2_test, calc_expected_het,
                                         CHROM_FIELD, POS_FIELD)
+import itertools
 
 
 def _setup_argparse(**kwargs):
@@ -142,56 +143,56 @@ def create_plots():
     plot_maf(h5, data_dir, chunk_size=chunk_size, window_size=manhattan_ws,
              min_num_genotypes=min_num_genotypes, write_bg=write_bg,
              calc_genome_wise=calc_genome_wise)
-    
+      
     logging.info('Plotting Depth based MAF per Sample Distributions')
     plot_maf_depth(h5, data_dir, min_depth=args['min_depth'],
                    chunk_size=chunk_size)
-    
+       
     logging.info('Plotting Missing Genotype rate per SNP')
     plot_missing_gt_rate_per_snp(h5, data_dir, chunk_size)
-    
+       
     logging.info('Plotting Observed Heterozygosity')
     plot_obs_het(h5, data_dir, chunk_size=chunk_size,
                  min_num_genotypes=min_num_genotypes)
-    
+       
     logging.info('Plotting SNP Density Distribution')
     plot_snp_dens_distrib(h5, args['window_size'], data_dir, write_bg=write_bg)
-    
+       
     logging.info('Plotting Depth Distribution')
     plot_call_field_distribs_per_gt_type(h5, field=DP_FIELD,
                                          max_value=args['max_depth'],
                                          data_dir=data_dir,
                                          chunk_size=chunk_size)
-    
+       
     logging.info('Plotting Genotypes Quality Distribution')
     plot_call_field_distribs_per_gt_type(h5, field=GQ_FIELD,
                                          max_value=args['max_gq'],
                                          data_dir=data_dir,
                                          chunk_size=chunk_size)
-    
+       
     logging.info('Plotting Genotypes Statistics per Sample')
     plot_gt_stats_per_sample(h5, data_dir, chunk_size=chunk_size)
-    
+        
     logging.info('Plotting number of Samples with higher Depth Distribution')
     plot_called_gts_distrib_per_depth(h5, args['depths'], data_dir,
                                       chunk_size=SNPS_PER_CHUNK)
-    
+        
     logging.info('Plotting Hardy-Weinberg Equilibrium')
     plot_hwe(h5, args['max_num_alleles'], data_dir, ploidy=2,
              min_num_genotypes=min_num_genotypes, chunk_size=chunk_size)
-    
-    
+       
+       
     if calc_genome_wise:
         logging.info('Plotting Nucleotide Diversity Measures')
         plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
                                            args['manhattan_ws'],
                                            data_dir, chunk_size=chunk_size,
                                            write_bg=write_bg)
-        
+           
     logging.info('Plotting Allele Observations Distribution 2 Dimensions')
     plot_allele_obs_distrib_2D(h5, data_dir, args['max_allele_counts'],
                                chunk_size=chunk_size)
-    
+       
     logging.info('Plotting Inbreeding Coefficient')
     plot_inbreeding_coefficient(h5, args['max_num_alleles'],
                                 data_dir, window_size=args['manhattan_ws'],
@@ -254,16 +255,27 @@ def plot_maf_depth(variations, data_dir, min_depth=DEF_MIN_DEPTH,
     maf_dp_distribs = calc_maf_depth_distribs_per_sample(variations,
                                                          min_depth=min_depth,
                                                          n_bins=100,
-                                                         chunk_size=SNPS_PER_CHUNK)[0]
-    fpath = join(data_dir, 'mafs_depths_distribution.png')
-    title = 'Depth based Maximum allele frequency (MAF) distribution'
-    mpl_params = {'set_xlabel': {'args': ['Samples'], 'kwargs': {}},
-                  'set_ylabel': {'args': ['MAF (depth)'], 'kwargs': {}},
-                  'set_title': {'args': [title], 'kwargs': {}}}
-    if variations.samples is not None:
-        mpl_params['set_xticklabels'] = {'args': [variations.samples], 'kwargs': {}}
-    plot_boxplot_from_distribs(maf_dp_distribs, fhand=open(fpath, 'w'),
-                               figsize=(40, 10), mpl_params=mpl_params)
+                                                         chunk_size=SNPS_PER_CHUNK)
+    maf_dp_distribs, bins = maf_dp_distribs
+
+    maf_dp_dir = os.path.join(data_dir, 'maf_depth')
+    if not os.path.exists(maf_dp_dir):
+        os.mkdir(maf_dp_dir)
+    
+    samples = variations.samples
+    if samples is None:
+        samples = range(maf_dp_distribs.shape[0])
+    
+    for sample, distrib in zip(samples, maf_dp_distribs):
+        fpath = join(maf_dp_dir, '{}.png'.format(sample))
+        title = 'Depth based Maximum allele frequency (MAF) distribution {}'
+        title = title.format(sample)
+        mpl_params = {'set_xlabel': {'args': ['MAF (depth)'], 'kwargs': {}},
+                      'set_ylabel': {'args': ['SNPs number'], 'kwargs': {}},
+                      'set_title': {'args': [title], 'kwargs': {}},
+                      'set_yscale': {'args': ['log'], 'kwargs': {}}}
+        plot_distrib(distrib, bins, fhand=open(fpath, 'w'), figsize=(10, 10),
+                     mpl_params=mpl_params, n_ticks=10)
 
 
 def plot_missing_gt_rate_per_snp(variations, data_dir,
@@ -295,11 +307,10 @@ def plot_obs_het(variations, data_dir, chunk_size=SNPS_PER_CHUNK,
     obs_het_var_distrib, bins1 = distrib
     
     # Calculate observed heterozygosity distribution by sample
-    distrib = histogram_for_chunks(variations,
-                                   calc_funct=calc_obs_het_by_sample,
-                                   n_bins=50, range_=(0, 1),
-                                   chunk_size=chunk_size)
-    obs_het_sample_distrib, bins2 = distrib 
+    obs_het_by_sample = calc_obs_het_by_sample(variations,
+                                               chunk_size=chunk_size)
+    obs_het_sample_distrib, bins2 = histogram(obs_het_by_sample, n_bins=25,
+                                              range_=(0, 1))
     
     # Plot distributions
     fpath = join(data_dir, 'obs_het.png')
@@ -369,13 +380,10 @@ def plot_call_field_distribs_per_gt_type(variations, field, max_value,
     # Field distribution per sample
     field_name = field.split('/')[-1]
     fpath = join(data_dir, '{}_distribution_per_sample.png'.format(field_name))
-    fhand = open(fpath, 'w')
-    fig = Figure(figsize=(10, 10))
-    canvas = FigureCanvas(fig)
     mask_funcs = [call_is_het, call_is_hom]
     names = ['Heterozygous', 'Homozygous']
     distribs = []
-    for i, (mask_func, name) in enumerate(zip(mask_funcs, names)):
+    for mask_func in mask_funcs:
         dp_distribs, bins = calc_field_distribs_per_sample(variations,
                                                            field=field,
                                                            range_=(0, max_value),
@@ -384,18 +392,17 @@ def plot_call_field_distribs_per_gt_type(variations, field, max_value,
                                                            mask_func=mask_func,
                                                            mask_field=GT_FIELD)
         distribs.append(dp_distribs)
-        title = '{} distribution per sample {}'.format(field_name, name)
-        mpl_params = {'set_xlabel': {'args': ['Samples'], 'kwargs': {}},
-                      'set_ylabel': {'args': [field_name], 'kwargs': {}},
-                      'set_title': {'args': [title], 'kwargs': {}}}
-        samples = variations.samples
-        if samples is not None:
-            mpl_params['set_xticklabels'] = {'args': [samples], 'kwargs':
-                                             {'rotation':90}}
-        axes = fig.add_subplot(len(names) *100 + 10 + i + 1)
-        plot_boxplot_from_distribs(dp_distribs, fhand=open(fpath, 'w'),
-                                   axes=axes, mpl_params=mpl_params)
-    canvas.print_figure(fhand)
+        
+    title = '{} distribution per sample'.format(field_name)
+    mpl_params = {'set_xlabel': {'args': ['Samples'], 'kwargs': {}},
+                  'set_ylabel': {'args': [field_name], 'kwargs': {}},
+                  'set_title': {'args': [title], 'kwargs': {}}}
+    figsize = (variations[GT_FIELD].shape[1], 7)
+    plot_boxplot_from_distribs_series(distribs, fhand=open(fpath, 'w'),
+                                      mpl_params=mpl_params, figsize=figsize,
+                                      colors=['pink', 'tan'],
+                                      labels=names,
+                                      xticklabels=variations.samples)
     
     # Overall field distributions
     fpath = join(data_dir, '{}_distribution.png'.format(field_name))
@@ -432,6 +439,7 @@ def plot_call_field_distribs_per_gt_type(variations, field, max_value,
 def plot_gt_stats_per_sample(variations, data_dir, chunk_size=SNPS_PER_CHUNK):
     gt_stats = calc_gt_type_stats(variations, chunk_size=chunk_size)
     gt_stats = gt_stats.transpose()
+    figsize = (variations[GT_FIELD].shape[1], 7)
     
     # All genotypes classes per sample
     fpath = join(data_dir, 'genotype_counts_per_sample.png')
@@ -445,7 +453,7 @@ def plot_gt_stats_per_sample(variations, data_dir, chunk_size=SNPS_PER_CHUNK):
     plot_barplot(gt_stats, ['Ref Homozygous', 'Heterozygous', 'Alt Homozygous',
                             'Missing GT'], mpl_params=mpl_params, 
                  color=['darkslategrey', 'c', 'paleturquoise', 'cadetblue'],
-                 fpath=fpath, stacked=True)
+                 fpath=fpath, stacked=True, figsize=figsize)
 
     # Missing per sample
     fpath = join(data_dir, 'missing_per_sample.png')
@@ -453,7 +461,7 @@ def plot_gt_stats_per_sample(variations, data_dir, chunk_size=SNPS_PER_CHUNK):
     mpl_params['set_ylabel'] = {'args': ['Missing Genotypes Number'], 'kwargs': {}}
     mpl_params['set_title'] = {'args': [title], 'kwargs': {}}
     plot_barplot(gt_stats[:, -1], ['Missing GT'], mpl_params=mpl_params,
-                 fpath=fpath, stacked=True)
+                 fpath=fpath, stacked=True, figsize=figsize)
 
     # Heterozygous per sample
     fpath = join(data_dir, 'het_per_sample.png')
@@ -461,7 +469,7 @@ def plot_gt_stats_per_sample(variations, data_dir, chunk_size=SNPS_PER_CHUNK):
     mpl_params['set_ylabel'] = {'args': ['Heterozygous Number'], 'kwargs': {}}
     mpl_params['set_title'] = {'args': [title], 'kwargs': {}}
     plot_barplot(gt_stats[:, 1], ['Heterozygous'], mpl_params=mpl_params,
-                 fpath=fpath, stacked=True)
+                 fpath=fpath, stacked=True, figsize=figsize)
 
     # GT percentage without missing values
     fpath = join(data_dir, 'gt_perc_per_sample.png')
@@ -471,7 +479,7 @@ def plot_gt_stats_per_sample(variations, data_dir, chunk_size=SNPS_PER_CHUNK):
     gt_perc = gt_stats[:, :-1] / gt_stats[:, :-1].sum(axis=1, keepdims=True)
     gt_perc *= 100
     plot_barplot(gt_perc, ['Ref Homozygous', 'Heterozygous', 'Alt Homozygous'],
-                 mpl_params=mpl_params, fpath=fpath)
+                 mpl_params=mpl_params, fpath=fpath, figsize=figsize)
 
 
 def plot_called_gts_distrib_per_depth(h5, depths, data_dir,
@@ -490,7 +498,8 @@ def plot_called_gts_distrib_per_depth(h5, depths, data_dir,
                   'set_xticklabels': {'args': [depths],
                                       'kwargs': {'rotation': 90}}}
     plot_boxplot_from_distribs(distribs, fhand=open(fpath, 'w'),
-                               figsize=(15, 10), mpl_params=mpl_params)
+                               figsize=(15, 10), mpl_params=mpl_params,
+                               color='tan')
 
 
 def plot_allele_obs_distrib_2D(variations, data_dir, max_allele_counts,
@@ -509,25 +518,24 @@ def plot_allele_obs_distrib_2D(variations, data_dir, max_allele_counts,
     
     for i, (mask_func, name) in enumerate(zip(masks, names)):
         hist2d = hist2d_allele_observations(variations,
-                                            n_bins=max_allele_counts ** 2,
+                                            n_bins=max_allele_counts,
                                             range_=counts_range,
                                             mask_func=mask_func,
                                             chunk_size=chunk_size)
         counts_distrib2d, xbins, ybins = hist2d
-        counts_distrib2d = numpy.log10(counts_distrib2d)
         
         axes = fig.add_subplot(gs[i, 0])
         title = 'Allele counts distribution 2D {}'.format(name)
-        plot_hist2d(counts_distrib2d, xbins, ybins, axes=axes, fig=fig,
+        plot_hist2d(numpy.log10(counts_distrib2d), xbins, ybins, axes=axes,
                     mpl_params={'set_xlabel': {'args': ['Alt allele counts'],
                                                'kwargs': {}},
                                 'set_ylabel': {'args': ['Ref allele counts'],
                                                'kwargs': {}},
                                 'set_title': {'args': [title], 'kwargs': {}}},
-                    colorbar_label='log10(counts)')
+                    colorbar_label='log10(counts)', fig=fig)
 
         hist2d = hist2d_gq_allele_observations(variations,
-                                               n_bins=max_allele_counts ** 2,
+                                               n_bins=max_allele_counts,
                                                range_=counts_range,
                                                mask_func=mask_func,
                                                chunk_size=chunk_size,
@@ -601,8 +609,8 @@ def plot_hwe(variations, max_num_alleles, data_dir, ploidy=2,
     canvas = FigureCanvas(fig)
     
     num_alleles = range(2, max_num_alleles + 1)
+    gs = gridspec.GridSpec(len(num_alleles), 1)
     for i, num_allele in enumerate(num_alleles):
-        print(i, num_allele)
         df = len(list(combinations_with_replacement(range(num_allele),
                                                     ploidy))) - num_allele
                                                     
@@ -611,10 +619,9 @@ def plot_hwe(variations, max_num_alleles, data_dir, ploidy=2,
                                        chunk_size=chunk_size)
         hwe_chi2 = hwe_test[:, 0]
         hwe_chi2_distrib, bins = histogram(hwe_chi2, n_bins=50)
-        print(hwe_chi2_distrib)
         
         # Plot observed distribution
-        axes = fig.add_subplot(len(num_alleles) * 100 + 11 + i)
+        axes = fig.add_subplot(gs[i, 0])
         title = 'Chi2 df={} statistic values distribution'.format(df)
         mpl_params = {'set_xlabel': {'args': ['Chi2 statistic'], 'kwargs': {}},
                       'set_ylabel': {'args': ['SNP number'], 'kwargs': {}},
@@ -627,7 +634,7 @@ def plot_hwe(variations, max_num_alleles, data_dir, ploidy=2,
         x = numpy.linspace(0, max(hwe_chi2), 1000)
         axes.plot(x, rv.pdf(x), color='b', lw=2, label='Expected Chi2')
         axes.set_ylabel('Expected Chi2 density')
-        canvas.print_figure(fhand)
+    canvas.print_figure(fhand)
 
 
 def plot_nucleotide_diversity_measures(variations, max_num_alleles,

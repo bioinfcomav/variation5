@@ -97,7 +97,7 @@ def _extend_array(array, arrays):
     i0 = array.shape[0]
     shape = list(arrays[0].shape)
     shape[0] = n_snps
-    array.resize(shape, refcheck = False)
+    array.resize(shape, refcheck=False)
 
     for array_to_append in arrays:
         if array_to_append is array:
@@ -157,5 +157,9 @@ def calc_min_max(matrix):
 
 
 def is_missing(matrix, axis=1):
-    matrix = numpy.any(matrix == MISSING_VALUES[matrix.dtype], axis=axis)
-    return matrix
+    if is_dataset(matrix):
+        matrix = matrix[:]
+    if axis is None:
+        return matrix == MISSING_VALUES[matrix.dtype]
+    else:
+        return numpy.any(matrix == MISSING_VALUES[matrix.dtype], axis=axis)

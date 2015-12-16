@@ -18,7 +18,7 @@ from variation.iterutils import PeekableIterator
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 
 from test.test_utils import TEST_DATA_DIR
-from variation.variations.stats import _remove_nans
+from variation.utils.misc import remove_nans
 from collections import Counter
 
 
@@ -202,8 +202,8 @@ class MergeTest(unittest.TestCase):
         new_vars.put_vars(merger)
         for field in new_vars.keys():
             if 'float' in str(new_vars[field][:].dtype):
-                assert numpy.all(_remove_nans(expected_h5[field][:]) ==
-                                 _remove_nans(new_vars[field][:]))
+                assert numpy.all(remove_nans(expected_h5[field][:]) ==
+                                 remove_nans(new_vars[field][:]))
             else:
                 result = new_vars[field][:]
                 assert numpy.all(expected_h5[field][:] == result)
@@ -223,8 +223,8 @@ class MergeTest(unittest.TestCase):
         new_vars.put_vars(merger)
         for field in new_vars.keys():
             if 'float' in str(new_vars[field][:].dtype):
-                assert numpy.all(_remove_nans(expected_h5[field][:]) ==
-                                 _remove_nans(new_vars[field][:]))
+                assert numpy.all(remove_nans(expected_h5[field][:]) ==
+                                 remove_nans(new_vars[field][:]))
             else:
                 result = new_vars[field][:]
                 assert numpy.all(expected_h5[field][:] == result)

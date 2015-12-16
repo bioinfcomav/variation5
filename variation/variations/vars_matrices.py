@@ -10,7 +10,7 @@ from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
-from variation.variations.stats import _remove_nans
+from variation.utils.misc import remove_nans
 # Missing docstring
 # pylint: disable=C0111
 
@@ -423,7 +423,7 @@ def _get_value_info(h5, var_index, info_paths):
         else:
             new_info = ''
             # TODO: change to a more elegant way
-            value = _remove_nans(h5[key][var_index])
+            value = remove_nans(h5[key][var_index])
             value = [str(x) for x in value]
             if 'numpy' in str(type(h5[key][var_index])):
                 if len(value) > 0:
@@ -446,7 +446,7 @@ def _get_value_info(h5, var_index, info_paths):
 def _get_calls_per_sample(h5, var_index, n_sample, calls_path):
     calls_sample = []
     for key in calls_path:
-        value = _remove_nans(h5[key][var_index][n_sample])
+        value = remove_nans(h5[key][var_index][n_sample])
         if 'GT' in key:
             value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
                      for x in value]
@@ -480,7 +480,7 @@ def _preprocess_format_calls_paths(variations, var_index, format_paths,
                                    calls_paths):
     new_format_paths, new_calls_paths = [], []
     for key in calls_paths:
-        values = _remove_nans(variations[key][var_index])
+        values = remove_nans(variations[key][var_index])
         if (not numpy.all(values == MISSING_VALUES[values.dtype]) and
                 values.shape[0] != 0):
             new_calls_paths.append(key)

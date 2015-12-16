@@ -7,9 +7,7 @@ import operator
 import numpy
 import matplotlib.pyplot as plt
 
-from variation.matrix.methods import iterate_matrix_chunks
-from variation.matrix.methods import calc_min_max
-from numpy import histogram
+from variation.matrix.methods import iterate_matrix_chunks, calc_min_max
 
 
 def _row_value_counter_array(array, value, axes):
@@ -69,7 +67,7 @@ def row_value_counter_fact(value, ratio=False):
 
 def counts_by_row(mat, missing_value=None):
 
-    alleles = (numpy.unique(mat))
+    alleles = sorted(numpy.unique(mat))
     allele_counts = None
     # This algorithm is suboptimal, it would be better to go row per row
     # the problem is a for snp in gts is very slow because the for in
@@ -93,28 +91,3 @@ def plot_hist(hist, bins, print_plot=False):
     plt.bar(center, hist, align='center', width=width)
     if print_plot:
         plt.show()
-
-
-def histogram(matrix, nbins, low_mem=False, print_plot=False):
-    if low_mem:
-        min_, max_ = calc_min_max(matrix)
-        hist, bins = _low_mem_histogram(matrix, nbins, min_, max_)
-        plot_hist(hist, bins, print_plot=print_plot)
-    else:
-        hist, bins = numpy.histogram(matrix, nbins)
-        plot_hist(hist, bins, print_plot=print_plot)
-
-
-def _low_mem_histogram(matrix, nbins, min_=None,  max_=None):
-    histogram = None
-    bins = None
-    for chunk in iterate_matrix_chunks(matrix):
-        if bins is None:
-            chunk_hist, bins = numpy.histogram(chunk, nbins, (min_, max_))
-        else:
-            chunk_hist, _ = numpy.histogram(chunk, bins)
-        if histogram is None:
-            histogram = chunk_hist
-        else:
-            histogram += chunk_hist
-    return histogram, bins

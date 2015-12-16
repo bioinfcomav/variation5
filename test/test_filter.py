@@ -17,7 +17,6 @@ from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (_filter_all,
                                           _filter_none,
                                           mafs_filter_fact,
-                                          missing_rate_filter_fact,
                                           min_called_gts_filter_fact,
                                           quality_filter_genotypes_fact,
                                           quality_filter_snps_fact,
@@ -25,7 +24,7 @@ from variation.variations.filters import (_filter_all,
                                           filter_monomorphic_snps_fact,
                                           filter_biallelic_and_polymorphic,
                                           filter_gts_by_dp_fact,
-                                          filter_snps_with_no_strand_info)
+                                          obs_het_filter_fact)
 from variation.iterutils import first
 
 
@@ -55,36 +54,10 @@ class FilterTest(unittest.TestCase):
             assert numpy.all(in_hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
             hdf5_2.close()
 
-    def test_filter_missing_varh5(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        chunk = first(hdf5.iterate_chunks())
-        flt_chunk = min_called_gts_filter_fact(min_=100)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 94
-
-        flt_chunk = min_called_gts_filter_fact()(chunk)
-        path = first(chunk.keys())
-        assert flt_chunk[path].shape[0] == 200
-
-        flt_chunk = min_called_gts_filter_fact(min_=307)(chunk)
-        path = first(chunk.keys())
-        assert flt_chunk[path].shape[0] == 0
-
-        flt_chunk = missing_rate_filter_fact(min_=0.6)(chunk)
-        path = first(chunk.keys())
-        assert flt_chunk[path].shape[0] == 64
-
-        flt_chunk = missing_rate_filter_fact()(chunk)
-        path = first(chunk.keys())
-        assert flt_chunk[path].shape[0] == 200
-
-        flt_chunk = missing_rate_filter_fact(min_=1.1)(chunk)
-        path = first(chunk.keys())
-        assert flt_chunk[path].shape[0] == 0
-
     def test_filter_mafs_varh5(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
-        filter_mafs = mafs_filter_fact(min_=0.6)
+        filter_mafs = mafs_filter_fact(min_=0.6, min_num_genotypes=0)
         flt_chunk = filter_mafs(chunk)
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 182
@@ -97,14 +70,17 @@ class FilterTest(unittest.TestCase):
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 18
 
-        flt_chunk = mafs_filter_fact(min_=0.6, max_=0.9)(chunk)
+        flt_chunk = mafs_filter_fact(min_=0.6, max_=0.9,
+                                     min_num_genotypes=0)(chunk)
         assert flt_chunk[path].shape[0] == 125
 
-        flt_chunk = mafs_filter_fact(min_=1.1)(chunk)
+        flt_chunk = mafs_filter_fact(min_=1.1,
+                                     min_num_genotypes=0)(chunk)
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 0
 
-        flt_chunk = mafs_filter_fact(max_=0)(chunk)
+        flt_chunk = mafs_filter_fact(max_=0,
+                                     min_num_genotypes=0)(chunk)
         path = first(chunk.keys())
         assert flt_chunk[path].shape[0] == 0
 
@@ -124,56 +100,169 @@ class FilterTest(unittest.TestCase):
         out_snps.put_chunks(flt_chunks)
         assert numpy.all(var_h5['/calls/GT'][:] == out_snps['/calls/GT'][:])
 
-    def test_filter_missing_varArray(self):
+    def test_filter_called_gt(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
+                           [[0, 0], [0, 0], [0, 0], [-1, -1], [-1, -1]],
+                           [[0, 0], [-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        variations['/calls/GT'] = gts
+        
+        filter_by_called = min_called_gts_filter_fact(min_=5, rates=False)
+        expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]])
+        filtered = filter_by_called(variations)
+        assert numpy.all(filtered['/calls/GT'] == expected)
+        
+        filter_by_called = min_called_gts_filter_fact(min_=2, rates=False)
+        expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
+                           [[0, 0], [0, 0], [0, 0], [-1, -1], [-1, -1]]])
+        filtered = filter_by_called(variations)
+        assert numpy.all(filtered['/calls/GT'] == expected)
+        
+        filter_by_called = min_called_gts_filter_fact(min_=0.4, rates=True)
+        expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
+                           [[0, 0], [0, 0], [0, 0], [-1, -1], [-1, -1]]])
+        filtered = filter_by_called(variations)
+        assert numpy.all(filtered['/calls/GT'] == expected)
+        
+        filter_by_called = min_called_gts_filter_fact(min_=0, rates=True)
+        filtered = filter_by_called(variations)
+        assert numpy.all(filtered['/calls/GT'] == variations['/calls/GT'])
+        
+        # With hdf5 file
+        filter_by_called = min_called_gts_filter_fact(min_=0.4, rates=True)
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        # Fichero de entrada esta mal, cogeremos solo algunos
-        kept_fields = ['/calls/GT', '/variations/alt', '/variations/info/AF']
-        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
-        chunk = first(snps)
-        flt_chunk = min_called_gts_filter_fact(min_=100)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 94
+        filtered_hdf5 = filter_by_called(hdf5)
+        
+        chunks = hdf5.iterate_chunks(kept_fields=['/calls/GT'])
+        filtered_vars = VariationsArrays()
+        filtered_chunks = map(filter_by_called, chunks)
+        filtered_vars.put_chunks(filtered_chunks)
+        
+        res = filtered_hdf5['/calls/GT'] == filtered_vars['/calls/GT']
+        assert numpy.all(res)
 
-        flt_chunk = min_called_gts_filter_fact()(chunk)
-        assert first(flt_chunk.values()).shape[0] == 200
+    def test_filter_mafs(self):
+        # with some missing values
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
+                           [[0, 0], [-1, -1], [0, 1], [0, 0], [1, 1]]])
+        variations['/calls/GT'] = gts
+        filter_mafs = mafs_filter_fact(min_num_genotypes=5)
+        filtered = filter_mafs(variations)
+        assert numpy.all(filtered['/calls/GT'] == gts)
+        
+        filter_mafs = mafs_filter_fact(min_=0, min_num_genotypes=5)
+        filtered = filter_mafs(variations)
+        assert numpy.all(filtered['/calls/GT'] == gts[[0, 1, 2]])
 
-        flt_chunk = min_called_gts_filter_fact(min_=307)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
-
-        flt_chunk = missing_rate_filter_fact(min_=0.6)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 64
-
-        flt_chunk = missing_rate_filter_fact()(chunk)
-        assert first(flt_chunk.values()).shape[0] == 200
-
-        flt_chunk = missing_rate_filter_fact(min_=1.1)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
-
-    def test_filter_mafs_varArray(self):
+        # without missing values
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        variations['/calls/GT'] = gts
+        
+        filter_maf = mafs_filter_fact(max_=0.8, min_num_genotypes=0)
+        expected = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                               [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                               [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        filtered = filter_maf(variations)
+        assert numpy.all(filtered['/calls/GT'] == expected)
+        
+        filter_maf = mafs_filter_fact(min_=0.6, max_=0.8, min_num_genotypes=0)
+        expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                               [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        filtered = filter_maf(variations)
+        assert numpy.all(filtered['/calls/GT'] == expected)
+        
+        filter_maf = mafs_filter_fact(max_=0.5, min_num_genotypes=0)
+        expected = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]]])
+        filtered = filter_maf(variations)
+        assert numpy.all(filtered['/calls/GT'] == expected)
+        
+        filter_maf = mafs_filter_fact(min_=0.5, max_=1, min_num_genotypes=0)
+        filtered = filter_maf(variations)
+        assert numpy.all(filtered['/calls/GT'] == variations['/calls/GT'])
+        
+        # With hdf5 files        
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        # Fichero de entrada esta mal, cogeremos solo algunos
-        kept_fields = ['/calls/GT', '/variations/alt', '/variations/info/AF']
-        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
-        chunk = first(snps)
-        filter_mafs = mafs_filter_fact(min_=0.6)
-        flt_chunk = filter_mafs(chunk)
-        assert first(flt_chunk.values()).shape[0] == 182
-
-        flt_chunk = mafs_filter_fact()(chunk)
-        assert first(flt_chunk.values()).shape[0] == 200
-
-        flt_chunk = mafs_filter_fact(max_=0.6)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 18
-
-        flt_chunk = mafs_filter_fact(min_=0.6, max_=0.9)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 125
-
-        flt_chunk = mafs_filter_fact(min_=1.1)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
-
-        flt_chunk = mafs_filter_fact(max_=0)(chunk)
-        assert first(flt_chunk.values()).shape[0] == 0
+        chunks = hdf5.iterate_chunks(kept_fields=['/calls/GT'])
+        filter_mafs = mafs_filter_fact(min_=0.6, max_=0.9)
+        
+        filtered_hdf5 = filter_mafs(hdf5)
+        filtered_vars = VariationsArrays()
+        filtered_chunks = map(filter_mafs, chunks)
+        filtered_vars.put_chunks(filtered_chunks)
+        res = filtered_hdf5['/calls/GT'] == filtered_vars['/calls/GT']
+        assert numpy.all(res)
+        
+    def test_filter_obs_het(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        variations['/calls/GT'] = gts
+        
+        filter_obs_het = obs_het_filter_fact(min_num_genotypes=0)
+        filtered = filter_obs_het(variations)
+        assert numpy.all(filtered['/calls/GT'] == gts)
+        
+        filter_obs_het = obs_het_filter_fact(min_=0.2, min_num_genotypes=0)
+        filtered = filter_obs_het(variations)
+        assert numpy.all(filtered['/calls/GT'] == gts[[0, 2, 3]])
+        
+        filter_obs_het = obs_het_filter_fact(max_=0.1, min_num_genotypes=0)
+        filtered = filter_obs_het(variations)
+        assert numpy.all(filtered['/calls/GT'] == gts[[1]])
+        
+        filter_obs_het = obs_het_filter_fact(max_=0.3, min_=0.2,
+                                             min_num_genotypes=0)
+        filtered = filter_obs_het(variations)
+        assert numpy.all(filtered['/calls/GT'] == gts[[0, 2, 3]])
+        
+        # With hdf5 files        
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        chunks = hdf5.iterate_chunks(kept_fields=['/calls/GT'])
+        filter_obs_het = obs_het_filter_fact(min_=0.6, max_=0.9)
+        
+        filtered_hdf5 = filter_obs_het(hdf5)
+        filtered_vars = VariationsArrays()
+        filtered_chunks = map(filter_obs_het, chunks)
+        filtered_vars.put_chunks(filtered_chunks)
+        res = filtered_hdf5['/calls/GT'] == filtered_vars['/calls/GT']
+        assert numpy.all(res)
 
     def test_filter_quality_genotype(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        gqs = numpy.array([[10, 20, 5, 20, 25],
+                           [10, 2, 5, 15, 5]])
+        variations['/calls/GT'] = gts
+        variations['/calls/GQ'] = gqs
+        
+        filter_by_gq = quality_filter_genotypes_fact()
+        filtered = filter_by_gq(variations)
+        assert numpy.all(filtered == variations['/calls/GT'])
+        
+        filter_by_gq = quality_filter_genotypes_fact(min_=10)
+        expected = numpy.array([[[0, 0], [1, 1], [-1, -1], [1, 1], [0, 0]],
+                                [[0, 0], [-1, -1], [-1, -1], [0, 0],
+                                 [-1, -1]]])
+        filtered = filter_by_gq(variations)
+        assert numpy.all(filtered == expected)
+        
+        filter_by_gq = quality_filter_genotypes_fact(min_=100)
+        filtered = filter_by_gq(variations)
+        assert numpy.all(filtered == -1)
+        
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         kept_fields = ['/calls/GQ', '/calls/GT']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
@@ -185,6 +274,29 @@ class FilterTest(unittest.TestCase):
         assert numpy.all(flt_chunk.shape[0] == 200)
 
     def test_filter_quality_snps(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1]], [[0, 1], [1, 1]],
+                            [[0, 0], [0, 0]], [[0, 0], [0, 0]],
+                            [[0, 1], [0, 0]]])
+        snp_quals = numpy.array([5, 10, 15, 5, 20])
+        variations['/calls/GT'] = gts
+        variations['/variations/qual'] = snp_quals
+        
+        filter_by_qual = quality_filter_snps_fact()
+        filtered = filter_by_qual(variations)
+        filtered_qual = filtered['/variations/qual']
+        filtered_gts = filtered['/calls/GT']
+        assert numpy.all(variations['/variations/qual'] == filtered_qual)
+        assert numpy.all(variations['/calls/GT'] == filtered_gts)
+        
+        filter_by_qual = quality_filter_snps_fact(min_=15)
+        expected_gts = numpy.array([[[0, 0], [0, 0]],
+                                    [[0, 1], [0, 0]]])
+        exp_snp_quals = numpy.array([15, 20])
+        filtered = filter_by_qual(variations)
+        assert numpy.all(filtered['/variations/qual'] == exp_snp_quals)
+        assert numpy.all(filtered['/calls/GT'] == expected_gts)
+        
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         kept_fields = ['/variations/qual']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
@@ -225,7 +337,8 @@ class FilterTest(unittest.TestCase):
         kept_fields = ['/calls/GT']
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
-        filter_monomorphic_snps = filter_monomorphic_snps_fact(0.9)
+        filter_monomorphic_snps = filter_monomorphic_snps_fact(0.9,
+                                                               min_num_genotypes=0)
         flt_chunk = filter_monomorphic_snps(chunk)
         assert flt_chunk.num_variations == 59
 
@@ -239,12 +352,6 @@ class FilterTest(unittest.TestCase):
         flt_chunk = filter_biallelic_and_polymorphic(chunk)
         assert flt_chunk['/calls/GT'].shape == (174, 153, 2)
 
-    def test_filter_snps_with_no_strand_info(self):
-        fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.h5')
-        h5 = VariationsH5(fpath, "r")
-        result = filter_snps_with_no_strand_info(h5)
-        assert result['/calls/GT'].shape[0] == 2
-
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'FilterTest.test_filter_missing_varArray']
+    # import sys;sys.argv = ['', 'FilterTest.test_filter_mafs']
     unittest.main()

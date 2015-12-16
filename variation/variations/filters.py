@@ -137,7 +137,7 @@ def _min_called_gts_filter(chunk, min_=None, rates=True):
     return _filter_chunk2(chunk, selected_rows)
 
 
-def min_called_gts_filter_fact(min_=None,rates=True):
+def min_called_gts_filter_fact(min_=None, rates=True):
     return partial(_min_called_gts_filter, min_=min_, rates=rates)
 
 

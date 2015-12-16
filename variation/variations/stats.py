@@ -78,7 +78,7 @@ def histogram_for_chunks(variations, calc_funct, n_bins=DEF_NUM_BINS,
                                                     chunk_size))
 
     hist = None
-    for stat in _calc_stats_for_chunks(calc_funct, variations,chunk_size):
+    for stat in _calc_stats_for_chunks(calc_funct, variations, chunk_size):
         stat_hist, bins = histogram(stat, n_bins, range_)
         if hist is None:
             hist = stat_hist
@@ -231,7 +231,7 @@ def calc_missing_gt(variations, rates=True, axis=1):
     gts = variations[GT_FIELD]
     if is_dataset(gts):
         gts = gts[:]
-    missing = numpy.any(gts == MISSING_VALUES[int], axis=2).sum(axis=axis) 
+    missing = numpy.any(gts == MISSING_VALUES[int], axis=2).sum(axis=axis)
     if rates:
         num_items_per_row = gts.shape[axis]
         result = missing / num_items_per_row
@@ -354,7 +354,7 @@ def calc_gt_type_stats(variations, chunk_size=None):
         else:
             gt_type_stats += chunk_stats
     return gt_type_stats
-    
+
 
 def calc_snp_density(variations, window):
     dens = []
@@ -443,7 +443,7 @@ def calc_inbreeding_coef(variations, chunk_size=SNPS_PER_CHUNK,
 
 
 def _calc_hwe_chi2_test(variations, num_allele,
-                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+                        min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     ploidy = variations.ploidy
     gts = variations[GT_FIELD]
 
@@ -453,7 +453,7 @@ def _calc_hwe_chi2_test(variations, num_allele,
     sel_vars = numpy.sum(allele_freq != 0, axis=1) == num_allele
     allele_freq = allele_freq[sel_vars]
     gts = gts[sel_vars, :, :]
-    
+
     genotypes = list(combinations_with_replacement(range(num_allele),
                                                    ploidy))
 
@@ -651,7 +651,8 @@ def calc_field_distribs_per_sample(variations, field, range_=None,
     if chunk_size:
         chunks = iterate_matrix_chunks(mat, chunk_size=chunk_size)
         if mask_mat is not None:
-            mask_chunks = iterate_matrix_chunks(mask_mat, chunk_size=chunk_size)
+            mask_chunks = iterate_matrix_chunks(mask_mat,
+                                                chunk_size=chunk_size)
             chunks = zip(chunks, mask_chunks)
     else:
         chunks = [mat]
@@ -659,7 +660,7 @@ def calc_field_distribs_per_sample(variations, field, range_=None,
             chunks = [(mat, mask_mat)]
 
     histograms = None
-    
+
     for chunk in chunks:
         chunk_hists = None
         chunk_mask = None

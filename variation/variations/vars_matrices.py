@@ -558,6 +558,15 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
 
 
 class _VariationMatrices():
+    def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
+                 ignore_overflows=False, ignore_undefined_fields=False,
+                 kept_fields=None, ignored_fields=None):
+        self._vars_in_chunk = vars_in_chunk
+        self.ignore_overflows = ignore_overflows
+        self.ignore_undefined_fields = ignore_undefined_fields
+        self.kept_fields = kept_fields
+        self.ignored_fields = ignored_fields
+
     @property
     def ploidy(self):
         return self['/calls/GT'].shape[2]
@@ -596,22 +605,64 @@ class _VariationMatrices():
         for line in _to_vcf(self):
             vcf_fhand.write(line + '\n')
 
+    @staticmethod
+    def _check_shape_matches(mat1, mat2, field):
+        shape1 = mat1.shape
+        shape2 = mat2.shape
+        msg = 'matrix in chunk and in self have not matching shape: ' + field
+        if len(shape1) != len(shape2):
+            raise ValueError(msg)
+        if len(shape1) > 1:
+            if shape1[1] != shape2[1]:
+                raise ValueError(msg)
+        if len(shape1) > 2:
+            if shape1[2] != shape2[2]:
+                raise ValueError(msg)
+
+    def _get_mats_for_chunk(self, variations):
+        field_paths = variations.keys()
+        diff_fields = set(self.keys()).difference(set(field_paths))
+
+        if diff_fields:
+            msg = 'Previous matrices do not match matrices in chunk'
+            raise ValueError(msg)
+
+        matrices = {}
+
+        for field in field_paths:
+            mat1 = variations[field]
+            mat2 = self[field]
+            self._check_shape_matches(mat1, mat2, field)
+            append_matrix(mat2, mat1)
+            matrices[field] = mat2
+        return matrices
+
+    def _create_or_get_mats_from_chunk(self, variations):
+        field_paths = variations.keys()
+        if first(field_paths) in self:
+            matrices = self._get_mats_for_chunk(variations)
+        else:
+            if self.keys():
+                raise ValueError('There are previous no matching matrices')
+            matrices = self._create_mats_from_chunks(variations)
+            self._set_metadata(variations.metadata)
+            self._set_samples(variations.samples)
+        return matrices
+
     def put_chunks(self, chunks, kept_fields=None, ignored_fields=None):
         matrices = None
-        for mats_chunks in chunks:
+        for chunk in chunks:
             if matrices is None:
-                matrices = self._create_mats_from_chunks(mats_chunks)
-                self._set_metadata(mats_chunks.metadata)
-                self._set_samples(mats_chunks.samples)
+                matrices = self._create_or_get_mats_from_chunk(chunk)
                 continue
             # check all chunks have the same number of snps
-            nsnps = [mats_chunks[path].data.shape[0]
-                     for path in mats_chunks.keys()]
+            nsnps = [chunk[path].data.shape[0]
+                     for path in chunk.keys()]
             num_snps = nsnps[0]
             assert all(num_snps == nsnp for nsnp in nsnps)
 
-            for path in mats_chunks.keys():
-                dset_chunk = mats_chunks[path]
+            for path in chunk.keys():
+                dset_chunk = chunk[path]
                 dset = matrices[path]
                 append_matrix(dset, dset_chunk)
 
@@ -698,6 +749,9 @@ class _VariationMatrices():
     def values(self):
         return [self[key] for key in self.keys()]
 
+    def __contains__(self, key):
+        return key in self.keys()
+
     @property
     def num_variations(self):
         try:
@@ -711,7 +765,9 @@ class _VariationMatrices():
                  max_field_str_lens=None):
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk,
                                  max_field_lens=max_field_lens,
-                                 max_field_str_lens=max_field_str_lens)
+                                 max_field_str_lens=max_field_str_lens,
+                                 kept_fields=self.kept_fields,
+                                 ignored_fields=self.ignored_fields)
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
@@ -741,7 +797,13 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False, ignore_undefined_fields=False):
+                 ignore_overflows=False, ignore_undefined_fields=False,
+                 kept_fields=None, ignored_fields=None):
+        super().__init__(vars_in_chunk=vars_in_chunk,
+                         ignore_overflows=ignore_overflows,
+                         ignore_undefined_fields=ignore_undefined_fields,
+                         kept_fields=kept_fields,
+                         ignored_fields=ignored_fields)
         self._fpath = fpath
         if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
@@ -750,9 +812,6 @@ class VariationsH5(_VariationMatrices):
             mode = 'w-'
         self.mode = mode
         self._h5file = h5py.File(fpath, mode)
-        self._vars_in_chunk = vars_in_chunk
-        self.ignore_overflows = ignore_overflows
-        self.ignore_undefined_fields = ignore_undefined_fields
 
     def __getitem__(self, path):
         return self._h5file[path]
@@ -861,13 +920,16 @@ def select_dset_from_chunks(chunks, dset_path):
 
 class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False, ignore_undefined_fields=False):
-        self._vars_in_chunk = vars_in_chunk
+                 ignore_overflows=False, ignore_undefined_fields=False,
+                 kept_fields=None, ignored_fields=None):
+        super().__init__(vars_in_chunk=vars_in_chunk,
+                         ignore_overflows=ignore_overflows,
+                         ignore_undefined_fields=ignore_undefined_fields,
+                         kept_fields=kept_fields,
+                         ignored_fields=ignored_fields)
         self._hArrays = {}
         self._metadata = {}
         self._samples = []
-        self.ignore_overflows = ignore_overflows
-        self.ignore_undefined_fields = ignore_undefined_fields
 
     def __getitem__(self, path):
         return self._hArrays[path]

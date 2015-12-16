@@ -49,6 +49,23 @@ def _filter_chunk2(chunk, selected_rows):
     return flt_chunk
 
 
+def _filter_chunk_samples(chunk, selected_cols):
+    flt_chunk = VariationsArrays()
+    for path in chunk.keys():
+        if 'calls' in path:
+            matrix = chunk[path]
+            try:
+                array = matrix.data
+            except:
+                array = matrix
+            flt_data = numpy.compress(selected_cols, array, axis=1)
+            flt_chunk[path] = flt_data
+        else:
+            flt_chunk[path] = matrix
+    flt_chunk.metadata = chunk.metadata
+    return flt_chunk
+
+
 def _calc_rows_by_min(array, min_):
     selected_rows = None if min_ is None else array >= min_
     return selected_rows

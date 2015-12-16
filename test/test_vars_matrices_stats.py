@@ -27,11 +27,24 @@ from variation.variations.stats import (calc_maf, histogram,
                                         calc_called_gts_distrib_per_depth,
                                         calc_field_distribs_per_sample,
                                         calc_maf_depth_distribs_per_sample,
-                                        PositionalStatsCalculator)
+                                        PositionalStatsCalculator, call_is_hom,
+                                        calc_cum_distrib)
 from test.test_utils import TEST_DATA_DIR
 
 
 class StatsTest(unittest.TestCase):
+    def test_calc_cum_distrib(self):
+        distrib = numpy.array([1, 0, 0, 0, 0, 1, 0, 0, 0, 1])
+        cum_distrib = calc_cum_distrib(distrib)
+        exp = [3, 2, 2, 2, 2, 2, 1, 1, 1, 1]
+        assert numpy.all(cum_distrib == exp)
+        
+        distrib = numpy.array([[1, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+                               [1, 0, 0, 0, 0, 1, 0, 0, 0, 1]])
+        cum_distrib = calc_cum_distrib(distrib)
+        exp = [3, 2, 2, 2, 2, 2, 1, 1, 1, 1]
+        assert numpy.all(cum_distrib == [exp, exp])
+        
     def test_maf(self):
         gts = numpy.array([[[0], [0], [0], [0]], [[0], [0], [1], [1]],
                            [[0], [0], [0], [1]], [[-1], [-1], [-1], [-1]]])
@@ -69,7 +82,8 @@ class StatsTest(unittest.TestCase):
 
     def test_calc_maf_distrib_by_chunk(self):
         varis = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        calc_maf_for_chunk = partial(calc_maf, min_num_genotypes=1)
+        calc_maf_for_chunk = partial(calc_maf, min_num_genotypes=1,
+                                     chunk_size=None)
 
         distrib, bins = histogram_for_chunks(varis, calc_maf_for_chunk,
                                              n_bins=10)
@@ -228,7 +242,8 @@ class StatsTest(unittest.TestCase):
                                                  [0, 0], [0, 1], [1, 1],
                                                  [0, 0]]]),
                       '/variations/alt': numpy.zeros((1, 1))}
-        result = calc_inbreeding_coef(variations, min_num_genotypes=0)
+        result = calc_inbreeding_coef(variations, min_num_genotypes=0,
+                                      chunk_size=None)
         expected = numpy.array([1 - (0.4 / 0.42)])
         assert numpy.allclose(result, expected)
 
@@ -243,8 +258,15 @@ class StatsTest(unittest.TestCase):
                                   dtype=numpy.int16, fillvalue=0)
         expected = numpy.array([[1.25825397e+01, 1.85240619e-03],
                                 [1.25825397e+01, 1.85240619e-03]])
-        result = calc_hwe_chi2_test(variations, min_num_genotypes=0)
+        result = calc_hwe_chi2_test(variations, min_num_genotypes=0,
+                                    chunk_size=None)
         assert numpy.allclose(result, expected)
+        
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        hwe_test1 = calc_hwe_chi2_test(hdf5, chunk_size=None)
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        hwe_test2 = calc_hwe_chi2_test(hdf5)
+        assert numpy.allclose(hwe_test1, hwe_test2, equal_nan=True)
 
     def test_calc_allele_obs_distrib_2D(self):
         variations = {'/calls/AO': numpy.array([[[0, 0], [5, 0], [-1, -1],
@@ -352,10 +374,25 @@ class StatsTest(unittest.TestCase):
                                                      n_bins=560,
                                                      chunk_size=50)
         assert numpy.all(distrib3 == distrib2)
+        
+        distrib_het, _ = calc_field_distribs_per_sample(snps, field='/calls/DP',
+                                                        n_bins=560,
+                                                        chunk_size=50,
+                                                        mask_field='/calls/GT',
+                                                        mask_func=call_is_het)
+        assert numpy.all(distrib3 == distrib2)
+        distrib_hom, _ = calc_field_distribs_per_sample(snps, field='/calls/DP',
+                                                        n_bins=560,
+                                                        chunk_size=50,
+                                                        mask_field='/calls/GT',
+                                                        mask_func=call_is_hom)
+        assert numpy.all(distrib3 == numpy.add(distrib_het, distrib_hom))
 
         vars_ = VariationsArrays()
         vars_['/calls/DP'] = numpy.array([[10, 5, 15],
                                           [0, 15, 10]])
+        vars_['/calls/GT'] = numpy.array([[[0, 0], [0, 1], [1, 1]],
+                                          [[0, 0], [0, 1], [1, 1]]])
         vars_.samples = list(range(3))
         distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
                                                     n_bins=16)
@@ -363,7 +400,26 @@ class StatsTest(unittest.TestCase):
                  [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
         assert numpy.all(expec == distrib)
-
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+        
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16,
+                                                    mask_field='/calls/GT',
+                                                    mask_func=call_is_het)
+        expec = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+        assert numpy.all(expec == distrib)
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+        
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16,
+                                                    mask_field='/calls/GT',
+                                                    mask_func=call_is_hom)
+        expec = [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
+        assert numpy.all(expec == distrib)
         assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
 
     def test_to_positional_stats(self):
@@ -415,5 +471,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_maf']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_cum_distrib']
     unittest.main()

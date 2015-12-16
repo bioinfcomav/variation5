@@ -67,8 +67,6 @@ def _calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
 def calc_and_plot_boxplot(mat, by_row=True, fhand=None, axes=None,
                           no_interactive_win=False, figsize=None,
                           show_fliers=False, mpl_params={}):
-    '''It assumes that there are as many bins in the distributions as integers
-    in their range'''
     print_figure = False
     if axes is None:
         print_figure = True
@@ -89,6 +87,9 @@ def calc_and_plot_boxplot(mat, by_row=True, fhand=None, axes=None,
 def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
                                no_interactive_win=False, figsize=None,
                                show_fliers=False, mpl_params={}):
+    '''It assumes that there are as many bins in the distributions as integers
+    in their range'''
+    
     mat = distribs
     print_figure = False
     if axes is None:
@@ -110,7 +111,7 @@ def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
 
 def plot_distrib(distrib, bins, fhand=None, axes=None,
                  no_interactive_win=False, figsize=None,
-                 mpl_params={}, **kwargs):
+                 mpl_params={}, n_ticks=10, **kwargs):
     '''Plots the histogram of an already calculated distribution'''
 
     print_figure = False
@@ -119,8 +120,10 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
     axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
     width = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
     result = axes.bar(bins[:-1], distrib, width=width, **kwargs)
-    axes.set_xticks(bins)
-    axes.set_xticklabels(bins)
+    
+    ticks = numpy.arange(0, bins.shape[0], int(bins.shape[0] / n_ticks))
+    axes.set_xticks(bins[ticks])
+    axes.set_xticklabels(bins[ticks])
 
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)

@@ -12,6 +12,7 @@ from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.utils.misc import remove_nans
 from variation.variations.index import PosIndex
+from chunk import Chunk
 
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -24,12 +25,18 @@ ALT_OBS = '/calls/AO'
 DP_FIELD = '/calls/DP'
 AO_FIELD = '/calls/AO'
 RO_FIELD = '/calls/RO'
+CHROM_FIELD = '/variations/chrom'
+POS_FIELD = '/variations/pos'
+
 
 REQUIRED_FIELDS_FOR_STAT = {'calc_maf': [GT_FIELD],
                             'calc_allele_freq': [GT_FIELD, ALT_FIELD],
                             'calc_hwe_chi2_test': [GT_FIELD, ALT_FIELD],
                             'calc_called_gts_distrib_per_depth': [DP_FIELD,
-                                                                  GT_FIELD]}
+                                                                  GT_FIELD],
+                            'calc_missing_gt': [GT_FIELD],
+                            'calc_obs_het': [GT_FIELD],
+                            'calc_obs_het_by_sample': [GT_FIELD]}
 
 
 def _calc_histogram(vector, n_bins, range_):
@@ -41,6 +48,13 @@ def histogram(vector, n_bins=DEF_NUM_BINS, range_=None):
     return _calc_histogram(vector, n_bins, range_)
 
 
+def calc_cum_distrib(distrib):
+    if len(distrib.shape) == 1:
+        return numpy.fliplr(numpy.cumsum(numpy.fliplr([distrib]), axis=1))[0]
+    else:
+        return numpy.fliplr(numpy.cumsum(numpy.fliplr(distrib), axis=1))
+
+
 def _guess_stat_funct_called(calc_funct):
     if 'func' in dir(calc_funct):
         funct_name = calc_funct.func.__name__
@@ -49,21 +63,23 @@ def _guess_stat_funct_called(calc_funct):
     return funct_name
 
 
-def _calc_stats_for_chunks(calc_funct, variations):
+def _calc_stats_for_chunks(calc_funct, variations, chunk_size):
     funct_name = _guess_stat_funct_called(calc_funct)
     req_fields = REQUIRED_FIELDS_FOR_STAT[funct_name]
     vectors = (calc_funct(chunk)
-               for chunk in variations.iterate_chunks(kept_fields=req_fields))
+               for chunk in variations.iterate_chunks(kept_fields=req_fields,
+                                                      chunk_size=chunk_size))
     return vectors
 
 
 def histogram_for_chunks(variations, calc_funct, n_bins=DEF_NUM_BINS,
-                         range_=None):
+                         range_=None, chunk_size=None):
     if range_ is None:
-        range_ = _calc_range(_calc_stats_for_chunks(calc_funct, variations))
+        range_ = _calc_range(_calc_stats_for_chunks(calc_funct, variations,
+                                                    chunk_size))
 
     hist = None
-    for stat in _calc_stats_for_chunks(calc_funct, variations):
+    for stat in _calc_stats_for_chunks(calc_funct, variations,chunk_size):
         stat_hist, bins = histogram(stat, n_bins, range_)
         if hist is None:
             hist = stat_hist
@@ -86,7 +102,7 @@ def _calc_range(vectors):
     return range_
 
 
-def calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
 
     gts = variations[GT_FIELD]
     gt_counts = counts_by_row(gts, missing_value=MISSING_VALUES[int])
@@ -97,6 +113,28 @@ def calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     with numpy.errstate(invalid='ignore'):
         mafs_gt = max_ / sum_
     return _mask_stats_with_few_samples(mafs_gt, variations, min_num_genotypes)
+
+
+def _calc_maf_by_chunk(variations,
+                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                       chunk_size=SNPS_PER_CHUNK):
+    mafs = None
+    for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=chunk_size):
+        chunk_maf = _calc_maf(chunk, min_num_genotypes=min_num_genotypes)
+        if mafs is None:
+            mafs = chunk_maf
+        else:
+            mafs = numpy.append(mafs, chunk_maf)
+    return mafs
+
+
+def calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+             chunk_size=SNPS_PER_CHUNK):
+    if chunk_size is None:
+        return _calc_maf(variations, min_num_genotypes=min_num_genotypes)
+    else:
+        return _calc_maf_by_chunk(variations, min_num_genotypes, chunk_size)
 
 
 def calc_depth(variations):
@@ -229,6 +267,14 @@ def call_is_hom(gts):
     return is_hom
 
 
+def call_is_hom_ref(gts):
+    return numpy.logical_and(call_is_hom(gts), gts[:, :, 0] == 0)
+
+
+def call_is_hom_alt(gts):
+    return numpy.logical_and(call_is_hom(gts), gts[:, :, 0] != 0)
+
+
 def _calc_obs_het(variations, axis):
     gts = variations['/calls/GT'][:]
     is_het = call_is_het(gts)
@@ -257,8 +303,8 @@ def calc_obs_het_by_sample(variations):
     return _calc_obs_het(variations, axis=0)
 
 
-def calc_gt_type_stats(variations):
-    gts = variations['/calls/GT']
+def _calc_gt_type_stats(variations):
+    gts = variations[GT_FIELD]
     het = numpy.sum(call_is_het(gts), axis=0)
     missing = numpy.sum(is_missing(gts, axis=2), axis=0)
     gts_alt = numpy.copy(gts)
@@ -267,6 +313,22 @@ def calc_gt_type_stats(variations):
     ref_hom = numpy.sum(call_is_hom(gts), axis=0) - alt_hom
     return numpy.array([ref_hom, het, alt_hom, missing])
 
+
+def calc_gt_type_stats(variations, chunk_size=None):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=chunk_size)
+    gt_type_stats = None
+    for chunk in chunks:
+        chunk_stats = _calc_gt_type_stats(chunk)
+        if gt_type_stats is None:
+            gt_type_stats = chunk_stats
+        else:
+            gt_type_stats += chunk_stats
+    return gt_type_stats
+    
 
 def calc_snp_density(variations, window):
     dens = []
@@ -308,8 +370,26 @@ def _calc_expected_het(variations,
     return 1 - numpy.sum(allele_freq ** ploidy, axis=1)
 
 
-def calc_inbreeding_coef(variations,
-                         min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+def calc_expected_het(variations,
+                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                      chunk_size=SNPS_PER_CHUNK):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=chunk_size)
+    exp_het = None
+    for chunk in chunks:
+        chunk_exp_het = _calc_expected_het(chunk, min_num_genotypes)
+        if exp_het is None:
+            exp_het = chunk_exp_het
+        else:
+            exp_het = numpy.append(exp_het, chunk_exp_het)
+    return exp_het
+
+
+def _calc_inbreeding_coef(variations,
+                          min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     obs_het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
     exp_het = _calc_expected_het(variations,
                                  min_num_genotypes=min_num_genotypes)
@@ -318,15 +398,37 @@ def calc_inbreeding_coef(variations,
     return inbreed
 
 
-def calc_hwe_chi2_test(variations,
+def calc_inbreeding_coef(variations, chunk_size=SNPS_PER_CHUNK,
+                         min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD, ALT_FIELD],
+                                           chunk_size=chunk_size)
+    inbreed_coef = None
+    for chunk in chunks:
+        chunk_inbreed_coef = _calc_inbreeding_coef(chunk,
+                                                   min_num_genotypes)
+        if inbreed_coef is None:
+            inbreed_coef = chunk_inbreed_coef
+        else:
+            inbreed_coef = numpy.append(inbreed_coef, chunk_inbreed_coef)
+    return inbreed_coef
+
+
+def _calc_hwe_chi2_test(variations, num_allele,
                        min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
-    max_num_allele = variations[ALT_FIELD].shape[1] + 1
     ploidy = variations.ploidy
     gts = variations[GT_FIELD]
 
     allele_freq = calc_allele_freq(variations,
                                    min_num_genotypes=min_num_genotypes)
-    genotypes = list(combinations_with_replacement(range(max_num_allele),
+    # Select vars with a certain number of alleles
+    sel_vars = numpy.sum(allele_freq != 0, axis=1) == num_allele
+    allele_freq = allele_freq[sel_vars]
+    gts = gts[sel_vars, :, :]
+    
+    genotypes = list(combinations_with_replacement(range(num_allele),
                                                    ploidy))
 
     gts_counts = numpy.zeros((gts.shape[0], len(genotypes)))
@@ -357,11 +459,33 @@ def calc_hwe_chi2_test(variations,
 
     total_gt_counts = numpy.sum(gts_counts, axis=1)
     exp_gts_counts = (exp_gts_freq.T * total_gt_counts).T
-    chi2, pvalue = chisquare(gts_counts, f_exp=exp_gts_counts, axis=1)
+    with numpy.errstate(invalid='ignore'):
+        chi2, pvalue = chisquare(gts_counts, f_exp=exp_gts_counts, axis=1)
     return numpy.array([chi2, pvalue]).T
 
 
-def _get_allele_observations(variations, mask_func, weights_field=None):
+def calc_hwe_chi2_test(variations, num_allele=2,
+                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                       chunk_size=SNPS_PER_CHUNK):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        req_fields = REQUIRED_FIELDS_FOR_STAT['calc_hwe_chi2_test']
+        chunks = variations.iterate_chunks(kept_fields=req_fields,
+                                           chunk_size=chunk_size)
+    hwe_test = None
+    for chunk in chunks:
+        chunk_hwe_test = _calc_hwe_chi2_test(chunk, num_allele,
+                                             min_num_genotypes)
+        if hwe_test is None:
+            hwe_test = chunk_hwe_test
+        else:
+            hwe_test = numpy.append(hwe_test, chunk_hwe_test, axis=0)
+    return hwe_test
+
+
+def _get_allele_observations(variations, mask_func, weights_field=None,
+                             mask_field=GT_FIELD):
     mat1 = variations[REF_OBS]
     alt_obs = variations[ALT_OBS]
     if is_dataset(alt_obs):
@@ -375,7 +499,7 @@ def _get_allele_observations(variations, mask_func, weights_field=None):
     if mask_func is None:
         mask = missing_mask
     else:
-        mask = mask_func(variations)
+        mask = mask_func(variations[mask_field])
         mask = numpy.logical_and(mask, missing_mask)
     mat1 = mat1[mask]
     mat2 = mat2[mask]
@@ -387,9 +511,11 @@ def _get_allele_observations(variations, mask_func, weights_field=None):
 
 
 def _hist2d_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
-                                mask_func=None, weights_field=None):
+                                mask_func=None, weights_field=None,
+                                mask_field=GT_FIELD):
     mat1, mat2, weights = _get_allele_observations(variations, mask_func,
-                                                   weights_field=weights_field)
+                                                   weights_field=weights_field,
+                                                   mask_field=mask_field)
     return numpy.histogram2d(mat1, mat2, bins=n_bins, range=range_,
                              weights=weights)
 
@@ -407,14 +533,16 @@ def _update_range(xrange, this_x_range):
 def _hist2d_allele_observations_by_chunk(variations, n_bins=DEF_NUM_BINS,
                                          range_=None, mask_func=None,
                                          weights_field=None,
-                                         chunk_size=SNPS_PER_CHUNK):
+                                         chunk_size=SNPS_PER_CHUNK,
+                                         mask_field=GT_FIELD):
     fields = [REF_OBS, ALT_OBS, GT_FIELD]
     if range_ is None:
         xrange = None
         yrange = None
         for var_chunk in variations.iterate_chunks(kept_fields=fields,
                                                    chunk_size=chunk_size):
-            mat1, mat2, _ = _get_allele_observations(var_chunk, mask_func)
+            mat1, mat2, _ = _get_allele_observations(var_chunk, mask_func,
+                                                     mask_field=mask_field)
             this_x_range = calc_min_max(mat1)
             xrange = _update_range(xrange, this_x_range)
             this_y_range = calc_min_max(mat2)
@@ -480,26 +608,42 @@ def hist2d_gq_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
 
 def calc_field_distribs_per_sample(variations, field, range_=None,
                                    n_bins=DEF_NUM_BINS,
-                                   chunk_size=SNPS_PER_CHUNK):
+                                   chunk_size=SNPS_PER_CHUNK,
+                                   mask_func=None, mask_field=None):
     mat = variations[field]
+    mask_mat = None
+    if mask_field is not None:
+        mask_mat = variations[mask_field]
 
     if range_ is None:
-        min_dp, max_dp = calc_min_max(mat)
-        if issubclass(mat.dtype.type, numpy.integer) and min_dp < 0:
+        min_, max_ = calc_min_max(mat)
+        if issubclass(mat.dtype.type, numpy.integer) and min_ < 0:
             # we remove the missing data
-            min_dp = 0
-        range_ = min_dp, max_dp + 1
+            min_ = 0
+        range_ = min_, max_ + 1
 
     if chunk_size:
         chunks = iterate_matrix_chunks(mat, chunk_size=chunk_size)
+        if mask_mat is not None:
+            mask_chunks = iterate_matrix_chunks(mask_mat, chunk_size=chunk_size)
+            chunks = zip(chunks, mask_chunks)
     else:
         chunks = [mat]
+        if mask_mat is not None:
+            chunks = [(mat, mask_mat)]
 
     histograms = None
+    
     for chunk in chunks:
         chunk_hists = None
+        chunk_mask = None
+        if mask_mat is not None and mask_func is not None:
+            chunk, mask_chunk = chunk
+            chunk_mask = mask_func(mask_chunk)
         for sample_idx in range(len(variations.samples)):
             dps = chunk[:, sample_idx]
+            if chunk_mask is not None:
+                dps = dps[chunk_mask[:, sample_idx]]
             chunk_hist, bins = histogram(dps, n_bins=n_bins, range_=range_)
             if chunk_hists is None:
                 chunk_hists = chunk_hist
@@ -617,6 +761,10 @@ class PositionalStatsCalculator:
                 stat.shape[0] != self.chrom.shape[0]):
             raise ValueError('Stat does not have the same size as pos')
         for chrom_name, pos, values in self._iterate_chroms():
+            try:
+                chrom_name = chrom_name.decode()
+            except AttributeError:
+                pass
             chrom_line = 'variableStep chrom={}'.format(chrom_name)
             variable_step = True
             if span is not None:
@@ -647,6 +795,10 @@ class PositionalStatsCalculator:
                 stat.shape[0] != self.chrom.shape[0]):
             raise ValueError('Stat does not have the same size as pos')
         for chrom_name, pos, values in self._iterate_chroms():
+            try:
+                chrom_name = chrom_name.decode()
+            except AttributeError:
+                pass
             # When containing only one value, it is not iterable
             if values.shape != () and pos.shape != ():
                 for pos, value in self._calc_chrom_window_stat(pos, values):
@@ -658,9 +810,10 @@ class PositionalStatsCalculator:
 
     def write(self, fhand, track_name, track_description,
               buffer_size=1000, track_type='bedgraph', **kwargs):
+        # TODO: Fix error. writes a line for each position
         get_lines = {'wig': self.to_wig, 'bedgraph': self.to_bedGraph}
         buffer = self._get_track_definition(track_type, track_name,
-                                            track_description, **kwargs)
+                                            track_description, **kwargs) + '\n'
         lines = 1
         for line in get_lines[track_type]():
             lines += 1

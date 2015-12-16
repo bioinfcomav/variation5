@@ -89,7 +89,7 @@ def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
                                show_fliers=False, mpl_params={}):
     '''It assumes that there are as many bins in the distributions as integers
     in their range'''
-    
+
     mat = distribs
     print_figure = False
     if axes is None:
@@ -120,7 +120,7 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
     axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
     width = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
     result = axes.bar(bins[:-1], distrib, width=width, **kwargs)
-    
+
     ticks = numpy.arange(0, bins.shape[0], int(bins.shape[0] / n_ticks))
     axes.set_xticks(bins[ticks])
     axes.set_xticklabels(bins[ticks])

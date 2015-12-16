@@ -168,7 +168,7 @@ class VCFParser():
             user_max_field_str_lens = max_field_str_lens
 
         self._max_field_str_lens = {'FILTER': 0, 'INFO': {},
-                                   'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
+                                    'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
 
         self._init_max_field_lens()
 
@@ -185,8 +185,6 @@ class VCFParser():
                     self._max_field_str_lens[key1][key2] = value2
             else:
                 self._max_field_str_lens[key1] = value1
-
-
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
@@ -419,10 +417,10 @@ def _parse_gt(gt, empty_gt):
     if gt is None:
         gt = empty_gt
     elif b'|' in gt:
-        is_phased = True
+        # is_phased = True
         gt = gt.split(b'|')
     else:
-        is_phased = False
+        # is_phased = False
         gt = gt.split(b'/')
     if gt is not None:
         gt = [MISSING_INT if allele == b'.' else int(allele) for allele in gt]

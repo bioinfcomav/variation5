@@ -558,6 +558,15 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
 
 
 class _VariationMatrices():
+    def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
+                 ignore_overflows=False, ignore_undefined_fields=False,
+                 kept_fields=None, ignored_fields=None):
+        self._vars_in_chunk = vars_in_chunk
+        self.ignore_overflows = ignore_overflows
+        self.ignore_undefined_fields = ignore_undefined_fields
+        self.kept_fields = kept_fields
+        self.ignored_fields = ignored_fields
+
     @property
     def ploidy(self):
         return self['/calls/GT'].shape[2]
@@ -790,6 +799,11 @@ class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
                  ignore_overflows=False, ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):
+        super().__init__(vars_in_chunk=vars_in_chunk,
+                         ignore_overflows=ignore_overflows,
+                         ignore_undefined_fields=ignore_undefined_fields,
+                         kept_fields=kept_fields,
+                         ignored_fields=ignored_fields)
         self._fpath = fpath
         if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
@@ -798,11 +812,6 @@ class VariationsH5(_VariationMatrices):
             mode = 'w-'
         self.mode = mode
         self._h5file = h5py.File(fpath, mode)
-        self._vars_in_chunk = vars_in_chunk
-        self.ignore_overflows = ignore_overflows
-        self.ignore_undefined_fields = ignore_undefined_fields
-        self.kept_fields = kept_fields
-        self.ignored_fields = ignored_fields
 
     def __getitem__(self, path):
         return self._h5file[path]
@@ -913,14 +922,14 @@ class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
                  ignore_overflows=False, ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):
-        self._vars_in_chunk = vars_in_chunk
+        super().__init__(vars_in_chunk=vars_in_chunk,
+                         ignore_overflows=ignore_overflows,
+                         ignore_undefined_fields=ignore_undefined_fields,
+                         kept_fields=kept_fields,
+                         ignored_fields=ignored_fields)
         self._hArrays = {}
         self._metadata = {}
         self._samples = []
-        self.ignore_overflows = ignore_overflows
-        self.ignore_undefined_fields = ignore_undefined_fields
-        self.kept_fields = kept_fields
-        self.ignored_fields = ignored_fields
 
     def __getitem__(self, path):
         return self._hArrays[path]

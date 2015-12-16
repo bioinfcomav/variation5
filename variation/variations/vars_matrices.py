@@ -756,7 +756,9 @@ class _VariationMatrices():
                  max_field_str_lens=None):
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk,
                                  max_field_lens=max_field_lens,
-                                 max_field_str_lens=max_field_str_lens)
+                                 max_field_str_lens=max_field_str_lens,
+                                 kept_fields=self.kept_fields,
+                                 ignored_fields=self.ignored_fields)
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
@@ -786,7 +788,8 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False, ignore_undefined_fields=False):
+                 ignore_overflows=False, ignore_undefined_fields=False,
+                 kept_fields=None, ignored_fields=None):
         self._fpath = fpath
         if mode not in ('r', 'w', 'r+'):
             msg = 'mode should be r or w'
@@ -798,6 +801,8 @@ class VariationsH5(_VariationMatrices):
         self._vars_in_chunk = vars_in_chunk
         self.ignore_overflows = ignore_overflows
         self.ignore_undefined_fields = ignore_undefined_fields
+        self.kept_fields = kept_fields
+        self.ignored_fields = ignored_fields
 
     def __getitem__(self, path):
         return self._h5file[path]
@@ -906,13 +911,16 @@ def select_dset_from_chunks(chunks, dset_path):
 
 class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False, ignore_undefined_fields=False):
+                 ignore_overflows=False, ignore_undefined_fields=False,
+                 kept_fields=None, ignored_fields=None):
         self._vars_in_chunk = vars_in_chunk
         self._hArrays = {}
         self._metadata = {}
         self._samples = []
         self.ignore_overflows = ignore_overflows
         self.ignore_undefined_fields = ignore_undefined_fields
+        self.kept_fields = kept_fields
+        self.ignored_fields = ignored_fields
 
     def __getitem__(self, path):
         return self._hArrays[path]

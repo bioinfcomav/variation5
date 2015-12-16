@@ -41,14 +41,15 @@ def _parse_vcf(chrom, vcf_fpath, tmp_dir, max_field_lens, max_field_str_lens,
     tmp_h5_fpath = tmp_h5_fhand.name
     tmp_h5_fhand.close()
     tmp_h5 = VariationsH5(tmp_h5_fpath, 'w', ignore_overflows=True,
-                          ignore_undefined_fields=True)
+                          ignore_undefined_fields=True,
+                          kept_fields=kept_fields,
+                          ignored_fields=ignored_fields)
 
     vcf_parser = VCFParser(get_vcf_lines_for_chrom(chrom, vcf_fpath),
                            kept_fields=kept_fields,
                            ignored_fields=ignored_fields,
                            max_field_lens=max_field_lens,
-                           max_field_str_lens=max_field_str_lens,
-                           max_n_vars=None)
+                           max_field_str_lens=max_field_str_lens)
 
     tmp_h5.put_vars(vcf_parser, max_field_lens=max_field_lens,
                     max_field_str_lens=max_field_str_lens)
@@ -89,7 +90,7 @@ def _remove_temp_chrom_in_dir(tmp_dir):
 
 
 def vcf_to_h5(vcf_fpath, out_h5_fpath, n_threads, preread_nvars, tmp_dir,
-               kept_fields=None, ignored_fields=None):
+              kept_fields=None, ignored_fields=None):
     if not os.path.exists(tmp_dir):
         os.mkdir(tmp_dir)
 

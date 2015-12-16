@@ -234,11 +234,12 @@ class VCFParser():
         ploidy = None
         for line in self._fhand:
             read_lines.append(line)
+            line = line.strip()
             if line.startswith(b'#'):
                 continue
             gts = line.split(b'\t')[9:]
             for gt in gts:
-                if gt is b'.':
+                if gt == b'.':
                     continue
                 gt = gt.split(b':')[0]
                 alleles = gt.split(b'/') if b'/' in gt else gt.split(b'|')

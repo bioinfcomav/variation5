@@ -88,6 +88,9 @@ def _remove_temp_chrom_in_dir(tmp_dir):
 
 def vcf_to_h5(vcf_fpath, out_h5_fpath, n_threads, preread_nvars, tmp_dir,
               kept_fields=None, ignored_fields=None):
+    if not os.path.exists(tmp_dir):
+        os.mkdir(tmp_dir)
+
     chroms = get_chroms_in_vcf(vcf_fpath)
     max_field_lens, max_field_str_lens = _get_max_field(vcf_fpath,
                                                         preread_nvars)

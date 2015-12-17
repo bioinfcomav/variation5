@@ -56,6 +56,7 @@ def _filter_chunk2(chunk, filtered_chunk, selected_rows):
         except KeyError:
             filtered_chunk[path] = flt_data
     filtered_chunk.metadata = chunk.metadata
+    filtered_chunk.samples = chunk.samples
     return filtered_chunk
 
 

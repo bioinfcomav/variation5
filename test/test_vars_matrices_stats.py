@@ -462,6 +462,7 @@ class StatsTest(unittest.TestCase):
 
         # Pre-calculating the windows
         pos_stats = pos_stats.calc_window_stat()
+        print(pos_stats.chrom, pos_stats.pos, pos_stats.stat)
         line1 = 'track type=bedGraph name="track1" description="description"'
         bg_lines = [line1, 'chr1 10 35 {}'.format(6 / 25),
                     'chr1 35 60 {}'.format(9 / 25)]
@@ -470,5 +471,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_obs_het_sample']
+    import sys;sys.argv = ['', 'StatsTest.test_to_positional_stats']
     unittest.main()

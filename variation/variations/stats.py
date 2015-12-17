@@ -402,7 +402,7 @@ def calc_expected_het(variations,
     if chunk_size is None:
         chunks = [variations]
     else:
-        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD, ALT_FIELD],
                                            chunk_size=chunk_size)
     exp_het = None
     for chunk in chunks:

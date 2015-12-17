@@ -6,7 +6,8 @@ from collections import Counter
 import numpy
 import h5py
 
-from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT)
+from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT,
+                       DEF_DSET_PARAMS)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
@@ -229,7 +230,7 @@ class _ChunkGenerator:
                 info = snp[7]
                 calls = snp[8]
                 info = dict(info) if info else {}
-                calls = dict(calls) if info else {}
+                calls = dict(calls) if calls else {}
                 ignore_snp = False
                 for path, struct in mat_structure.items():
                     basepath = struct['basepath']
@@ -254,7 +255,6 @@ class _ChunkGenerator:
                         item = info.get(struct['field'], None)
                     elif basepath == 'CALLS':
                         item = calls.get(struct['field'], None)
-
                     shape = struct['shape']
 
                     if item is not None:
@@ -870,6 +870,10 @@ class VariationsH5(_VariationMatrices):
             group = hdf5[group_name]
         except KeyError:
             group = hdf5.create_group(group_name)
+
+        for key, value in DEF_DSET_PARAMS.items():
+            if key not in kwargs:
+                kwargs[key] = value
 
         if 'fillvalue' not in kwargs:
             if 'dtype' in kwargs:

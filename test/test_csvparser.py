@@ -32,7 +32,7 @@ class CSVParserTest(unittest.TestCase):
         allele_coding = {0: variation['ref']}
         del variation['ref']
         if 'alt' in variation:
-            allele_coding.update({idx+1: allele for idx, allele in
+            allele_coding.update({idx + 1: allele for idx, allele in
                                                 enumerate(variation['alt'])})
             del variation['alt']
         alleles = set(allele_coding.values())
@@ -61,9 +61,9 @@ class CSVParserTest(unittest.TestCase):
                                                                (2, 2)])]),
                     (b'chrom1', 346, b'solcap_snp_sl_60635', b'G', None, None,
                      None, None, [(b'GT', [(0, 0), (0, 0), (0, 0), (0, 0),
-                                           None])]),
+                                           (-1, -1)])]),
                     (b'chrom1', 347, b'solcap_snp_sl_60604', b'C', [b'T'],
-                     None, None, None, [(b'GT', [(0, 0), None, (1, 0), (0, 0),
+                     None, None, None, [(b'GT', [(0, 0), (-1, -1), (1, 0), (0, 0),
                                                  (0, 0)])])]
 
         assert list(parser.variations) == expected
@@ -85,13 +85,13 @@ class CSVParserTest(unittest.TestCase):
                            gt_splitter=create_iupac_allele_splitter())
 
         expected = [(b'SL2.40ch02', 331954, b'1', b'T', [b'G'], None, None,
-                     None, [(b'GT', [(1, 1), (0, 0), None])]),
+                     None, [(b'GT', [(1, 1), (0, 0), (-1, -1)])]),
                     (b'SL2.40ch02', 681961, b'2', b'C', None, None, None,
-                     None, [(b'GT', [(0, 0), (0, 0), None])]),
+                     None, [(b'GT', [(0, 0), (0, 0), (-1, -1)])]),
                     (b'SL2.40ch02', 1511764, b'3', b'A', [b'T'], None, None,
                      None, [(b'GT', [(1, 1), (1, 1), (0, 1)])]),
                     (b'SL2.40ch02', 331954, b'1', b'T', [b'G'], None, None,
-                     None, [(b'GT', [(1, 1), (0, 0), None])])]
+                     None, [(b'GT', [(1, 1), (0, 0), (-1, -1)])])]
         for var, expect in zip(parser.variations, expected):
             assert var == expect
 
@@ -113,9 +113,9 @@ class CSVParserTest(unittest.TestCase):
                                                                (2, 2)])]),
                     (b'chrom1', 346, b'solcap_snp_sl_60635', b'G', None, None,
                      None, None, [(b'GT', [(0, 0), (0, 0), (0, 0), (0, 0),
-                                           None])]),
+                                           (-1, -1)])]),
                     (b'chrom1', 347, b'solcap_snp_sl_60604', b'C', [b'T'],
-                     None, None, None, [(b'GT', [(0, 0), None, (1, 0), (0, 0),
+                     None, None, None, [(b'GT', [(0, 0), (-1, -1), (1, 0), (0, 0),
                                                  (0, 0)])])]
         for var, expect in zip(parser.variations, expected):
             assert var == expect
@@ -135,11 +135,13 @@ class CSVParserTest(unittest.TestCase):
                            first_gt_column=3, sep=b'\t',
                            gt_splitter=create_iupac_allele_splitter(),
                            max_field_lens={'alt': 1},
-                           max_field_str_lens={'alt': 1, 'chrom':20})
+                           max_field_str_lens={'alt': 1, 'chrom': 20,
+                                               'ref': 1})
 
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
-            h5 = VariationsH5(fhand.name, mode='w')
+            h5 = VariationsH5(fhand.name, mode='w', ignore_overflows=True,
+                              ignore_undefined_fields=True)
             h5.put_vars(parser)
             exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
             assert list(h5['/variations/chrom'][:]) == exp
@@ -156,6 +158,7 @@ class CSVParserTest(unittest.TestCase):
             exp2 = numpy.array([[[0, 0], [1, 1], [-1, -1]],
                                 [[0, 0], [0, 0], [-1, -1]],
                                 [[1, 1], [1, 1], [0, 1]]])
+
             for gts, exp_gts1, exp_gts2 in zip(h5['/calls/GT'][:], exp1, exp2):
                 for gt, ex1, ex2 in zip(gts, exp_gts1, exp_gts2):
                     assert set(gt) == set(ex1) or set(gt) == set(ex2)
@@ -172,9 +175,11 @@ class CSVParserTest(unittest.TestCase):
         parser = CSVParser(fhand_ex, var_info, first_sample_column=3,
                            first_gt_column=3, sep=b'\t',
                            max_field_lens={'alt': 1},
-                           max_field_str_lens={'alt': 1, 'chrom':20})
+                           max_field_str_lens={'alt': 1, 'chrom':20,
+                                               'ref': 1})
 
-        h5 = VariationsArrays()
+        h5 = VariationsArrays(ignore_overflows=True,
+                              ignore_undefined_fields=True)
         h5.put_vars(parser)
         exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
         assert list(h5['/variations/chrom'][:]) == exp
@@ -197,4 +202,5 @@ class CSVParserTest(unittest.TestCase):
         fhand_ex.close()
 
 if __name__ == "__main__":
+    # import sys;sys.argv = ['', 'CSVParserTest.test_put_vars_from_csv']
     unittest.main()

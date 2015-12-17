@@ -12,7 +12,7 @@ import numpy
 
 from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            calc_pairwise_distance,
-                                           select_samples_from_distance)
+                                           sel_samples_from_dist_mat)
 from variation.variations.vars_matrices import VariationsArrays
 
 
@@ -96,12 +96,10 @@ class IndividualDistTest(unittest.TestCase):
 
     def test_select_samples_from_distance_matrix(self):
         distances = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
-        n_samples = 4
         sel_samples = [0, 1, 3]
         expected = [0.33333333, 0.75, 0.5]
-        selected_distances = select_samples_from_distance(distances,
-                                                          sel_samples,
-                                                          n_samples)
+        selected_distances = sel_samples_from_dist_mat(distances,
+                                                       sel_samples)
         assert numpy.all(selected_distances == expected)
     
 

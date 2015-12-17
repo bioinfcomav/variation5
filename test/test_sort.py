@@ -19,7 +19,8 @@ class SortVariationsTest(unittest.TestCase):
         parser = CSVParser(fhand, var_info, first_sample_column=1, sep=b'\t',
                            max_field_lens={'alt': 3},
                            max_field_str_lens={'chrom': 10, 'alt': 10})
-        variations = VariationsArrays()
+        variations = VariationsArrays(ignore_overflows=True,
+                                      ignore_undefined_fields=True)
         variations.put_vars(parser)
         sorted_vars = VariationsArrays()
         sort_variations(variations, sorted_vars)
@@ -31,4 +32,3 @@ class SortVariationsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -1,7 +1,7 @@
 import copy
 
 from itertools import chain
-from variation import DEF_METADATA
+from variation import DEF_METADATA, MISSING_INT
 
 IUPAC = {b'A': b'AA', b'T': b'TT', b'C': b'CC', b'G': b'GG',
          b'W': b'AT', b'M': b'AC', b'R': b'AG', b'': b'-',
@@ -121,7 +121,7 @@ class CSVParser():
                 alleles.add(allele)
         allele_coding = {allele: idx for idx, allele in enumerate(alleles)}
         allele_coding[None] = None
-        genotype_coding = {None: None}
+        genotype_coding = {None: (MISSING_INT,) * self.ploidy}
         for gt in gts:
             try:
                 coded_gt = genotype_coding[gt]
@@ -160,5 +160,4 @@ class CSVParser():
 
             variation = (var_info['chrom'], var_info['pos'], snp_id,
                          alleles[0], alt_alleles, None, None, None, gts)
-
             yield variation

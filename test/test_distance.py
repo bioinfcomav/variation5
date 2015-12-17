@@ -23,17 +23,20 @@ class IndividualDistTest(unittest.TestCase):
         b = numpy.array([[1, 1], [-1, -1], [0, 0],
                          [0, 0], [1, 1], [0, 1], [1, 0],
                          [1, 0], [1, 0], [0, 1], [1, 2]])
-        abs_distance, n_snps = _kosman(a, b)
+        gts = numpy.stack((a, b), axis=1)
+        abs_distance, n_snps = _kosman(gts, 0, 1, {})
         distance = abs_distance / n_snps
-        assert distance == 1/3
+        assert distance == 1 / 3
 
         c = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
         d = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
-        abs_distance, n_snps = _kosman(c, d)
+        gts = numpy.stack((c, d), axis=1)
+        abs_distance, n_snps = _kosman(gts, 0, 1, {})
         distance = abs_distance / n_snps
         assert distance == 0
 
-        abs_distance, n_snps = _kosman(b, d)
+        gts = numpy.stack((b, d), axis=1)
+        abs_distance, n_snps = _kosman(gts, 0, 1, {})
         distance = abs_distance / n_snps
         assert distance == 0.5
 
@@ -48,7 +51,7 @@ class IndividualDistTest(unittest.TestCase):
         d = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
         gts = numpy.stack((a, b, c, d), axis=0)
         gts = numpy.transpose(gts, axes=(1, 0, 2)).astype(numpy.int16)
-        abs_distance, n_snps = _indi_pairwise_dist(gts)
+        abs_distance, n_snps = _indi_pairwise_dist(gts, {})
         distance = abs_distance / n_snps
         expected = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
         assert numpy.allclose(distance, expected)
@@ -83,8 +86,8 @@ class IndividualDistTest(unittest.TestCase):
         assert numpy.isnan(distance[0])
 
         # With missing in some chunks only
-        variations['/calls/GT'][:5,0,:] = 1
-        variations['/calls/GT'][:5,1,:] = 0
+        variations['/calls/GT'][:5, 0, :] = 1
+        variations['/calls/GT'][:5, 1, :] = 0
         assert calc_pairwise_distance(variations)[0] == 1
         assert calc_pairwise_distance(variations, chunk_size=3)[0] == 1
 

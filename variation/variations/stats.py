@@ -356,18 +356,23 @@ def calc_gt_type_stats(variations, chunk_size=None):
     return gt_type_stats
 
 
-def calc_snp_density(variations, window):
+def calc_snp_density(variations, window, chunk_size=SNPS_PER_CHUNK):
     dens = []
     dic_index = PosIndex(variations)
-    n_snps = variations['/variations/chrom'].shape
-    for i in range(n_snps[0]):
-        chrom = variations['/variations/chrom'][i]
-        pos = variations['/variations/pos'][i]
-        pos_right = window + pos
-        pos_left = pos - window
-        index_right = dic_index.index_pos(chrom, pos_right)
-        index_left = dic_index.index_pos(chrom, pos_left)
-        dens.append(index_right - index_left)
+    n_snps = variations[CHROM_FIELD].shape[0]
+    chromosomes = variations[CHROM_FIELD]
+    positions = variations[POS_FIELD]
+    for i in range(0, n_snps, chunk_size):
+        chunk_chrom = chromosomes[i: i + chunk_size]
+        chunk_pos = positions[i: i + chunk_size]
+        for chunk_idx in range(chunk_chrom.shape[0]):
+            chrom = chunk_chrom[chunk_idx]
+            pos = chunk_pos[chunk_idx]
+            pos_right = window + pos
+            pos_left = pos - window
+            index_right = dic_index.index_pos(chrom, pos_right)
+            index_left = dic_index.index_pos(chrom, pos_left)
+            dens.append(index_right - index_left)
     return numpy.array(dens)
 
 
@@ -402,7 +407,7 @@ def calc_expected_het(variations,
     if chunk_size is None:
         chunks = [variations]
     else:
-        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD, ALT_FIELD],
                                            chunk_size=chunk_size)
     exp_het = None
     for chunk in chunks:

@@ -470,5 +470,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_obs_het_sample']
+    # import sys;sys.argv = ['', 'StatsTest.test_to_positional_stats']
     unittest.main()

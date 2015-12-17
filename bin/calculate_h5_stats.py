@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import time
 import argparse
 import logging
 from functools import partial
@@ -40,7 +41,6 @@ from variation.variations.stats import (calc_maf, histogram_for_chunks,
                                         calc_inbreeding_coef, GQ_FIELD,
                                         calc_hwe_chi2_test, calc_expected_het,
                                         CHROM_FIELD, POS_FIELD)
-import itertools
 
 
 def _setup_argparse(**kwargs):
@@ -119,6 +119,13 @@ def _parse_args(parser):
     return args
 
 
+def _log_info(logging, msg, print_time=True):
+    if print_time:
+        msg += ' {}'.format(time.strftime("%Y-%m-%d %H:%M"))
+    logging.info(msg)
+    
+
+
 def create_plots():
     description = 'Calculates basic stats of a HDF5 file'
     parser = _setup_argparse(description=description)
@@ -139,61 +146,62 @@ def create_plots():
     write_bg = args['write_bedgraph']
     calc_genome_wise = args['calc_genome_wise']
     
-    logging.info('Plotting MAF Distribution')
+    _log_info(logging, 'Plotting MAF Distribution')
     plot_maf(h5, data_dir, chunk_size=chunk_size, window_size=manhattan_ws,
              min_num_genotypes=min_num_genotypes, write_bg=write_bg,
              calc_genome_wise=calc_genome_wise)
-      
-    logging.info('Plotting Depth based MAF per Sample Distributions')
+       
+    _log_info(logging, 'Plotting Depth based MAF per Sample Distributions')
     plot_maf_depth(h5, data_dir, min_depth=args['min_depth'],
                    chunk_size=chunk_size)
-       
-    logging.info('Plotting Missing Genotype rate per SNP')
+         
+    _log_info(logging, 'Plotting Missing Genotype rate per SNP')
     plot_missing_gt_rate_per_snp(h5, data_dir, chunk_size)
-       
-    logging.info('Plotting Observed Heterozygosity')
+         
+    _log_info(logging, 'Plotting Observed Heterozygosity')
     plot_obs_het(h5, data_dir, chunk_size=chunk_size,
                  min_num_genotypes=min_num_genotypes)
-       
-    logging.info('Plotting SNP Density Distribution')
+         
+    _log_info(logging, 'Plotting SNP Density Distribution')
     plot_snp_dens_distrib(h5, args['window_size'], data_dir, write_bg=write_bg)
-       
-    logging.info('Plotting Depth Distribution')
+         
+    _log_info(logging, 'Plotting Depth Distribution')
     plot_call_field_distribs_per_gt_type(h5, field=DP_FIELD,
                                          max_value=args['max_depth'],
                                          data_dir=data_dir,
                                          chunk_size=chunk_size)
-       
-    logging.info('Plotting Genotypes Quality Distribution')
+         
+    _log_info(logging, 'Plotting Genotypes Quality Distribution')
     plot_call_field_distribs_per_gt_type(h5, field=GQ_FIELD,
                                          max_value=args['max_gq'],
                                          data_dir=data_dir,
                                          chunk_size=chunk_size)
-       
-    logging.info('Plotting Genotypes Statistics per Sample')
+         
+    _log_info(logging, 'Plotting Genotypes Statistics per Sample')
     plot_gt_stats_per_sample(h5, data_dir, chunk_size=chunk_size)
-        
-    logging.info('Plotting number of Samples with higher Depth Distribution')
+          
+    _log_info(logging, 'Plotting number of Samples with higher Depth Distribution')
     plot_called_gts_distrib_per_depth(h5, args['depths'], data_dir,
                                       chunk_size=SNPS_PER_CHUNK)
-        
-    logging.info('Plotting Hardy-Weinberg Equilibrium')
+          
+    _log_info(logging, 'Plotting Hardy-Weinberg Equilibrium')
     plot_hwe(h5, args['max_num_alleles'], data_dir, ploidy=2,
              min_num_genotypes=min_num_genotypes, chunk_size=chunk_size)
-       
-       
+         
+        
     if calc_genome_wise:
-        logging.info('Plotting Nucleotide Diversity Measures')
+        _log_info(logging, 'Plotting Nucleotide Diversity Measures')
         plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
                                            args['manhattan_ws'],
                                            data_dir, chunk_size=chunk_size,
-                                           write_bg=write_bg)
-           
-    logging.info('Plotting Allele Observations Distribution 2 Dimensions')
+                                           write_bg=write_bg,
+                                           min_num_genotypes=min_num_genotypes)
+            
+    _log_info(logging, 'Plotting Allele Observations Distribution 2 Dimensions')
     plot_allele_obs_distrib_2D(h5, data_dir, args['max_allele_counts'],
                                chunk_size=chunk_size)
-       
-    logging.info('Plotting Inbreeding Coefficient')
+        
+    _log_info(logging, 'Plotting Inbreeding Coefficient')
     plot_inbreeding_coefficient(h5, args['max_num_alleles'],
                                 data_dir, window_size=args['manhattan_ws'],
                                 chunk_size=chunk_size,
@@ -229,7 +237,8 @@ def plot_maf(variations, data_dir, chunk_size=SNPS_PER_CHUNK, window_size=None,
         pos = _load_matrix(variations, POS_FIELD) 
         bg_fhand = open(join(data_dir, 'maf.bg'), 'w')
         pos_maf = PositionalStatsCalculator(chrom, pos, mafs,
-                                            window_size=window_size)
+                                            window_size=window_size,
+                                            step=window_size)
         if write_bg:
             pos_maf.write(bg_fhand, 'MAF', 'Maximum allele frequency',
                           track_type='bedgraph')
@@ -640,7 +649,8 @@ def plot_hwe(variations, max_num_alleles, data_dir, ploidy=2,
 def plot_nucleotide_diversity_measures(variations, max_num_alleles,
                                        window_size, data_dir,
                                        chunk_size=SNPS_PER_CHUNK,
-                                       write_bg=False):
+                                       write_bg=False,
+                                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     fig = Figure(figsize=(20, 20))
     canvas = FigureCanvas(fig)
     marker = 'k'
@@ -664,7 +674,7 @@ def plot_nucleotide_diversity_measures(variations, max_num_alleles,
     mpl_params = {'set_title': {'args': [title], 'kwargs': {}},
                   'set_ylabel': {'args': ['SNPs number / bp'], 'kwargs': {}},
                   'set_ylim': {'args': [0, 1.2*numpy.max(snp_density.stat)],
-                               'kwargs': {}}},
+                               'kwargs': {}}}
     manhattan_plot(snp_density.chrom, snp_density.pos, snp_density.stat,
                    mpl_params=mpl_params, axes=axes, ylim=0, show_chroms=False,
                    marker=marker)
@@ -687,8 +697,8 @@ def plot_nucleotide_diversity_measures(variations, max_num_alleles,
                    marker=marker)
 
     # Expected heterozygosity (Pi)
-    exp_het = calc_expected_het(variations, max_num_allele=max_num_alleles,
-                                chunk_size=chunk_size)
+    exp_het = calc_expected_het(variations, chunk_size=chunk_size,
+                                min_num_genotypes=min_num_genotypes)
     pi = PositionalStatsCalculator(chrom, pos, exp_het,
                                    window_size=window_size, step=window_size)
     pi = pi.calc_window_stat()

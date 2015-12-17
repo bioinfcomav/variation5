@@ -3,6 +3,7 @@ from itertools import cycle
 
 import numpy
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from numpy.core.defchararray import decode
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -86,7 +87,7 @@ def calc_and_plot_boxplot(mat, by_row=True, fhand=None, axes=None,
 
 def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
                                no_interactive_win=False, figsize=None,
-                               show_fliers=False, mpl_params={}):
+                               show_fliers=False, mpl_params={}, color=None):
     '''It assumes that there are as many bins in the distributions as integers
     in their range'''
 
@@ -99,8 +100,68 @@ def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
     if not by_row:
         mat = mat.transpose()
     bxp_stats = _calc_boxplot_stats(mat)
-    result = axes.bxp(bxp_stats)
+    result = axes.bxp(bxp_stats, patch_artist=True)
+    if color is not None:
+        _set_box_color(result, color)
 
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def _set_box_color(bp, color):
+    plt.setp(bp['boxes'], color=color)
+    plt.setp(bp['whiskers'], color='black')
+    plt.setp(bp['caps'], color='black')
+    plt.setp(bp['medians'], color='black')
+
+
+def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
+                                      axes=None, no_interactive_win=False,
+                                      figsize=None, show_fliers=False,
+                                      mpl_params={}, colors=None, labels=None,
+                                      xticklabels=None):
+    '''It assumes that there are as many bins in the distributions as integers
+    in their range'''
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+
+    n_series = len(distribs_series)
+    if colors is None:
+        colors = cm.rainbow(numpy.linspace(0, 1, n_series))
+    if labels is None:
+        labels = [str(x) for x in range(n_series)]
+        
+    for dist_n, (distribs, color) in enumerate(zip(distribs_series, colors)):
+        mat = distribs
+        if not by_row:
+            mat = mat.transpose()
+        positions = numpy.arange(1, (n_series + 1) * mat.shape[0] + 1,
+                                 n_series + 1)
+        positions += dist_n
+        bxp_stats = _calc_boxplot_stats(mat)
+        result = axes.bxp(bxp_stats, positions=positions, patch_artist=True)
+        _set_box_color(result, color)
+        
+    axes.set_xlim(0, positions[-1] + 1)
+    xticks = numpy.arange((n_series + 1) / 2.0,
+                          (n_series + 1) * (mat.shape[0] + 1) + 1,
+                          n_series + 1)
+    if xticklabels is None:
+        xticklabels = numpy.arange(1, mat.shape[0] + 1)
+    axes.set_xticks(xticks)
+    axes.set_xticklabels(xticklabels, rotation=90)
+    # draw temporary red and blue lines and use them to create a legend
+    for color, label in zip(colors, labels):
+        axes.plot([], c=color, label=label)
+    axes.legend()
+    
+    
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])
@@ -123,7 +184,8 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
 
     ticks = numpy.arange(0, bins.shape[0], int(bins.shape[0] / n_ticks))
     axes.set_xticks(bins[ticks])
-    axes.set_xticklabels(bins[ticks])
+    xticklabels = [str(x)[:len(str(x).split('.')[0])+4] for x in bins[ticks]]
+    axes.set_xticklabels(xticklabels)
 
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)

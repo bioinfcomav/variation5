@@ -198,7 +198,8 @@ class MergeTest(unittest.TestCase):
                                   b'NA00002', b'NA00003']
         expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'expected_merged.h5'),
                                    'r')
-        new_vars = VariationsArrays()
+        new_vars = VariationsArrays(ignore_overflows=True,
+                                    ignore_undefined_fields=True)
         new_vars.put_vars(merger)
         for field in new_vars.keys():
             if 'float' in str(new_vars[field][:].dtype):
@@ -219,7 +220,8 @@ class MergeTest(unittest.TestCase):
                                   b'TS-1', b'TS-11', b'TS-21']
         expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'expected_merged2.h5'),
                                    'r')
-        new_vars = VariationsArrays()
+        new_vars = VariationsArrays(ignore_overflows=True,
+                                    ignore_undefined_fields=True)
         new_vars.put_vars(merger)
         for field in new_vars.keys():
             if 'float' in str(new_vars[field][:].dtype):

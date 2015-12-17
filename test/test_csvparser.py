@@ -135,11 +135,14 @@ class CSVParserTest(unittest.TestCase):
                            first_gt_column=3, sep=b'\t',
                            gt_splitter=create_iupac_allele_splitter(),
                            max_field_lens={'alt': 1},
-                           max_field_str_lens={'alt': 1, 'chrom':20})
-
+                           max_field_str_lens={'alt': 1, 'chrom': 20,
+                                               'ref': 1})
+        print('aa', parser.max_field_lens)
+        print('str', parser.max_field_str_lens)
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
-            h5 = VariationsH5(fhand.name, mode='w')
+            h5 = VariationsH5(fhand.name, mode='w', ignore_overflows=True,
+                              ignore_undefined_fields=True)
             h5.put_vars(parser)
             exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
             assert list(h5['/variations/chrom'][:]) == exp

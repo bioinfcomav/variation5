@@ -418,6 +418,7 @@ def _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
     fmt = _parse_gt_fmt(fmt, metadata)
     empty_call = [None] * len(fmt)
     calls = [empty_call if gt == b'.' else gt.split(b':') for gt in calls]
+    # TODO: mirar si esto es necesario
     for call_data in calls:
         if len(call_data) < len(fmt):
             call_data.append(None)

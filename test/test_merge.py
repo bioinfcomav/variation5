@@ -207,7 +207,12 @@ class MergeTest(unittest.TestCase):
                                  remove_nans(new_vars[field][:]))
             else:
                 result = new_vars[field][:]
-                assert numpy.all(expected_h5[field][:] == result)
+                try:
+                    assert numpy.all(expected_h5[field][:] == result)
+                except AssertionError:
+                    print(field)
+                    print(expected_h5[field][:])
+                    print(result)
 
         # Change the order
         h5_1 = VariationsH5(join(TEST_DATA_DIR, 'csv', 'format.h5'), "r")

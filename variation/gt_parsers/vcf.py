@@ -472,10 +472,12 @@ def _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
 
     return parsed_gts
 
+PARSED_INFO_TYPE_CACHE = {}
+
 
 def _parse_info(info, ignored_fields, metadata, max_field_lens,
                 max_field_str_lens):
-
+    global PARSED_INFO_TYPE_CACHE
     if b'.' == info:
         return None
     infos = info.split(b';')
@@ -494,12 +496,16 @@ def _parse_info(info, ignored_fields, metadata, max_field_lens,
             msg += key.decode('utf-8')
             raise RuntimeError(msg)
         try:
-            type_ = _get_type_cast(meta['dtype'])
+            type_ = PARSED_INFO_TYPE_CACHE[key]
         except KeyError:
-            print(info)
-            print(metadata['INFO'])
-            print(meta)
-            raise
+            try:
+                type_ = _get_type_cast(meta['dtype'])
+                PARSED_INFO_TYPE_CACHE[key] = type_
+            except KeyError:
+                print(info)
+                print(metadata['INFO'])
+                print(meta)
+                raise
 
         if isinstance(val, bool):
             pass

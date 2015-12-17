@@ -230,7 +230,7 @@ class _ChunkGenerator:
                 info = snp[7]
                 calls = snp[8]
                 info = dict(info) if info else {}
-                calls = dict(calls) if info else {}
+                calls = dict(calls) if calls else {}
                 ignore_snp = False
                 for path, struct in mat_structure.items():
                     basepath = struct['basepath']
@@ -255,7 +255,6 @@ class _ChunkGenerator:
                         item = info.get(struct['field'], None)
                     elif basepath == 'CALLS':
                         item = calls.get(struct['field'], None)
-
                     shape = struct['shape']
 
                     if item is not None:

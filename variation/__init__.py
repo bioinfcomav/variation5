@@ -55,12 +55,12 @@ MISSING_VALUES = _MissingValues()
 # performance
 SNPS_PER_CHUNK = 200
 
-DEF_DSET_PARAMS = {
-    'compression': 'gzip', # Not much slower than lzf, but compresses much
-                            # more
-    'shuffle': True,
-    'fletcher32': True # checksum, slower but safer
-}
+DEF_DSET_PARAMS = {'compression': 'gzip',  # Not much slower than lzf,
+                                           # but compresses much more
+                   'shuffle': True,
+                   'fletcher32': True  # checksum, slower but safer
+                   }
+
 PRE_READ_MAX_SIZE = 10000
 STATS_DEPTHS = ','.join([str(x) for x in range(0, 75, 5)])
 MAX_DEPTH = 100

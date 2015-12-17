@@ -55,20 +55,21 @@ MISSING_VALUES = _MissingValues()
 # performance
 SNPS_PER_CHUNK = 200
 
-DEF_DSET_PARAMS = {
-    'compression': 'gzip',  # Not much slower than lzf, but compresses much
-                            # more
-    'shuffle': True,
-    'fletcher32': True  # checksum, slower but safer
-}
+DEF_DSET_PARAMS = {'compression': 'gzip',  # Not much slower than lzf,
+                                           # but compresses much more
+                   'shuffle': True,
+                   'fletcher32': True  # checksum, slower but safer
+                   }
+
 PRE_READ_MAX_SIZE = 10000
 STATS_DEPTHS = ','.join([str(x) for x in range(0, 75, 5)])
 MAX_DEPTH = 100
 MIN_N_GENOTYPES = 10
 SNP_DENSITY_WINDOW_SIZE = 100
-DIVERSITY_WINDOW_SIZE = 100000
+MANHATTAN_WINDOW_SIZE = 100000
 MAX_N_ALLELES = 4
 MAX_ALLELE_COUNTS = 50
+DEF_MIN_DEPTH = 20
 
 VCF_FORMAT = 'VCFv4.2'
 DEF_METADATA = {'CALLS': {b'GT': {'Description': 'Genotype',

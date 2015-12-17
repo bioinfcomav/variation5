@@ -131,8 +131,8 @@ class VCFParser():
 
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
-                 max_field_lens=None, max_n_vars=None,
-                 n_threads=None):
+                 max_field_lens=None, max_field_str_lens=None, max_n_vars=None,
+                 n_threads=None,):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
@@ -161,15 +161,30 @@ class VCFParser():
         else:
             user_max_field_lens = max_field_lens
         self._max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
+
+        if max_field_str_lens is None:
+            user_max_field_str_lens = {}
+        else:
+            user_max_field_str_lens = max_field_str_lens
+
         self._max_field_str_lens = {'FILTER': 0, 'INFO': {},
-                                   'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
+                                    'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
+
         self._init_max_field_lens()
+
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
                 for key2, value2 in value1.items():
                     self._max_field_lens[key1][key2] = value2
             else:
                 self._max_field_lens[key1] = value1
+
+        for key1, value1 in user_max_field_str_lens.items():
+            if isinstance(value1, dict):
+                for key2, value2 in value1.items():
+                    self._max_field_str_lens[key1][key2] = value2
+            else:
+                self._max_field_str_lens[key1] = value1
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
@@ -219,11 +234,12 @@ class VCFParser():
         ploidy = None
         for line in self._fhand:
             read_lines.append(line)
+            line = line.strip()
             if line.startswith(b'#'):
                 continue
             gts = line.split(b'\t')[9:]
             for gt in gts:
-                if gt is b'.':
+                if gt == b'.':
                     continue
                 gt = gt.split(b':')[0]
                 alleles = gt.split(b'/') if b'/' in gt else gt.split(b'|')
@@ -402,10 +418,10 @@ def _parse_gt(gt, empty_gt):
     if gt is None:
         gt = empty_gt
     elif b'|' in gt:
-        is_phased = True
+        # is_phased = True
         gt = gt.split(b'|')
     else:
-        is_phased = False
+        # is_phased = False
         gt = gt.split(b'/')
     if gt is not None:
         gt = [MISSING_INT if allele == b'.' else int(allele) for allele in gt]
@@ -457,10 +473,12 @@ def _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
 
     return parsed_gts
 
+PARSED_INFO_TYPE_CACHE = {}
+
 
 def _parse_info(info, ignored_fields, metadata, max_field_lens,
                 max_field_str_lens):
-
+    global PARSED_INFO_TYPE_CACHE
     if b'.' == info:
         return None
     infos = info.split(b';')
@@ -479,12 +497,16 @@ def _parse_info(info, ignored_fields, metadata, max_field_lens,
             msg += key.decode('utf-8')
             raise RuntimeError(msg)
         try:
-            type_ = _get_type_cast(meta['dtype'])
+            type_ = PARSED_INFO_TYPE_CACHE[key]
         except KeyError:
-            print(info)
-            print(metadata['INFO'])
-            print(meta)
-            raise
+            try:
+                type_ = _get_type_cast(meta['dtype'])
+                PARSED_INFO_TYPE_CACHE[key] = type_
+            except KeyError:
+                print(info)
+                print(metadata['INFO'])
+                print(meta)
+                raise
 
         if isinstance(val, bool):
             pass

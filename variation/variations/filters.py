@@ -1,11 +1,15 @@
-import numpy
-from _functools import partial
+from functools import partial
+from itertools import chain
 
-from variation.variations.stats import (_MafCalculator,
-                                        _MissingGTCalculator,
-                                        _CalledGTCalculator)
+import numpy
+
+from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
+                                        calc_called_gt, GQ_FIELD, DP_FIELD,
+                                        MIN_NUM_GENOTYPES_FOR_POP_STAT)
 from variation.variations.vars_matrices import VariationsArrays
-from variation import MISSING_VALUES
+from variation import MISSING_INT
+from variation.matrix.methods import append_matrix, is_dataset
+from variation.iterutils import first
 
 
 def _filter_dsets_chunks(selector_function, dsets_chunks):
@@ -35,8 +39,10 @@ def _filter_chunk(chunk, fields, filter_funct):
     return _filter_chunk2(chunk, selected_rows)
 
 
-def _filter_chunk2(chunk, selected_rows):
-    flt_chunk = VariationsArrays()
+def _filter_chunk2(chunk, filtered_chunk, selected_rows):
+    if filtered_chunk is None:
+        filtered_chunk = VariationsArrays()
+
     for path in chunk.keys():
         matrix = chunk[path]
         try:
@@ -44,37 +50,23 @@ def _filter_chunk2(chunk, selected_rows):
         except:
             array = matrix
         flt_data = numpy.compress(selected_rows, array, axis=0)
-        flt_chunk[path] = flt_data
-    flt_chunk.metadata = chunk.metadata
-    return flt_chunk
+        try:
+            out_mat = filtered_chunk[path]
+            append_matrix(out_mat, flt_data)
+        except KeyError:
+            filtered_chunk[path] = flt_data
+    filtered_chunk.metadata = chunk.metadata
+    filtered_chunk.samples = chunk.samples
+    return filtered_chunk
 
 
-def _filter_quality_GT(chunk, selected_rows):
-    matrix = chunk['calls/GT']
-    try:
-        array = matrix.data
-    except:
-        array = matrix
-    flt_data = numpy.extract(selected_rows, array)
-    print(flt_data.shape)
-    chunk['calls/GT'].data = flt_data
-    print(len(chunk['calls/GT']))
+def _filter_mafs(variations, filtered_vars=None, min_=None, max_=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    mafs = calc_maf(variations, min_num_genotypes=min_num_genotypes)
 
-
-def _filter_all(chunk):
-    flt_chunk = _filter_chunk(chunk, ['/calls/GT'], _filter_all_rows)
-    return flt_chunk
-
-
-def _filter_none(chunk):
-    return _filter_chunk(chunk, ['/calls/GT'], _filter_no_row)
-
-
-def _filter_mafs(chunk, min_=None, max_=None):
-    calc_mafs = _MafCalculator()
-    mafs = calc_mafs(chunk)
-    selector_max = None if max_ is None else mafs <= max_
-    selector_min = None if min_ is None else mafs >= min_
+    with numpy.errstate(invalid='ignore'):
+        selector_max = None if max_ is None else mafs <= max_
+        selector_min = None if min_ is None else mafs >= min_
 
     if selector_max is None and selector_min is not None:
         selected_rows = selector_min
@@ -83,67 +75,135 @@ def _filter_mafs(chunk, min_=None, max_=None):
     elif selector_max is not None and selector_min is not None:
         selected_rows = selector_min & selector_max
     else:
-        selected_rows = _filter_no_row(chunk)
-    return _filter_chunk2(chunk, selected_rows)
+        selected_rows = _filter_no_row(variations)
+
+    return _filter_chunk2(variations, filtered_vars, selected_rows)
 
 
-def mafs_filter_fact(min_=None, max_=None):
-    return partial(_filter_mafs, min_=min_, max_=max_)
+def _filter_by_chunk(variations, filtered_vars, filter_funct):
+
+    for chunk in variations.iterate_chunks():
+        filtered_vars = filter_funct(chunk, filtered_vars)
+    return filtered_vars
 
 
-def _missing_rate_filter(chunk, min_=None):
-    calc_missing_gt = _MissingGTCalculator()
-    rates = calc_missing_gt(chunk)
-    if min_ is not None:
-        selected_rows = _calc_rows_by_min(rates, min_)
+def filter_mafs(variations, filtered_vars=None, min_maf=None, max_maf=None,
+                min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                by_chunk=True):
+    if by_chunk:
+        filter_funct = partial(_filter_mafs, min_=min_maf, max_=max_maf,
+                               min_num_genotypes=min_num_genotypes)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
     else:
-        selected_rows = _filter_no_row(chunk)
-    return _filter_chunk2(chunk, selected_rows)
+        return _filter_mafs(variations, filtered_vars=filtered_vars,
+                            min_=min_maf, max_=max_maf,
+                            min_num_genotypes=min_num_genotypes)
 
 
-def missing_rate_filter_fact(min_=None):
-    return partial(_missing_rate_filter, min_=min_)
+def _filter_obs_het(variations, filtered_vars, min_=None, max_=None,
+                    min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    obs_het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
+    with numpy.errstate(invalid='ignore'):
+        selector_max = None if max_ is None else obs_het <= max_
+        selector_min = None if min_ is None else obs_het >= min_
 
-
-def _min_called_gts_filter(chunk, min_=None):
-    calc_called_gt = _CalledGTCalculator(rate=False)
-    called_gts = calc_called_gt(chunk)
-    if min_ is not None:
-        selected_rows = _calc_rows_by_min(called_gts, min_)
+    if selector_max is None and selector_min is not None:
+        selected_rows = selector_min
+    elif selector_max is not None and selector_min is None:
+        selected_rows = selector_max
+    elif selector_max is not None and selector_min is not None:
+        selected_rows = selector_min & selector_max
     else:
-        selected_rows = _filter_no_row(chunk)
-    return _filter_chunk2(chunk, selected_rows)
+        selected_rows = _filter_no_row(variations)
+    return _filter_chunk2(variations, filtered_vars, selected_rows)
 
 
-def min_called_gts_filter_fact(min_=None):
-    return partial(_min_called_gts_filter, min_=min_)
+def filter_obs_het(variations, filtered_vars=None, min_het=None, max_het=None,
+                   min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                   by_chunk=True):
+    no_chunk_flt_funct = _filter_obs_het
+    if by_chunk:
+        filter_funct = partial(no_chunk_flt_funct, min_=min_het, max_=max_het,
+                               min_num_genotypes=min_num_genotypes)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
+    else:
+        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
+                                  min_=min_het, max_=max_het,
+                                  min_num_genotypes=min_num_genotypes)
 
 
-def _calc_rows_by_min(array, min_):
-    selected_rows = None if min_ is None else array >= min_
-    return selected_rows
-
-
-def _filter_gt(chunk, min_, path):
-    genotypes_qual = chunk[path]
-    gts = chunk['/calls/GT'].copy()
+def _filter_min_called_gts(variations, filtered_vars=None, min_=None,
+                           rates=True):
+    called_gts = calc_called_gt(variations, rates=rates)
     if min_ is not None:
-        gts[genotypes_qual < min_] = MISSING_VALUES[int]
+        selected_rows = None if min_ is None else called_gts > min_
+    else:
+        selected_rows = _filter_no_row(variations)
+    return _filter_chunk2(variations, filtered_vars, selected_rows)
+
+
+def filter_min_called_gts(variations, filtered_vars=None, min_called=None,
+                          rates=True, by_chunk=True):
+    no_chunk_flt_funct = _filter_min_called_gts
+    if by_chunk:
+        filter_funct = partial(no_chunk_flt_funct, min_=min_called,
+                               rates=rates)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
+    else:
+        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
+                                  min_=min_called, rates=rates)
+
+
+def _filter_gt_by_chunk(variations, filter_funct, field_path):
+
+    gt_mat = variations[GT_FIELD]
+    idx = 0
+    for chunk in variations.iterate_chunks():
+        filtered_gt_chunk = filter_funct(chunk)
+        n_snps_in_chunk = filtered_gt_chunk.shape[0]
+        gt_mat[idx: idx + n_snps_in_chunk] = filtered_gt_chunk
+        idx += n_snps_in_chunk
+
+
+def _filter_gt_no_chunk(variations, field_path, min_):
+    mat_to_check = variations[field_path]
+    if is_dataset(mat_to_check):
+        mat_to_check = mat_to_check[:]
+    gts = variations[GT_FIELD]
+
+    if min_ is not None:
+        if is_dataset(variations[GT_FIELD]):
+            gts = variations[GT_FIELD][:]
+            gts[mat_to_check < min_] = MISSING_INT
+            variations[GT_FIELD][:] = gts
+        else:
+            gts[mat_to_check < min_] = MISSING_INT
     return gts
 
 
-def _quality_filter_gt(chunk, min_=None):
-    return _filter_gt(chunk, min_, '/calls/GQ')
+def _filter_gt(variations, min_, field_path, by_chunk=True):
+    no_chunk_flt_funct = _filter_gt_no_chunk
+    if by_chunk:
+        filter_funct = partial(no_chunk_flt_funct, min_=min_,
+                               field_path=field_path)
+        _filter_gt_by_chunk(variations, filter_funct, field_path=field_path)
+    else:
+        no_chunk_flt_funct(variations, min_=min_, field_path=field_path)
 
 
-def quality_filter_genotypes_fact(min_=None):
-    return partial(_quality_filter_gt, min_=min_)
+def set_low_qual_gts_to_missing(variations, min_qual=None, by_chunk=True):
+    _filter_gt(variations, min_qual, field_path=GQ_FIELD, by_chunk=by_chunk)
 
 
-def _quality_filter_snps(chunk, min_=None, max_=None):
-    snps_qual = chunk['/variations/qual']
-    selector_max = None if max_ is None else snps_qual <= max_
-    selector_min = None if min_ is None else snps_qual >= min_
+def set_low_dp_gts_to_missing(variations, min_dp=None, by_chunk=True):
+    _filter_gt(variations, min_dp, field_path=DP_FIELD, by_chunk=by_chunk)
+
+
+def _filter_snps_by_qual(variations, filtered_vars=None, min_=None, max_=None):
+    snps_qual = variations['/variations/qual']
+    with numpy.errstate(invalid='ignore'):
+        selector_max = None if max_ is None else snps_qual <= max_
+        selector_min = None if min_ is None else snps_qual >= min_
 
     if selector_max is None and selector_min is not None:
         selected_rows = selector_min
@@ -152,28 +212,44 @@ def _quality_filter_snps(chunk, min_=None, max_=None):
     elif selector_max is not None and selector_min is not None:
         selected_rows = selector_min & selector_max
     else:
-        selected_rows = _filter_no_row(chunk)
-    return _filter_chunk2(chunk, selected_rows)
+        selected_rows = _filter_no_row(variations)
+    return _filter_chunk2(variations, filtered_vars, selected_rows)
 
 
-def quality_filter_snps_fact(min_=None, max_=None):
-    return partial(_quality_filter_snps, min_=min_, max_=max_)
+def filter_snps_by_qual(variations, filtered_vars=None, min_qual=None,
+                        max_qual=None, by_chunk=True):
+    no_chunk_flt_funct = _filter_snps_by_qual
+    if by_chunk:
+        filter_funct = partial(no_chunk_flt_funct, min_=min_qual,
+                               max_=max_qual)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
+    else:
+        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
+                                  min_=min_qual, max_=max_qual)
 
 
-def _filter_gts_by_dp(chunk, min_=None):
-    return _filter_gt(chunk, min_, '/calls/DP')
+def _filter_monomorphic_snps(variations, filtered_vars=None, min_maf=None,
+                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    return filter_mafs(variations, filtered_vars=filtered_vars,
+                       min_maf=min_maf, min_num_genotypes=min_num_genotypes)
 
 
-def filter_gts_by_dp_fact(min_=None):
-    return partial(_filter_gts_by_dp, min_=min_)
+def filter_monomorphic_snps(variations, filtered_vars=None, min_maf=None,
+                            min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                            by_chunk=True):
+    no_chunk_flt_funct = _filter_monomorphic_snps
+    if by_chunk:
+        filter_funct = partial(no_chunk_flt_funct, min_maf=min_maf,
+                               min_num_genotypes=min_num_genotypes)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
+    else:
+        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
+                                  min_maf=min_maf,
+                                  min_num_genotypes=min_num_genotypes)
 
 
-def filter_monomorphic_snps_fact(min_maf=None):
-    return partial(_filter_mafs, min_=min_maf)
-
-
-def _biallelic_filter(chunk, keep_monomorphic):
-    gts = chunk['/calls/GT']
+def _biallelic_filter(chunk, filtered_vars, keep_monomorphic):
+    gts = chunk[GT_FIELD]
     shape = gts.shape
 
     # we count how many different alleles are per row
@@ -197,24 +273,90 @@ def _biallelic_filter(chunk, keep_monomorphic):
     else:
         selected_rows = (c == 2)
 
-    return _filter_chunk2(chunk, selected_rows)
+    return _filter_chunk2(chunk, filtered_vars, selected_rows)
 
 
-def filter_biallelic_and_polymorphic(chunk):
-    return _biallelic_filter(chunk, keep_monomorphic=False)
+def _filter_non_biallelic(variations, filtered_vars=None,
+                          keep_monomorphic=False, by_chunk=True):
+    no_chunk_flt_funct = _biallelic_filter
+    if by_chunk:
+        filter_funct = partial(no_chunk_flt_funct,
+                               keep_monomorphic=keep_monomorphic)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
+    else:
+        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
+                                  keep_monomorphic=keep_monomorphic)
 
 
-def filter_biallelic(chunk):
-    return _biallelic_filter(chunk, keep_monomorphic=True)
+def keep_biallelic(variations, filtered_vars=None, by_chunk=True):
+    return _filter_non_biallelic(variations, filtered_vars=filtered_vars,
+                                 keep_monomorphic=False, by_chunk=by_chunk)
 
 
-def filter_snps_with_no_strand_info(chunk, n_snps_check=None):
-    ref = chunk['/variations/ref'][:n_snps_check]
-    alt = chunk['/variations/alt'][:n_snps_check]
-    alleles = numpy.append(alt, ref.reshape(ref.shape[0], 1), axis=1)
-    is_at = numpy.logical_and(alleles != b"A", alleles != b"T")
-    at = numpy.sum(is_at, axis=1)
-    is_cg = numpy.logical_and(alleles != b"C", alleles != b"G")
-    cg = numpy.sum(is_cg, axis=1)
-    selected_rows = numpy.logical_and(at > 1, cg > 1)
-    return _filter_chunk2(chunk, selected_rows)
+def keep_biallelic_and_monomorphic(variations, filtered_vars=None,
+                                   by_chunk=True):
+    return _filter_non_biallelic(variations, filtered_vars=filtered_vars,
+                                 keep_monomorphic=True, by_chunk=by_chunk)
+
+
+def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
+                             reverse=False):
+    if filtered_vars is None:
+        filtered_vars = VariationsArrays()
+
+    samples = variations.samples
+    if reverse:
+        sample_cols = [idx for idx in range(len(samples))
+                       if idx not in sample_cols]
+
+    for path in variations.keys():
+        matrix = variations[path]
+        if is_dataset(matrix):
+            matrix = matrix[:]
+        if 'calls' in path:
+            flt_data = matrix[:, sample_cols]
+            # flt_data = numpy.compress(sample_cols, , axis=1)
+            filtered_vars[path] = flt_data
+        else:
+            filtered_vars[path] = matrix
+    filtered_vars.metadata = variations.metadata
+    filtered_vars.samples = [samples[idx] for idx in sample_cols]
+    return filtered_vars
+
+
+def filter_samples_by_index(variations, sample_cols, filtered_vars=None,
+                            reverse=False, by_chunk=True):
+    if by_chunk:
+        if filtered_vars is None:
+            filtered_vars = VariationsArrays()
+        chunks = (_filter_samples_by_index(chunk, sample_cols, reverse=reverse)
+                  for chunk in variations.iterate_chunks())
+        chunk = first(chunks)
+        chunks = chain([chunk], chunks)
+        filtered_vars.put_chunks(chunks)
+        filtered_vars.metadata = chunk.metadata
+        filtered_vars.samples = chunk.samples
+        return filtered_vars
+    else:
+        return _filter_samples_by_index(variations, sample_cols,
+                                        filtered_vars=filtered_vars,
+                                        reverse=reverse)
+
+
+def filter_samples(variations, samples, filtered_vars=None,
+                   reverse=False, by_chunk=True):
+    var_samples = variations.samples
+    if len(set(var_samples)) != len(var_samples):
+        raise ValueError('Some samples in the given variations are repeated')
+    if len(set(samples)) != len(samples):
+        raise ValueError('Some samples in the given samples are repeated')
+    samples_not_int_vars = set(samples).difference(var_samples)
+    if samples_not_int_vars:
+        msg = 'Samples not found in variations: '
+        msg += ','.join(samples_not_int_vars)
+        raise ValueError(msg)
+
+    idx_to_keep = [var_samples.index(sample) for sample in samples]
+
+    return filter_samples_by_index(variations, idx_to_keep, reverse=reverse,
+                                   by_chunk=by_chunk)

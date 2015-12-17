@@ -21,7 +21,7 @@ from variation.variations.vars_matrices import (VariationsArrays,
                                                 _prepare_vcf_header, _to_vcf)
 from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
-from variation.variations.stats import _remove_nans
+from variation.utils.misc import remove_nans
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -227,6 +227,8 @@ class VarMatsTests(unittest.TestCase):
                 out_snps = _init_var_mat(klass)
                 out_snps.put_chunks(var_mat.iterate_chunks())
                 assert '/variations/filter/q10' in out_snps.keys()
+                out_snps.put_chunks(var_mat.iterate_chunks())
+
             fhand.close()
 
     def test_max_field_str_len(self):
@@ -273,14 +275,14 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/variations/filter/PASS'][:] == expected)
 
         # Variations info fields
-        expected = _remove_nans(numpy.array([[0.5, numpy.nan],
-                                             [0.01699829, numpy.nan],
-                                             [0.33300781, 0.66699219],
-                                             [numpy.nan, numpy.nan],
-                                             [numpy.nan, numpy.nan]],
-                                            dtype=numpy.float16))
+        expected = remove_nans(numpy.array([[0.5, numpy.nan],
+                                            [0.01699829, numpy.nan],
+                                            [0.33300781, 0.66699219],
+                                            [numpy.nan, numpy.nan],
+                                            [numpy.nan, numpy.nan]],
+                                           dtype=numpy.float16))
 
-        af = _remove_nans(h5['/variations/info/AF'][:])
+        af = remove_nans(h5['/variations/info/AF'][:])
         assert numpy.all(af == expected)
         expected = numpy.array([3, 3, 2, 3, 3])
         assert numpy.all(h5['/variations/info/NS'][:] == expected)

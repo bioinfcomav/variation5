@@ -50,4 +50,3 @@ class PeekableIterator(object):
             self._peek_buffer_idx = None
         else:
             self._peek_buffer_idx = 0
-

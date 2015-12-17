@@ -1,13 +1,16 @@
 
+from itertools import cycle
+
 import numpy
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from numpy.core.defchararray import decode
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from pandas.core.frame import DataFrame
 from scipy.stats.morestats import probplot
-from itertools import cycle
-from numpy.core.defchararray import decode
-from variation.variations.stats import _remove_nans
+
+
 plt.style.use('ggplot')
 
 
@@ -32,25 +35,6 @@ def _print_figure(canvas, fhand, no_interactive_win):
     canvas.print_figure(fhand)
 
 
-def plot_histogram(mat, bins=20, range_=None, fhand=None, axes=None,
-                   no_interactive_win=False, color=None, label=None,
-                   canvas=None, mpl_params={}, figsize=None):
-    mat = _remove_nans(mat)
-    print_figure = False
-    if axes is None:
-        print_figure = True
-    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
-    result = axes.hist(mat, bins=bins, range=range_, color=color, label=label)
-    if label is not None:
-        axes.legend()
-    for function_name, params in mpl_params.items():
-        function = getattr(axes, function_name)
-        function(*params['args'], **params['kwargs'])
-    if print_figure:
-        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
-    return result
-
-
 def _calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
     cum_distribs = numpy.cumsum(distribs, axis=1)
     cum_distribs_norm = cum_distribs / cum_distribs[:, -1][:, None]
@@ -58,11 +42,12 @@ def _calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
     for distrib, cum_distrib, cum_distrib_norm in zip(distribs, cum_distribs,
                                                       cum_distribs_norm):
         quartiles = [0.05, 0.25, 0.5, 0.75, 0.95]
-        quartiles = [numpy.searchsorted(cum_distrib_norm, q) + 1 for q in quartiles]
+        quartiles = [numpy.searchsorted(cum_distrib_norm, q) + 1
+                     for q in quartiles]
         stats = {'q1': quartiles[1], 'med': quartiles[2], 'q3': quartiles[3]}
         stats['iqr'] = stats['q3'] - stats['q1']
-        stats['mean'] = numpy.sum(numpy.array(range(0, distrib.shape[0])) * distrib)
-        stats['mean'] = stats['mean'] / cum_distrib[-1]
+        mean = numpy.sum(numpy.array(range(0, distrib.shape[0])) * distrib)
+        stats['mean'] = mean / cum_distrib[-1]
         stats['whishi'] = quartiles[4]
         stats['whislo'] = quartiles[0]
         stats['cihi'] = stats['med']
@@ -80,34 +65,18 @@ def _calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
     return series_stats
 
 
-def plot_boxplot(mat, by_row=True, make_bins=False, fhand=None, axes=None,
-                 no_interactive_win=False, figsize=None, show_fliers=False,
-                 mpl_params={}):
-    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
-    if make_bins:
-        if by_row:
-            mat = mat.transpose()
-        result = axes.boxplot(mat)
-    else:
-        if not by_row:
-            mat = mat.transpose()
-        bxp_stats = _calc_boxplot_stats(mat)
-        result = axes.bxp(bxp_stats)
-    for function_name, params in mpl_params.items():
-        function = getattr(axes, function_name)
-        function(*params['args'], **params['kwargs'])
-    _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
-    return result
-
-
-def plot_barplot(x, height, width=0.8, fhand=None, axes=None,
-                 no_interactive_win=False, figsize=None,
-                 mpl_params={}, **kwargs):
+def calc_and_plot_boxplot(mat, by_row=True, fhand=None, axes=None,
+                          no_interactive_win=False, figsize=None,
+                          show_fliers=False, mpl_params={}):
     print_figure = False
     if axes is None:
         print_figure = True
     axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
-    result = axes.bar(x, height, width=width, **kwargs)
+
+    if by_row:
+        mat = mat.transpose()
+    result = axes.boxplot(mat)
+
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])
@@ -116,11 +85,121 @@ def plot_barplot(x, height, width=0.8, fhand=None, axes=None,
     return result
 
 
-def plot_pandas_barplot(matrix, columns, fpath=None, stacked=True,
-                        mpl_params={}, axes=None, color=None):
+def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
+                               no_interactive_win=False, figsize=None,
+                               show_fliers=False, mpl_params={}, color=None):
+    '''It assumes that there are as many bins in the distributions as integers
+    in their range'''
+
+    mat = distribs
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+
+    if not by_row:
+        mat = mat.transpose()
+    bxp_stats = _calc_boxplot_stats(mat)
+    result = axes.bxp(bxp_stats, patch_artist=True)
+    if color is not None:
+        _set_box_color(result, color)
+
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def _set_box_color(bp, color):
+    plt.setp(bp['boxes'], color=color)
+    plt.setp(bp['whiskers'], color='black')
+    plt.setp(bp['caps'], color='black')
+    plt.setp(bp['medians'], color='black')
+
+
+def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
+                                      axes=None, no_interactive_win=False,
+                                      figsize=None, show_fliers=False,
+                                      mpl_params={}, colors=None, labels=None,
+                                      xticklabels=None):
+    '''It assumes that there are as many bins in the distributions as integers
+    in their range'''
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+
+    n_series = len(distribs_series)
+    if colors is None:
+        colors = cm.rainbow(numpy.linspace(0, 1, n_series))
+    if labels is None:
+        labels = [str(x) for x in range(n_series)]
+        
+    for dist_n, (distribs, color) in enumerate(zip(distribs_series, colors)):
+        mat = distribs
+        if not by_row:
+            mat = mat.transpose()
+        positions = numpy.arange(1, (n_series + 1) * mat.shape[0] + 1,
+                                 n_series + 1)
+        positions += dist_n
+        bxp_stats = _calc_boxplot_stats(mat)
+        result = axes.bxp(bxp_stats, positions=positions, patch_artist=True)
+        _set_box_color(result, color)
+        
+    axes.set_xlim(0, positions[-1] + 1)
+    xticks = numpy.arange((n_series + 1) / 2.0,
+                          (n_series + 1) * (mat.shape[0] + 1) + 1,
+                          n_series + 1)
+    if xticklabels is None:
+        xticklabels = numpy.arange(1, mat.shape[0] + 1)
+    axes.set_xticks(xticks)
+    axes.set_xticklabels(xticklabels, rotation=90)
+    # draw temporary red and blue lines and use them to create a legend
+    for color, label in zip(colors, labels):
+        axes.plot([], c=color, label=label)
+    axes.legend()
+    
+    
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def plot_distrib(distrib, bins, fhand=None, axes=None,
+                 no_interactive_win=False, figsize=None,
+                 mpl_params={}, n_ticks=10, **kwargs):
+    '''Plots the histogram of an already calculated distribution'''
+
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    width = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
+    result = axes.bar(bins[:-1], distrib, width=width, **kwargs)
+
+    ticks = numpy.arange(0, bins.shape[0], int(bins.shape[0] / n_ticks))
+    axes.set_xticks(bins[ticks])
+    xticklabels = [str(x)[:len(str(x).split('.')[0])+4] for x in bins[ticks]]
+    axes.set_xticklabels(xticklabels)
+
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params['args'], **params['kwargs'])
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return result
+
+
+def plot_barplot(matrix, columns, fpath=None, stacked=True, mpl_params={},
+                 axes=None, color=None, figsize=(70, 10), **kwargs):
     df = DataFrame(matrix, columns=columns)
-    axes = df.plot(kind='bar', stacked=stacked, figsize=(70, 10),
-                   axes=axes, color=color)
+    axes = df.plot(kind='bar', stacked=stacked, figsize=figsize, axes=axes,
+                   color=color, **kwargs)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])
@@ -130,39 +209,18 @@ def plot_pandas_barplot(matrix, columns, fpath=None, stacked=True,
     return axes
 
 
-def plot_hexabinplot(matrix, columns, fpath=None, axes=None,
-                     mpl_params={}):
-    y = []
-    for i in range(matrix.shape[1]):
-            y.extend([i]*matrix.shape[0])
-    x = list(range(0, matrix.shape[0]))*matrix.shape[1]
-    z = matrix.reshape((matrix.shape[0]*matrix.shape[1],))
-    df = DataFrame(numpy.array([x, y, z]).transpose(), columns=['x', 'y', 'z'])
-    numpy.set_printoptions(threshold=numpy.nan)
-    axes = df.plot(kind='hexbin', x='x', y='y', C='z', axes=axes)
-    for function_name, params in mpl_params.items():
-        function = getattr(axes, function_name)
-        function(*params['args'], **params['kwargs'])
-    if fpath is not None:
-        figure = axes.get_figure()
-        figure.savefig(fpath)
-    return axes
-
-
-class AxesMod():
+class _AxesMod():
     def __init__(self, axes):
         self.axes = axes
 
-    def hist2d(self, matrix):
-        y = numpy.arange(matrix.shape[1])
-        x = numpy.arange(matrix.shape[0])
-        pc = self.axes.pcolorfast(x, y, matrix)
-        self.axes.set_xlim(x[0], x[-1])
-        self.axes.set_ylim(y[0], y[-1])
-        return matrix, x, y, pc
+    def hist2d(self, matrix, xbins, ybins):
+        pc = self.axes.pcolorfast(xbins, ybins, matrix)
+        self.axes.set_xlim(xbins[0], xbins[-1])
+        self.axes.set_ylim(ybins[0], ybins[-1])
+        return matrix, xbins, ybins, pc
 
 
-def plot_hist2d(matrix, fhand=None, axes=None, fig=None,
+def plot_hist2d(matrix, xbins, ybins, fhand=None, axes=None, fig=None,
                 no_interactive_win=False, figsize=None,
                 mpl_params={}, colorbar_label='', **kwargs):
     print_figure = False
@@ -171,8 +229,8 @@ def plot_hist2d(matrix, fhand=None, axes=None, fig=None,
         fig = Figure(figsize=figsize)
         canvas = FigureCanvas(fig)
         axes = fig.add_subplot(111)
-    axesmod = AxesMod(axes)
-    result = axesmod.hist2d(matrix)
+    axesmod = _AxesMod(axes)
+    result = axesmod.hist2d(matrix, xbins, ybins)
     fig.colorbar(result[3], ax=axes, label=colorbar_label)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
@@ -198,20 +256,21 @@ def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
 
 
 def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
-           no_interactive_win=False, figsize=None, fhand=None,
-           colors=['darkorchid', 'darkturquoise'], yfunc=lambda x:x, ylim=0,
-           yline=None, remove_nans=True, show_chroms=True, marker='o'):
+                   no_interactive_win=False, figsize=None, fhand=None,
+                   colors=['darkorchid', 'darkturquoise'],
+                   yfunc=lambda x: x, ylim=0, yline=None, remove_nans=True,
+                   show_chroms=True, marker='o'):
     if remove_nans:
         mask = numpy.logical_not(numpy.isnan(values))
         chrom = chrom[mask]
         pos = pos[mask]
         values = values[mask]
-    
+
     print_figure = False
     if axes is None:
         print_figure = True
         axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
-    
+
     x = numpy.array([])
     y = numpy.array([])
     col = numpy.array([])
@@ -232,7 +291,8 @@ def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
         if marker != 'o':
             result = axes.plot(xs, ys, marker, c=color)
     if marker == 'o':
-        result = axes.scatter(x, y, c=col, marker=marker, alpha=0.8, edgecolors='none')
+        result = axes.scatter(x, y, c=col, marker=marker, alpha=0.8,
+                              edgecolors='none')
     axes.set_xticks(xticks)
     if show_chroms:
         axes.set_xticklabels(decode(chrom_names), rotation=-90, size='small')

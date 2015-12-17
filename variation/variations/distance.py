@@ -9,7 +9,7 @@ from variation.matrix.methods import iterate_matrix_chunks
 
 
 def _kosman(indi1, indi2):
-    '''It calculates the distance between two individuals using the Kosman distance.
+    '''It calculates the distance between two individuals using the Kosman dist
 
     The Kosman distance is explain in DOI: 10.1111/j.1365-294X.2005.02416.x
     '''

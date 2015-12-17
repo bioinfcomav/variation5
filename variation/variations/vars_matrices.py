@@ -288,7 +288,8 @@ class _ChunkGenerator:
                                 mat[idx, 0:len(item)] = item
                             except (ValueError, TypeError):
                                 missing_val = struct['missing_value']
-                                item = [missing_val if val is None else val[0] for val in item]
+                                item = [missing_val if val is None else val[0]
+                                        for val in item]
                                 mat[idx, 0:len(item)] = item
 
                         elif n_dims == 3:
@@ -690,7 +691,8 @@ class _VariationMatrices():
                        chunk_size=None):
 
         if kept_fields is not None and ignored_fields is not None:
-            msg = 'kept_fields and ignored_fields can not be set at the same time'
+            msg = 'kept_fields and ignored_fields can not be set at the same'
+            msg += ' time'
             raise ValueError(msg)
         # We read the hdf5 file to keep the datasets metadata
         # We remove the unwanted fields

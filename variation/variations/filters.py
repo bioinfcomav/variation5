@@ -1,4 +1,5 @@
 from functools import partial
+from itertools import chain
 
 import numpy
 
@@ -8,6 +9,7 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
 from variation.variations.vars_matrices import VariationsArrays
 from variation import MISSING_INT
 from variation.matrix.methods import append_matrix, is_dataset
+from variation.iterutils import first
 
 
 def _filter_dsets_chunks(selector_function, dsets_chunks):
@@ -55,23 +57,6 @@ def _filter_chunk2(chunk, filtered_chunk, selected_rows):
             filtered_chunk[path] = flt_data
     filtered_chunk.metadata = chunk.metadata
     return filtered_chunk
-
-
-def _filter_chunk_samples(chunk, selected_cols):
-    flt_chunk = VariationsArrays()
-    for path in chunk.keys():
-        if 'calls' in path:
-            matrix = chunk[path]
-            try:
-                array = matrix.data
-            except:
-                array = matrix
-            flt_data = numpy.compress(selected_cols, array, axis=1)
-            flt_chunk[path] = flt_data
-        else:
-            flt_chunk[path] = matrix
-    flt_chunk.metadata = chunk.metadata
-    return flt_chunk
 
 
 def _filter_mafs(variations, filtered_vars=None, min_=None, max_=None,
@@ -311,3 +296,66 @@ def keep_biallelic_and_monomorphic(variations, filtered_vars=None,
                                    by_chunk=True):
     return _filter_non_biallelic(variations, filtered_vars=filtered_vars,
                                  keep_monomorphic=True, by_chunk=by_chunk)
+
+
+def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
+                             reverse=False):
+    if filtered_vars is None:
+        filtered_vars = VariationsArrays()
+
+    samples = variations.samples
+    if reverse:
+        sample_cols = [idx for idx in range(len(samples))
+                       if idx not in sample_cols]
+
+    for path in variations.keys():
+        matrix = variations[path]
+        if is_dataset(matrix):
+            matrix = matrix[:]
+        if 'calls' in path:
+            flt_data = matrix[:, sample_cols]
+            # flt_data = numpy.compress(sample_cols, , axis=1)
+            filtered_vars[path] = flt_data
+        else:
+            filtered_vars[path] = matrix
+    filtered_vars.metadata = variations.metadata
+    filtered_vars.samples = [samples[idx] for idx in sample_cols]
+    return filtered_vars
+
+
+def filter_samples_by_index(variations, sample_cols, filtered_vars=None,
+                            reverse=False, by_chunk=True):
+    if by_chunk:
+        if filtered_vars is None:
+            filtered_vars = VariationsArrays()
+        chunks = (_filter_samples_by_index(chunk, sample_cols, reverse=reverse)
+                  for chunk in variations.iterate_chunks())
+        chunk = first(chunks)
+        chunks = chain([chunk], chunks)
+        filtered_vars.put_chunks(chunks)
+        filtered_vars.metadata = chunk.metadata
+        filtered_vars.samples = chunk.samples
+        return filtered_vars
+    else:
+        return _filter_samples_by_index(variations, sample_cols,
+                                        filtered_vars=filtered_vars,
+                                        reverse=reverse)
+
+
+def filter_samples(variations, samples, filtered_vars=None,
+                   reverse=False, by_chunk=True):
+    var_samples = variations.samples
+    if len(set(var_samples)) != len(var_samples):
+        raise ValueError('Some samples in the given variations are repeated')
+    if len(set(samples)) != len(samples):
+        raise ValueError('Some samples in the given samples are repeated')
+    samples_not_int_vars = set(samples).difference(var_samples)
+    if samples_not_int_vars:
+        msg = 'Samples not found in variations: '
+        msg += ','.join(samples_not_int_vars)
+        raise ValueError(msg)
+
+    idx_to_keep = [var_samples.index(sample) for sample in samples]
+
+    return filter_samples_by_index(variations, idx_to_keep, reverse=reverse,
+                                   by_chunk=by_chunk)

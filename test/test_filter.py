@@ -21,7 +21,8 @@ from variation.variations.filters import (filter_mafs, filter_obs_het,
                                           set_low_dp_gts_to_missing,
                                           keep_biallelic,
                                           filter_monomorphic_snps,
-                                          keep_biallelic_and_monomorphic)
+                                          keep_biallelic_and_monomorphic,
+                                          filter_samples)
 from variation.iterutils import first
 
 
@@ -294,6 +295,29 @@ class FilterTest(unittest.TestCase):
         flt_chunk = keep_biallelic(chunk)
         assert flt_chunk['/calls/GT'].shape == (174, 153, 2)
 
+
+class FilterSamplesTest(unittest.TestCase):
+    def test_filter_samples(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        samples = ['1_14_1_gbs', '1_17_1_gbs', '1_18_4_gbs']
+        varis = filter_samples(hdf5, samples=samples)
+        assert varis.samples == samples
+        assert varis['/calls/GT'].shape == (943, 3, 2)
+        assert varis['/calls/GQ'].shape == (943, 3)
+        assert varis['/variations/chrom'].shape == (943,)
+
+        varis = filter_samples(hdf5, samples=samples, reverse=True,
+                               by_chunk=True)
+        assert all([sample not in samples for sample in varis.samples])
+        n_samples = len(hdf5.samples)
+        assert varis['/calls/GT'].shape == (943, n_samples - 3, 2)
+        assert varis['/calls/GQ'].shape == (943, n_samples - 3)
+        assert varis['/variations/chrom'].shape == (943,)
+
+        varis2 = filter_samples(hdf5, samples=samples, reverse=True,
+                                by_chunk=False)
+        assert numpy.all(varis['/calls/GT'] == varis2['/calls/GT'])
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'FilterTest.test_filter_biallelic']
+    # import sys;sys.argv = ['', 'FilterSamplesTest']
     unittest.main()

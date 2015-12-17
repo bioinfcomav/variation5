@@ -11,8 +11,7 @@ from os.path import join
 import numpy
 
 from variation.variations.vars_matrices import (VariationsH5,
-                                                select_dset_from_chunks,
-                                                VariationsArrays)
+                                                select_dset_from_chunks)
 from variation.matrix.methods import extend_matrix
 from variation.matrix.stats import (row_value_counter_fact,
                                     counts_by_row)

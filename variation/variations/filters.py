@@ -6,7 +6,7 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_called_gt, GQ_FIELD, DP_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT)
 from variation.variations.vars_matrices import VariationsArrays
-from variation import MISSING_VALUES, MISSING_INT
+from variation import MISSING_INT
 from variation.matrix.methods import append_matrix, is_dataset
 
 
@@ -72,11 +72,6 @@ def _filter_chunk_samples(chunk, selected_cols):
             flt_chunk[path] = matrix
     flt_chunk.metadata = chunk.metadata
     return flt_chunk
-
-
-def _calc_rows_by_min(array, min_):
-    selected_rows = None if min_ is None else array >= min_
-    return selected_rows
 
 
 def _filter_mafs(variations, filtered_vars=None, min_=None, max_=None,
@@ -155,7 +150,7 @@ def _filter_min_called_gts(variations, filtered_vars=None, min_=None,
                            rates=True):
     called_gts = calc_called_gt(variations, rates=rates)
     if min_ is not None:
-        selected_rows = _calc_rows_by_min(called_gts, min_)
+        selected_rows = None if min_ is None else called_gts > min_
     else:
         selected_rows = _filter_no_row(variations)
     return _filter_chunk2(variations, filtered_vars, selected_rows)

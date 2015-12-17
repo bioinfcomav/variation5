@@ -327,7 +327,7 @@ def calc_obs_het_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
     with numpy.errstate(invalid='ignore'):
         obs_het_by_sample = obs_het_by_sample / called_gts
     return obs_het_by_sample
-            
+
 
 def _calc_gt_type_stats(variations):
     gts = variations[GT_FIELD]

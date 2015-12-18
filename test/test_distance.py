@@ -73,7 +73,7 @@ class IndividualDistTest(unittest.TestCase):
         expected = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
 #         distance = calc_pairwise_distance(variations, chunk_size=2)
 #         assert numpy.allclose(distance, expected)
-        
+
         distance = calc_pairwise_distance(variations, chunk_size=None)
         assert numpy.allclose(distance, expected)
         return
@@ -101,8 +101,8 @@ class IndividualDistTest(unittest.TestCase):
         selected_distances = sel_samples_from_dist_mat(distances,
                                                        sel_samples)
         assert numpy.all(selected_distances == expected)
-    
+
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise_by_chunk']
+    # import sys;sys.argv = ['', 'IndividualDistTest']
     unittest.main()

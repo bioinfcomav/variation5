@@ -99,5 +99,5 @@ def calc_pairwise_distance(variations, chunk_size=None):
 
 
 def sel_samples_from_dist_mat(distance_matrix, sample_idxs):
-    selected = squareform(distance_matrix)[sample_idxs][:,sample_idxs]
+    selected = squareform(distance_matrix)[sample_idxs][:, sample_idxs]
     return squareform(selected)

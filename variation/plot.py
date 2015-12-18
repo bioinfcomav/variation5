@@ -136,7 +136,7 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
         colors = cm.rainbow(numpy.linspace(0, 1, n_series))
     if labels is None:
         labels = [str(x) for x in range(n_series)]
-        
+
     for dist_n, (distribs, color) in enumerate(zip(distribs_series, colors)):
         mat = distribs
         if not by_row:
@@ -147,7 +147,7 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
         bxp_stats = _calc_boxplot_stats(mat)
         result = axes.bxp(bxp_stats, positions=positions, patch_artist=True)
         _set_box_color(result, color)
-        
+
     axes.set_xlim(0, positions[-1] + 1)
     xticks = numpy.arange((n_series + 1) / 2.0,
                           (n_series + 1) * (mat.shape[0] + 1) + 1,
@@ -160,8 +160,7 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
     for color, label in zip(colors, labels):
         axes.plot([], c=color, label=label)
     axes.legend()
-    
-    
+
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])
@@ -184,7 +183,7 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
 
     ticks = numpy.arange(0, bins.shape[0], int(bins.shape[0] / n_ticks))
     axes.set_xticks(bins[ticks])
-    xticklabels = [str(x)[:len(str(x).split('.')[0])+4] for x in bins[ticks]]
+    xticklabels = [str(x)[:len(str(x).split('.')[0]) + 4] for x in bins[ticks]]
     axes.set_xticklabels(xticklabels)
 
     for function_name, params in mpl_params.items():

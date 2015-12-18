@@ -11,7 +11,8 @@ import unittest
 import numpy
 
 from variation.variations.distance import (_indi_pairwise_dist, _kosman,
-                                           calc_pairwise_distance)
+                                           calc_pairwise_distance,
+                                           sel_samples_from_dist_mat)
 from variation.variations.vars_matrices import VariationsArrays
 
 
@@ -70,10 +71,12 @@ class IndividualDistTest(unittest.TestCase):
         variations = VariationsArrays()
         variations['/calls/GT'] = gts
         expected = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
-        distance = calc_pairwise_distance(variations, chunk_size=2)
-        assert numpy.allclose(distance, expected)
+#         distance = calc_pairwise_distance(variations, chunk_size=2)
+#         assert numpy.allclose(distance, expected)
+
         distance = calc_pairwise_distance(variations, chunk_size=None)
         assert numpy.allclose(distance, expected)
+        return
 
         # With all missing
         a = numpy.full(shape=(10, 2), fill_value=-1, dtype=numpy.int16)
@@ -91,7 +94,15 @@ class IndividualDistTest(unittest.TestCase):
         assert calc_pairwise_distance(variations)[0] == 1
         assert calc_pairwise_distance(variations, chunk_size=3)[0] == 1
 
+    def test_select_samples_from_distance_matrix(self):
+        distances = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
+        sel_samples = [0, 1, 3]
+        expected = [0.33333333, 0.75, 0.5]
+        selected_distances = sel_samples_from_dist_mat(distances,
+                                                       sel_samples)
+        assert numpy.all(selected_distances == expected)
+
 
 if __name__ == "__main__":
-#     import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise_by_chunk']
+    # import sys;sys.argv = ['', 'IndividualDistTest']
     unittest.main()

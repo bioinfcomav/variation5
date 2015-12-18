@@ -57,7 +57,6 @@ def _indi_pairwise_dist(gts, indi_cache):
     n_snps_matrix = numpy.zeros(int((n_samples ** 2 - n_samples) / 2))
     index = 0
     for sample_i, sample_j in itertools.combinations(range(n_samples), 2):
-        # dist, n_snps = _kosman(gts[:, sample_i], gts[:, sample_j])
         dist, n_snps = _kosman(gts, sample_i, sample_j, indi_cache)
         dists[index] = dist
         n_snps_matrix[index] = n_snps

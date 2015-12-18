@@ -6,6 +6,7 @@ import numpy
 from variation.matrix.methods import is_missing
 
 from variation.matrix.methods import iterate_matrix_chunks
+from scipy.spatial.distance import squareform
 
 
 def _kosman(gts, sample_i, sample_j, indi_cache):
@@ -78,7 +79,8 @@ def _calc_pairwise_distance_by_chunk(gts, chunk_size):
         else:
             abs_distances = numpy.add(abs_distances, chunk_abs_distances)
             n_snps_matrix = numpy.add(n_snps_matrix, n_snps_chunk)
-    return abs_distances / n_snps_matrix
+    with numpy.errstate(invalid='ignore'):
+        return abs_distances / n_snps_matrix
 
 
 def calc_pairwise_distance(variations, chunk_size=None):
@@ -94,3 +96,8 @@ def calc_pairwise_distance(variations, chunk_size=None):
         with numpy.errstate(invalid='ignore'):
             distance = abs_dist / n_snps
     return distance
+
+
+def sel_samples_from_dist_mat(distance_matrix, sample_idxs):
+    selected = squareform(distance_matrix)[sample_idxs][:,sample_idxs]
+    return squareform(selected)

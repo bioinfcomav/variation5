@@ -9,13 +9,14 @@
 import os
 import unittest
 from tempfile import NamedTemporaryFile
-
+from io import StringIO
 
 import numpy
 
 from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             qqplot, manhattan_plot, plot_barplot, plot_distrib,
-                            plot_hist2d, plot_boxplot_from_distribs_series)
+                            plot_hist2d, plot_boxplot_from_distribs_series,
+                            write_curlywhirly)
 
 
 class PlotTest(unittest.TestCase):
@@ -39,7 +40,7 @@ class PlotTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_boxplot_from_distribs(distribs, fhand=fhand,
                                        mpl_params=mpl_params)
-    
+
     def test_plot_boxplot_series(self):
         distribs = numpy.array([[0, 0, 0, 0, 0, 1, 3, 5, 3, 1],
                                 [0, 0, 0, 0, 1, 3, 5, 3, 1, 0],
@@ -48,7 +49,7 @@ class PlotTest(unittest.TestCase):
         mpl_params = {'set_xlabel': {'args': ['Samples'], 'kwargs': {}},
                       'set_ylabel': {'args': ['Depth'],
                                      'kwargs': {}}}
-        distribs_series = [distribs[[0,2],:], distribs[[1,3],:]]
+        distribs_series = [distribs[[0, 2], :], distribs[[1, 3], :]]
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_boxplot_from_distribs_series(distribs_series, fhand=fhand,
                                               mpl_params=mpl_params)
@@ -92,6 +93,16 @@ class PlotTest(unittest.TestCase):
             plot_hist2d(distrib, xbins, ybins, fhand=fhand,
                         colorbar_label='Counts')
 
+    def test_curlywhirly(self):
+        coords = numpy.random.normal(size=(3, 4))
+        labels = ['acc1', 'acc2', 'acc3']
+        fhand = StringIO()
+        write_curlywhirly(fhand, labels, coords)
+        assert fhand.getvalue().splitlines()[0].startswith('label\tdim_0\t')
+        classes = {'class': ['class1', 'class2', 'class2']}
+        fhand = StringIO()
+        write_curlywhirly(fhand, labels, coords, classifications=classes)
+        assert fhand.getvalue().splitlines()[1].startswith('class1\tacc1\t')
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PlotTest.test_plot_boxplot_series']

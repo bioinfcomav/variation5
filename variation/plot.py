@@ -323,3 +323,38 @@ def plot_lines(x, y, fhand=None, axes=None,
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return result
+
+
+def _write_line(fhand, items, sep):
+    line = sep.join(items)
+    fhand.write(line)
+    fhand.write('\n')
+
+
+def write_curlywhirly(fhand, labels, coords, dim_labels=None,
+                      classifications=None):
+    sep = '\t'
+
+    header_items = []
+
+    if classifications is not None:
+        categories = list(classifications.keys())
+        cat_labels = ['categories:%s' % cat for cat in categories]
+        header_items.extend(cat_labels)
+
+    header_items.append('label')
+    if dim_labels is None:
+        dim_labels = ['dim_%i' % idx for idx in range(coords.shape[1])]
+    header_items.extend(dim_labels)
+
+    _write_line(fhand, header_items, sep)
+
+    for idx, (label, coord) in enumerate(zip(labels, coords)):
+        line_items = []
+        if classifications is not None:
+            classes = [classifications[cat][idx] for cat in categories]
+            line_items.extend(classes)
+
+        line_items.append(label)
+        line_items.extend(map(str, coord))
+        _write_line(fhand, line_items, sep)

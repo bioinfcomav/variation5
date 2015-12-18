@@ -5,6 +5,8 @@ import operator
 
 import numpy
 from scipy.stats.stats import chisquare
+from allel.stats.ld import rogers_huff_r
+from allel.model.ndarray import GenotypeArray
 
 from variation import MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH
 from variation.matrix.stats import counts_by_row
@@ -12,6 +14,8 @@ from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.utils.misc import remove_nans
 from variation.variations.index import PosIndex
+
+
 
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -842,7 +846,6 @@ class PositionalStatsCalculator:
 
     def write(self, fhand, track_name, track_description,
               buffer_size=1000, track_type='bedgraph', **kwargs):
-        # TODO: Fix error. writes a line for each position
         get_lines = {'wig': self.to_wig, 'bedgraph': self.to_bedGraph}
         buffer = self._get_track_definition(track_type, track_name,
                                             track_description, **kwargs) + '\n'
@@ -857,3 +860,48 @@ class PositionalStatsCalculator:
         if lines != buffer_size:
             fhand.write(buffer)
         fhand.flush()
+
+
+def _calc_r2(gts):
+    gts = GenotypeArray(gts)
+    gns = gts.to_n_alt(fill=MISSING_VALUES[int])
+    return rogers_huff_r(gns) ** 2
+
+
+def calc_r2_windows(variations, window_size, step=None):
+    if step is None:
+        step = window_size
+    chrom = variations[CHROM_FIELD]
+    if is_dataset(chrom):
+        chrom = chrom[:]
+    pos = variations[POS_FIELD]
+    if is_dataset(pos):
+        pos = pos[:]
+    gts = variations[GT_FIELD]
+    
+    window_chrom = []
+    window_pos = []
+    window_r2 = []
+    
+    chrom_names = numpy.unique(chrom)
+    
+    for chrom_name in chrom_names:
+        chrom_mask = chrom == chrom_name
+        chrom_pos = pos[chrom_mask]
+        if isinstance(chrom_pos, int) or len(chrom_pos.shape) == 0:
+            continue
+        for position in range(chrom_pos[0], chrom_pos[-1], step):
+            start, stop = position, position + window_size
+            window_mask = numpy.logical_and(pos > start, pos <= stop)
+            chrom_window_mask = numpy.logical_and(window_mask, chrom_mask)
+
+            if not numpy.any(chrom_window_mask):
+                continue
+
+            r2 = numpy.mean(_calc_r2(gts[chrom_window_mask, :, :]))
+            
+            window_chrom.append(chrom_name)
+            window_pos.append(start)
+            window_r2.append(r2)
+    return (numpy.array(window_chrom), numpy.array(window_pos),
+            numpy.array(window_r2))

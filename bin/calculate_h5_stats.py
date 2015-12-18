@@ -40,7 +40,8 @@ from variation.variations.stats import (calc_maf, histogram_for_chunks,
                                         hist2d_gq_allele_observations,
                                         calc_inbreeding_coef, GQ_FIELD,
                                         calc_hwe_chi2_test, calc_expected_het,
-                                        CHROM_FIELD, POS_FIELD)
+                                        CHROM_FIELD, POS_FIELD,
+    calc_r2_windows)
 
 
 def _setup_argparse(**kwargs):
@@ -121,7 +122,7 @@ def _parse_args(parser):
 
 def _log_info(logging, msg, print_time=True):
     if print_time:
-        msg += ' {}'.format(time.strftime("%Y-%m-%d %H:%M"))
+        msg = '{} {}'.format(time.strftime("%Y-%m-%d %H:%M"), msg)
     logging.info(msg)
     
 
@@ -150,45 +151,45 @@ def create_plots():
     plot_maf(h5, data_dir, chunk_size=chunk_size, window_size=manhattan_ws,
              min_num_genotypes=min_num_genotypes, write_bg=write_bg,
              calc_genome_wise=calc_genome_wise)
-       
+        
     _log_info(logging, 'Plotting Depth based MAF per Sample Distributions')
     plot_maf_depth(h5, data_dir, min_depth=args['min_depth'],
                    chunk_size=chunk_size)
-         
+          
     _log_info(logging, 'Plotting Missing Genotype rate per SNP')
     plot_missing_gt_rate_per_snp(h5, data_dir, chunk_size)
-         
+          
     _log_info(logging, 'Plotting Observed Heterozygosity')
     plot_obs_het(h5, data_dir, chunk_size=chunk_size,
                  min_num_genotypes=min_num_genotypes)
-         
+          
     _log_info(logging, 'Plotting SNP Density Distribution')
     plot_snp_dens_distrib(h5, args['window_size'], data_dir, write_bg=write_bg)
-         
+          
     _log_info(logging, 'Plotting Depth Distribution')
     plot_call_field_distribs_per_gt_type(h5, field=DP_FIELD,
                                          max_value=args['max_depth'],
                                          data_dir=data_dir,
                                          chunk_size=chunk_size)
-         
+          
     _log_info(logging, 'Plotting Genotypes Quality Distribution')
     plot_call_field_distribs_per_gt_type(h5, field=GQ_FIELD,
                                          max_value=args['max_gq'],
                                          data_dir=data_dir,
                                          chunk_size=chunk_size)
-         
+          
     _log_info(logging, 'Plotting Genotypes Statistics per Sample')
     plot_gt_stats_per_sample(h5, data_dir, chunk_size=chunk_size)
-          
+           
     _log_info(logging, 'Plotting number of Samples with higher Depth Distribution')
     plot_called_gts_distrib_per_depth(h5, args['depths'], data_dir,
                                       chunk_size=SNPS_PER_CHUNK)
-          
+           
     _log_info(logging, 'Plotting Hardy-Weinberg Equilibrium')
     plot_hwe(h5, args['max_num_alleles'], data_dir, ploidy=2,
              min_num_genotypes=min_num_genotypes, chunk_size=chunk_size)
+          
          
-        
     if calc_genome_wise:
         _log_info(logging, 'Plotting Nucleotide Diversity Measures')
         plot_nucleotide_diversity_measures(h5, args['max_num_alleles'],
@@ -196,11 +197,14 @@ def create_plots():
                                            data_dir, chunk_size=chunk_size,
                                            write_bg=write_bg,
                                            min_num_genotypes=min_num_genotypes)
+        
+        _log_info(logging, 'Plotting LD r2')
+        plot_r2(h5, manhattan_ws, data_dir, write_bg=write_bg)
             
     _log_info(logging, 'Plotting Allele Observations Distribution 2 Dimensions')
     plot_allele_obs_distrib_2D(h5, data_dir, args['max_allele_counts'],
                                chunk_size=chunk_size)
-        
+         
     _log_info(logging, 'Plotting Inbreeding Coefficient')
     plot_inbreeding_coefficient(h5, args['max_num_alleles'],
                                 data_dir, window_size=args['manhattan_ws'],
@@ -714,6 +718,46 @@ def plot_nucleotide_diversity_measures(variations, max_num_alleles,
     manhattan_plot(pi.chrom, pi.pos, pi.stat, axes=axes, ylim=0, marker=marker,
                    mpl_params=mpl_params)
     canvas.print_figure(open(join(data_dir, 'nucleotide_diversity.png'), 'w'))
+
+
+def plot_r2(variations, window_size, data_dir, write_bg=False):
+    
+    # Calculate LD r2 parameter in windows
+    chrom, pos, r2 = calc_r2_windows(variations, window_size=window_size)
+    
+    # Plot r2 distribution
+    fpath = os.path.join(data_dir, 'r2_distrib.png')
+    distrib, bins = histogram(r2, n_bins=50, range_=(0, 1))
+    title = 'r2 distribution in windows of {} bp'.format(window_size)
+    mpl_params={'set_xlabel': {'args': ['r2'], 'kwargs': {}},
+                'set_ylabel': {'args': ['Number of windows'], 'kwargs': {}},
+                'set_title': {'args': [title], 'kwargs': {}}}
+    plot_distrib(distrib, bins, fhand=open(fpath, 'w'), figsize=(7, 7),
+                 mpl_params=mpl_params)
+    
+    # Manhattan plot
+    mask = numpy.logical_not(numpy.isnan(r2))
+    chrom = chrom[mask]
+    pos = pos[mask]
+    r2 = r2[mask]
+    fpath = os.path.join(data_dir, 'r2_manhattan.png')
+    title = 'r2 along genome in windows of {} bp'.format(window_size)
+    mpl_params={'set_xlabel': {'args': ['Chromosome'], 'kwargs': {}},
+                'set_ylabel': {'args': ['r2'], 'kwargs': {}},
+                'set_title': {'args': [title], 'kwargs': {}}}
+    manhattan_plot(chrom, pos, r2, fhand=open(fpath, 'w'), figsize=(15, 7),
+                   marker='k', mpl_params=mpl_params)
+    
+    # Write bg
+    if write_bg:
+        fpath = os.path.join(data_dir, 'r2_windows_{}.png'.format(window_size))
+        bg_fhand = open(fpath, 'w')
+        pos_r2 = PositionalStatsCalculator(chrom, pos, r2,
+                                           window_size=window_size,
+                                           step=window_size,
+                                           take_windows=False)
+        description = 'mean r2 in windows of {} bp'.format(window_size)
+        pos_r2.write(bg_fhand, 'r2', description, track_type='bedgraph')
 
 
 if __name__ == '__main__':

@@ -26,8 +26,8 @@ def _calc_sort_order_by_chrom(variations):
 
 
 def _sorted_chunks(n_snps, chunk_size, idx_order, variations):
-    for i in range(0, n_snps, chunk_size):
-        idx = array('L', itertools.islice(idx_order, i, i + chunk_size))
+    for _ in range(0, n_snps, chunk_size):
+        idx = array('L', itertools.islice(idx_order, chunk_size))
         yield variations.get_chunk(idx)
 
 

@@ -98,7 +98,8 @@ class PlotTest(unittest.TestCase):
         labels = ['acc1', 'acc2', 'acc3']
         fhand = StringIO()
         write_curlywhirly(fhand, labels, coords)
-        assert fhand.getvalue().splitlines()[0].startswith('label\tdim_0\t')
+        expected = 'categories:all\tlabel\tdim_0\t'
+        assert fhand.getvalue().splitlines()[0].startswith(expected)
         classes = {'class': ['class1', 'class2', 'class2']}
         fhand = StringIO()
         write_curlywhirly(fhand, labels, coords, classifications=classes)

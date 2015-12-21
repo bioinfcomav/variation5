@@ -337,10 +337,12 @@ def write_curlywhirly(fhand, labels, coords, dim_labels=None,
 
     header_items = []
 
-    if classifications is not None:
-        categories = list(classifications.keys())
-        cat_labels = ['categories:%s' % cat for cat in categories]
-        header_items.extend(cat_labels)
+    if classifications is None:
+        classifications = {'all': ['all'] * len(labels)}
+
+    categories = list(classifications.keys())
+    cat_labels = ['categories:%s' % cat for cat in categories]
+    header_items.extend(cat_labels)
 
     header_items.append('label')
     if dim_labels is None:

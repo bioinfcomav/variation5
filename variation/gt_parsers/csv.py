@@ -136,6 +136,7 @@ class CSVParser():
     def variations(self):
         max_field_lens = self.max_field_lens
         max_field_str_lens = self.max_field_str_lens
+        max_field_str_lens['ref'] = 1
         for line in self.fhand:
             items = line.split(self._sep)
             items[-1] = items[-1].strip()
@@ -145,6 +146,9 @@ class CSVParser():
             var_info = self._var_info[snp_id]
 
             alt_alleles = list(alleles[1:]) if len(alleles) > 1 else None
+            ref_allele = alleles[0]
+            if max_field_str_lens['ref'] < len(ref_allele):
+                max_field_str_lens['ref'] = len(ref_allele)
 
             if alt_alleles:
                 if max_field_lens['alt'] < len(alt_alleles):

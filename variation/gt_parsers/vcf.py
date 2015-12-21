@@ -3,13 +3,13 @@ import re
 import subprocess
 from multiprocessing import Pool
 
-import numpy
 
-from variation import (MISSING_VALUES, MISSING_INT, MISSING_FLOAT,
-                       SNPS_PER_CHUNK)
+from variation import (MISSING_VALUES, SNPS_PER_CHUNK)
 from variation.utils.compressed_queue import CCache
 from variation.iterutils import group_items
 
+from variation.gt_parsers.vcf_field_parsers import (_parse_info,
+                                                    _parse_calls)
 # Missing docstring
 # pylint: disable=C0111
 
@@ -26,53 +26,6 @@ def read_gzip_file(fpath, pgiz=False):
         yield line
 
 
-MAPPED_INTS = {str(i).encode(): i for i in range(100)}
-MAPPED_INTS[None] = MISSING_INT
-MAPPED_INTS[''] = MISSING_INT
-MAPPED_INTS[b''] = MISSING_INT
-MAPPED_INTS['.'] = MISSING_INT
-MAPPED_INTS[b'.'] = MISSING_INT
-
-MAPPED_FLOATS = {}
-MAPPED_FLOATS[None] = MISSING_FLOAT
-MAPPED_FLOATS[''] = MISSING_FLOAT
-MAPPED_FLOATS['.'] = MISSING_FLOAT
-MAPPED_FLOATS[b'.'] = MISSING_FLOAT
-
-
-def _to_int(string):
-    try:
-        return MAPPED_INTS[string]
-    except KeyError:
-        return int(string)
-
-
-def _to_float(string):
-    try:
-        return MAPPED_FLOATS[string]
-    except KeyError:
-        return float(string)
-
-
-TYPE_CASTS = {int: _to_int,
-              float: _to_float,
-              numpy.int8: _to_int, 'int8': _to_int,
-              numpy.int16: _to_int, 'int16': _to_int,
-              numpy.int32: _to_int, 'int32': _to_int,
-              numpy.float16: _to_float, 'float16': _to_float,
-              numpy.float32: _to_float, 'float32': _to_float}
-
-
-def _get_type_cast(dtype):
-    if dtype == 'str':
-        type_ = None
-    elif dtype == 'bool':
-        type_ = None
-    else:
-        type_ = TYPE_CASTS[dtype]
-    return type_
-
-
 def _gt_data_to_list_old(mapper_function, sample_gt):
     if sample_gt is None:
         # we cannot now at this point how many items compose a gt for a sample
@@ -83,34 +36,6 @@ def _gt_data_to_list_old(mapper_function, sample_gt):
     sample_gt = [mapper_function(item) for item in sample_gt]
     return sample_gt
 
-
-def _gt_data_to_list(gt_data, mapper_function, missing_val, max_len_tip=1):
-    max_len = None
-
-    gt_parsed_data = []
-    for gt_sample_data in gt_data:
-        if max_len is None:
-            # we're in the first item
-            if gt_sample_data is None:
-                # it might be just one. that works in our data most of the time
-                max_len = max_len_tip
-                missing_item = [missing_val] * max_len
-            else:
-                gt_sample_data_parsed = gt_sample_data.split(b',')
-                max_len = len(gt_sample_data_parsed)
-                missing_item = [missing_val] * max_len
-        if gt_sample_data is None:
-            gt_sample_data = missing_item
-        else:
-            gt_sample_data = gt_sample_data.split(b',')
-            gt_sample_data = [mapper_function(item) for item in gt_sample_data]
-            if len(gt_sample_data) > max_len:
-                max_len = len(gt_sample_data)
-                missing_item = [missing_val] * max_len
-                return _gt_data_to_list(gt_data, mapper_function, missing_val,
-                                        max_len_tip=max_len)
-        gt_parsed_data.append(gt_sample_data)
-    return gt_parsed_data
 
 
 def _detect_fields_in_vcf(metadata, fields):
@@ -131,8 +56,8 @@ class VCFParser():
 
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
-                 max_field_lens=None, max_field_str_lens=None, max_n_vars=None,
-                 n_threads=None,):
+                 max_field_lens=None, max_n_vars=None,
+                 n_threads=None):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
@@ -161,30 +86,15 @@ class VCFParser():
         else:
             user_max_field_lens = max_field_lens
         self._max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
-
-        if max_field_str_lens is None:
-            user_max_field_str_lens = {}
-        else:
-            user_max_field_str_lens = max_field_str_lens
-
         self._max_field_str_lens = {'FILTER': 0, 'INFO': {},
-                                    'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
-
+                                   'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
         self._init_max_field_lens()
-
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
                 for key2, value2 in value1.items():
                     self._max_field_lens[key1][key2] = value2
             else:
                 self._max_field_lens[key1] = value1
-
-        for key1, value1 in user_max_field_str_lens.items():
-            if isinstance(value1, dict):
-                for key2, value2 in value1.items():
-                    self._max_field_str_lens[key1][key2] = value2
-            else:
-                self._max_field_str_lens[key1] = value1
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
@@ -234,12 +144,11 @@ class VCFParser():
         ploidy = None
         for line in self._fhand:
             read_lines.append(line)
-            line = line.strip()
             if line.startswith(b'#'):
                 continue
             gts = line.split(b'\t')[9:]
             for gt in gts:
-                if gt == b'.':
+                if gt is b'.':
                     continue
                 gt = gt.split(b':')[0]
                 alleles = gt.split(b'/') if b'/' in gt else gt.split(b'|')
@@ -374,163 +283,6 @@ class VCFParser():
                 if snp is None:
                     continue
                 yield snp
-
-
-PARSED_GT_FMT_CACHE = {}
-
-
-def _parse_gt_fmt(fmt, metadata):
-    global PARSED_GT_FMT_CACHE
-    orig_fmt = fmt
-    try:
-        return PARSED_GT_FMT_CACHE[fmt]
-    except KeyError:
-        pass
-
-    meta = metadata['CALLS']
-    format_ = []
-    for fmt in fmt.split(b':'):
-        try:
-            fmt_meta = meta[fmt]
-        except KeyError:
-            msg = 'FORMAT metadata was not defined in header: '
-            msg += fmt.decode('utf-8')
-            raise RuntimeError(msg)
-        type_cast = _get_type_cast(fmt_meta['dtype'])
-        format_.append((fmt, type_cast,
-                        fmt_meta['Number'] != 1,  # Is list
-                        fmt_meta,
-                        MISSING_VALUES[fmt_meta['dtype']]))
-    PARSED_GT_FMT_CACHE[orig_fmt] = format_
-    return format_
-
-PARSED_GT_CACHE = {}
-
-
-def _parse_gt(gt, empty_gt):
-    global PARSED_GT_CACHE
-    gt_str = gt
-    try:
-        return PARSED_GT_CACHE[gt]
-    except KeyError:
-        pass
-
-    if gt is None:
-        gt = empty_gt
-    elif b'|' in gt:
-        # is_phased = True
-        gt = gt.split(b'|')
-    else:
-        # is_phased = False
-        gt = gt.split(b'/')
-    if gt is not None:
-        gt = [MISSING_INT if allele == b'.' else int(allele) for allele in gt]
-    PARSED_GT_CACHE[gt_str] = gt
-    return gt
-
-
-def _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
-                 metadata, empty_gt):
-    fmt = _parse_gt_fmt(fmt, metadata)
-    empty_call = [None] * len(fmt)
-    calls = [empty_call if gt == b'.' else gt.split(b':') for gt in calls]
-    for call_data in calls:
-        if len(call_data) < len(fmt):
-            call_data.append(None)
-    calls = zip(*calls)
-
-    parsed_gts = []
-    ignored_fields = ignored_fields
-    kept_fields = kept_fields
-    for fmt_data, gt_data in zip(fmt, calls):
-        if fmt_data[0] in ignored_fields:
-            continue
-        if kept_fields and fmt_data[0] not in kept_fields:
-            continue
-        if fmt_data[0] == b'GT':
-            gt_data = [_parse_gt(sample_gt, empty_gt) for sample_gt in gt_data]
-        else:
-            if fmt_data[2]:  # the info for a sample in this field is
-                            # or should be a list
-                # gt_data = [_gt_data_to_list(fmt_data[1], sample_gt) for sample_gt in gt_data]
-                gt_data = _gt_data_to_list(gt_data, fmt_data[1],
-                                           fmt_data[4])
-            else:
-                gt_data = [fmt_data[1](sample_gt) for sample_gt in gt_data]
-
-        meta = fmt_data[3]
-        if not isinstance(meta['Number'], int):
-            max_len = max([0 if data is None else len(data) for data in gt_data])
-            if max_field_lens['CALLS'][fmt_data[0]] < max_len:
-                max_field_lens['CALLS'][fmt_data[0]] = max_len
-            if 'str' in meta['dtype'] and fmt_data[0] != b'GT':
-                # if your file has variable length str fields you
-                # should check and fix the following part of the code
-                raise NotImplementedError('Fixme')
-
-        parsed_gts.append((fmt_data[0], gt_data))
-
-    return parsed_gts
-
-PARSED_INFO_TYPE_CACHE = {}
-
-
-def _parse_info(info, ignored_fields, metadata, max_field_lens,
-                max_field_str_lens):
-    global PARSED_INFO_TYPE_CACHE
-    if b'.' == info:
-        return None
-    infos = info.split(b';')
-    parsed_infos = {}
-    for info in infos:
-        if b'=' in info:
-            key, val = info.split(b'=', 1)
-        else:
-            key, val = info, True
-        if key in ignored_fields:
-            continue
-        try:
-            meta = metadata['INFO'][key]
-        except KeyError:
-            msg = 'INFO metadata was not defined in header: '
-            msg += key.decode('utf-8')
-            raise RuntimeError(msg)
-        try:
-            type_ = PARSED_INFO_TYPE_CACHE[key]
-        except KeyError:
-            try:
-                type_ = _get_type_cast(meta['dtype'])
-                PARSED_INFO_TYPE_CACHE[key] = type_
-            except KeyError:
-                print(info)
-                print(metadata['INFO'])
-                print(meta)
-                raise
-
-        if isinstance(val, bool):
-            pass
-        elif b',' in val:
-            if type_ is None:
-                val = val.split(b',')
-            else:
-                val = [type_(val) for val in val.split(b',')]
-            val_to_check_len = val
-        else:
-            if type_ is not None:
-                val = type_(val)
-            val_to_check_len = [val]
-        if not isinstance(meta['Number'], int):
-            if max_field_lens['INFO'][key] < len(val_to_check_len):
-                max_field_lens['INFO'][key] = len(val_to_check_len)
-            if 'str' in meta['dtype']:
-                max_str = max([len(val_) for val_ in val_to_check_len])
-                if max_field_str_lens['INFO'][key] < max_str:
-                    max_field_str_lens['INFO'][key] = max_str
-            if not isinstance(val, list):
-                val = val_to_check_len
-
-        parsed_infos[key] = val
-    return parsed_infos
 
 
 class VCFLineParser:

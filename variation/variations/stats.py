@@ -16,8 +16,6 @@ from variation.utils.misc import remove_nans
 from variation.variations.index import PosIndex
 
 
-
-
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
 DEF_NUM_BINS = 20
 GT_FIELD = '/calls/GT'

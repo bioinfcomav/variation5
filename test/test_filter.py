@@ -22,8 +22,9 @@ from variation.variations.filters import (filter_mafs, filter_obs_het,
                                           keep_biallelic,
                                           filter_monomorphic_snps,
                                           keep_biallelic_and_monomorphic,
-                                          filter_samples)
+                                          filter_samples, filter_unlinked_vars)
 from variation.iterutils import first
+from variation.variations.stats import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD)
 
 
 class FilterTest(unittest.TestCase):
@@ -66,27 +67,27 @@ class FilterTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
                            [[0, 0], [0, 0], [0, 0], [-1, -1], [-1, -1]],
                            [[0, 0], [-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
-        variations['/calls/GT'] = gts
+        variations[GT_FIELD] = gts
 
         expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]])
         filtered = filter_min_called_gts(variations, min_called=5, rates=False)
-        assert numpy.all(filtered['/calls/GT'] == expected)
+        assert numpy.all(filtered[GT_FIELD] == expected)
 
         expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
                                [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
                                [[0, 0], [0, 0], [0, 0], [-1, -1], [-1, -1]]])
         filtered = filter_min_called_gts(variations, min_called=2, rates=False)
-        assert numpy.all(filtered['/calls/GT'] == expected)
+        assert numpy.all(filtered[GT_FIELD] == expected)
 
         expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
                                 [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
                                 [[0, 0], [0, 0], [0, 0], [-1, -1], [-1, -1]]])
         filtered = filter_min_called_gts(variations, min_called=0.4,
                                          rates=True)
-        assert numpy.all(filtered['/calls/GT'] == expected)
+        assert numpy.all(filtered[GT_FIELD] == expected)
 
         filtered = filter_min_called_gts(variations, min_called=0, rates=True)
-        assert numpy.all(filtered['/calls/GT'] == variations['/calls/GT'])
+        assert numpy.all(filtered[GT_FIELD] == variations[GT_FIELD])
 
         # With hdf5 file
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -95,7 +96,7 @@ class FilterTest(unittest.TestCase):
         filtered_h5_2 = filter_min_called_gts(hdf5, min_called=0.4, rates=True,
                                               by_chunk=False)
 
-        res = filtered_h5_1['/calls/GT'] == filtered_h5_2['/calls/GT']
+        res = filtered_h5_1[GT_FIELD] == filtered_h5_2[GT_FIELD]
         assert numpy.all(res)
 
     def test_filter_mafs_2(self):
@@ -105,12 +106,12 @@ class FilterTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
                            [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
                            [[0, 0], [-1, -1], [0, 1], [0, 0], [1, 1]]])
-        variations['/calls/GT'] = gts
+        variations[GT_FIELD] = gts
         filtered = filter_mafs(variations, min_num_genotypes=5)
-        assert numpy.all(filtered['/calls/GT'] == gts)
+        assert numpy.all(filtered[GT_FIELD] == gts)
 
         filtered = filter_mafs(variations, min_maf=0, min_num_genotypes=5)
-        assert numpy.all(filtered['/calls/GT'] == gts[[0, 1, 2]])
+        assert numpy.all(filtered[GT_FIELD] == gts[[0, 1, 2]])
 
         # without missing values
         variations = VariationsArrays()
@@ -118,27 +119,27 @@ class FilterTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
                            [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
                            [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
-        variations['/calls/GT'] = gts
+        variations[GT_FIELD] = gts
 
         expected = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
                                [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
                                [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
         filtered = filter_mafs(variations, max_maf=0.8, min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == expected)
+        assert numpy.all(filtered[GT_FIELD] == expected)
 
         expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
                                [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
         filtered = filter_mafs(variations, min_maf=0.6, max_maf=0.8,
                                min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == expected)
+        assert numpy.all(filtered[GT_FIELD] == expected)
 
         expected = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]]])
         filtered = filter_mafs(variations, max_maf=0.5, min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == expected)
+        assert numpy.all(filtered[GT_FIELD] == expected)
 
         filtered = filter_mafs(variations, min_maf=0.5, max_maf=1,
                                min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == variations['/calls/GT'])
+        assert numpy.all(filtered[GT_FIELD] == variations[GT_FIELD])
 
         # With hdf5 files
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -146,7 +147,7 @@ class FilterTest(unittest.TestCase):
                                     by_chunk=True)
         filtered_h5_2 = filter_mafs(hdf5, min_maf=0.6, max_maf=0.9,
                                     by_chunk=False)
-        res = filtered_h5_1['/calls/GT'] == filtered_h5_2['/calls/GT']
+        res = filtered_h5_1[GT_FIELD] == filtered_h5_2[GT_FIELD]
         assert numpy.all(res)
 
     def test_filter_obs_het(self):
@@ -155,27 +156,27 @@ class FilterTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
                            [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
                            [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
-        variations['/calls/GT'] = gts
+        variations[GT_FIELD] = gts
 
         filtered = filter_obs_het(variations, min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == gts)
+        assert numpy.all(filtered[GT_FIELD] == gts)
 
         filtered = filter_obs_het(variations, min_het=0.2, min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == gts[[0, 2, 3]])
+        assert numpy.all(filtered[GT_FIELD] == gts[[0, 2, 3]])
 
         filtered = filter_obs_het(variations, max_het=0.1, min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == gts[[1]])
+        assert numpy.all(filtered[GT_FIELD] == gts[[1]])
 
         filtered = filter_obs_het(variations, max_het=0.3, min_het=0.2,
                                   min_num_genotypes=0)
-        assert numpy.all(filtered['/calls/GT'] == gts[[0, 2, 3]])
+        assert numpy.all(filtered[GT_FIELD] == gts[[0, 2, 3]])
 
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         filtered_h5_1 = filter_obs_het(hdf5, min_het=0.6, max_het=0.9,
                                        by_chunk=True)
         filtered_h5_2 = filter_obs_het(hdf5, min_het=0.6, max_het=0.9,
                                        by_chunk=False)
-        res = filtered_h5_1['/calls/GT'] == filtered_h5_2['/calls/GT']
+        res = filtered_h5_1[GT_FIELD] == filtered_h5_2[GT_FIELD]
         assert numpy.all(res)
 
     def test_filter_quality_genotype(self):
@@ -184,31 +185,31 @@ class FilterTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
         gqs = numpy.array([[10, 20, 5, 20, 25],
                            [10, 2, 5, 15, 5]])
-        variations['/calls/GT'] = gts
-        variations['/calls/GQ'] = gqs
+        variations[GT_FIELD] = gts
+        variations[GQ_FIELD] = gqs
 
         set_low_qual_gts_to_missing(variations)
-        filtered = variations['/calls/GT']
+        filtered = variations[GT_FIELD]
         assert numpy.all(filtered == gts)
 
         expected = numpy.array([[[0, 0], [1, 1], [-1, -1], [1, 1], [0, 0]],
                                 [[0, 0], [-1, -1], [-1, -1], [0, 0],
                                  [-1, -1]]])
         set_low_qual_gts_to_missing(variations, min_qual=10, by_chunk=True)
-        assert numpy.all(variations['/calls/GT'] == expected)
+        assert numpy.all(variations[GT_FIELD] == expected)
 
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
                            [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
         gqs = numpy.array([[10, 20, 5, 20, 25],
                            [10, 2, 5, 15, 5]])
-        variations['/calls/GT'] = gts
-        variations['/calls/GQ'] = gqs
+        variations[GT_FIELD] = gts
+        variations[GQ_FIELD] = gqs
         set_low_qual_gts_to_missing(variations, min_qual=10, by_chunk=False)
-        assert numpy.all(variations['/calls/GT'] == expected)
+        assert numpy.all(variations[GT_FIELD] == expected)
 
         set_low_qual_gts_to_missing(variations, min_qual=100)
-        assert numpy.all(variations['/calls/GT'] == -1)
+        assert numpy.all(variations[GT_FIELD] == -1)
 
         h1_fhand = NamedTemporaryFile(suffix='.h5')
         h2_fhand = NamedTemporaryFile(suffix='.h5')
@@ -219,7 +220,7 @@ class FilterTest(unittest.TestCase):
         set_low_qual_gts_to_missing(h5_1, min_qual=0, by_chunk=True)
         h5_2 = VariationsH5(h2_fhand.name, mode='r+')
         set_low_qual_gts_to_missing(h5_2, min_qual=0, by_chunk=False)
-        assert numpy.all(h5_1['/calls/GT'][:] == h5_2['/calls/GT'][:])
+        assert numpy.all(h5_1[GT_FIELD][:] == h5_2[GT_FIELD][:])
 
     def test_filter_quality_snps(self):
         variations = VariationsArrays()
@@ -227,21 +228,21 @@ class FilterTest(unittest.TestCase):
                            [[0, 0], [0, 0]], [[0, 0], [0, 0]],
                            [[0, 1], [0, 0]]])
         snp_quals = numpy.array([5, 10, 15, 5, 20])
-        variations['/calls/GT'] = gts
+        variations[GT_FIELD] = gts
         variations['/variations/qual'] = snp_quals
 
         filtered = filter_snps_by_qual(variations)
         filtered_qual = filtered['/variations/qual']
-        filtered_gts = filtered['/calls/GT']
+        filtered_gts = filtered[GT_FIELD]
         assert numpy.all(variations['/variations/qual'] == filtered_qual)
-        assert numpy.all(variations['/calls/GT'] == filtered_gts)
+        assert numpy.all(variations[GT_FIELD] == filtered_gts)
 
         expected_gts = numpy.array([[[0, 0], [0, 0]],
                                     [[0, 1], [0, 0]]])
         exp_snp_quals = numpy.array([15, 20])
         filtered = filter_snps_by_qual(variations, min_qual=15)
         assert numpy.all(filtered['/variations/qual'] == exp_snp_quals)
-        assert numpy.all(filtered['/calls/GT'] == expected_gts)
+        assert numpy.all(filtered[GT_FIELD] == expected_gts)
 
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         kept_fields = ['/variations/qual']
@@ -267,18 +268,18 @@ class FilterTest(unittest.TestCase):
 
     def test_filter_quality_dp(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = ['/calls/DP', '/calls/GT']
+        kept_fields = ['/calls/DP', GT_FIELD]
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
         set_low_dp_gts_to_missing(chunk, min_dp=300)
-        assert numpy.all(chunk['/calls/GT'][0][147] == [-1, -1])
+        assert numpy.all(chunk[GT_FIELD][0][147] == [-1, -1])
 
         set_low_dp_gts_to_missing(chunk)
-        assert numpy.all(chunk['/calls/GT'].shape[0] == 200)
+        assert numpy.all(chunk[GT_FIELD].shape[0] == 200)
 
     def test_filter_monomorfic(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = ['/calls/GT']
+        kept_fields = [GT_FIELD]
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
         flt_chunk = filter_monomorphic_snps(chunk, min_maf=0.9,
@@ -287,13 +288,40 @@ class FilterTest(unittest.TestCase):
 
     def test_filter_biallelic(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = ['/calls/GT']
+        kept_fields = [GT_FIELD]
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
         flt_chunk = keep_biallelic_and_monomorphic(chunk)
-        assert flt_chunk['/calls/GT'].shape == (200, 153, 2)
+        assert flt_chunk[GT_FIELD].shape == (200, 153, 2)
         flt_chunk = keep_biallelic(chunk)
-        assert flt_chunk['/calls/GT'].shape == (174, 153, 2)
+        assert flt_chunk[GT_FIELD].shape == (174, 153, 2)
+    
+    def test_filter_unlinked_vars(self):
+        varis = VariationsArrays()
+        varis[GT_FIELD] = numpy.array([[[0, 0], [0, 0], [0, 1]],
+                                      [[0, 0], [0, 0], [0, 1]],
+                                      [[1, 1], [0, 1], [0, 0]],
+                                      [[1, 1], [0, 1], [0, 0]]])
+        varis[CHROM_FIELD] = numpy.array([b'chr1'] * 4)
+        varis[POS_FIELD] = numpy.array([1, 10, 100, 110])
+        expected = [[[0, 0], [0, 0], [0, 1]]]
+        filtered_vars = filter_unlinked_vars(varis, window_size=50,
+                                             by_chunk=False)
+        assert numpy.all(filtered_vars[GT_FIELD] == expected)
+        
+        filtered_vars = filter_unlinked_vars(varis, window_size=50,
+                                             by_chunk=False, r2_threshold=1)
+        assert numpy.all(filtered_vars[GT_FIELD] == varis[GT_FIELD])
+        
+        expected = [[[0, 0], [0, 0], [0, 1]], [[1, 1], [0, 1], [0, 0]]]
+        filtered_vars = filter_unlinked_vars(varis, window_size=50,
+                                             by_chunk=False, r2_threshold=.9)
+        assert numpy.all(filtered_vars[GT_FIELD] == expected)
+        
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        vars1 = filter_unlinked_vars(hdf5, 1000, by_chunk=True)
+        vars2 = filter_unlinked_vars(hdf5, 1000, by_chunk=False)
+        assert numpy.all(vars1[GT_FIELD] == vars2[GT_FIELD])
 
 
 class FilterSamplesTest(unittest.TestCase):
@@ -302,21 +330,21 @@ class FilterSamplesTest(unittest.TestCase):
         samples = ['1_14_1_gbs', '1_17_1_gbs', '1_18_4_gbs']
         varis = filter_samples(hdf5, samples=samples)
         assert varis.samples == samples
-        assert varis['/calls/GT'].shape == (943, 3, 2)
-        assert varis['/calls/GQ'].shape == (943, 3)
-        assert varis['/variations/chrom'].shape == (943,)
+        assert varis[GT_FIELD].shape == (943, 3, 2)
+        assert varis[GQ_FIELD].shape == (943, 3)
+        assert varis[CHROM_FIELD].shape == (943,)
 
         varis = filter_samples(hdf5, samples=samples, reverse=True,
                                by_chunk=True)
         assert all([sample not in samples for sample in varis.samples])
         n_samples = len(hdf5.samples)
-        assert varis['/calls/GT'].shape == (943, n_samples - 3, 2)
-        assert varis['/calls/GQ'].shape == (943, n_samples - 3)
-        assert varis['/variations/chrom'].shape == (943,)
+        assert varis[GT_FIELD].shape == (943, n_samples - 3, 2)
+        assert varis[GQ_FIELD].shape == (943, n_samples - 3)
+        assert varis[CHROM_FIELD].shape == (943,)
 
         varis2 = filter_samples(hdf5, samples=samples, reverse=True,
                                 by_chunk=False)
-        assert numpy.all(varis['/calls/GT'] == varis2['/calls/GT'])
+        assert numpy.all(varis[GT_FIELD] == varis2[GT_FIELD])
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'FilterSamplesTest']

@@ -136,7 +136,7 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
         colors = cm.rainbow(numpy.linspace(0, 1, n_series))
     if labels is None:
         labels = [str(x) for x in range(n_series)]
-        
+
     for dist_n, (distribs, color) in enumerate(zip(distribs_series, colors)):
         mat = distribs
         if not by_row:
@@ -147,7 +147,7 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
         bxp_stats = _calc_boxplot_stats(mat)
         result = axes.bxp(bxp_stats, positions=positions, patch_artist=True)
         _set_box_color(result, color)
-        
+
     axes.set_xlim(0, positions[-1] + 1)
     xticks = numpy.arange((n_series + 1) / 2.0,
                           (n_series + 1) * (mat.shape[0] + 1) + 1,
@@ -160,8 +160,7 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
     for color, label in zip(colors, labels):
         axes.plot([], c=color, label=label)
     axes.legend()
-    
-    
+
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params['args'], **params['kwargs'])
@@ -184,7 +183,7 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
 
     ticks = numpy.arange(0, bins.shape[0], int(bins.shape[0] / n_ticks))
     axes.set_xticks(bins[ticks])
-    xticklabels = [str(x)[:len(str(x).split('.')[0])+4] for x in bins[ticks]]
+    xticklabels = [str(x)[:len(str(x).split('.')[0]) + 4] for x in bins[ticks]]
     axes.set_xticklabels(xticklabels)
 
     for function_name, params in mpl_params.items():
@@ -324,3 +323,40 @@ def plot_lines(x, y, fhand=None, axes=None,
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return result
+
+
+def _write_line(fhand, items, sep):
+    line = sep.join(items)
+    fhand.write(line)
+    fhand.write('\n')
+
+
+def write_curlywhirly(fhand, labels, coords, dim_labels=None,
+                      classifications=None):
+    sep = '\t'
+
+    header_items = []
+
+    if classifications is None:
+        classifications = {'all': ['all'] * len(labels)}
+
+    categories = list(classifications.keys())
+    cat_labels = ['categories:%s' % cat for cat in categories]
+    header_items.extend(cat_labels)
+
+    header_items.append('label')
+    if dim_labels is None:
+        dim_labels = ['dim_%i' % idx for idx in range(coords.shape[1])]
+    header_items.extend(dim_labels)
+
+    _write_line(fhand, header_items, sep)
+
+    for idx, (label, coord) in enumerate(zip(labels, coords)):
+        line_items = []
+        if classifications is not None:
+            classes = [classifications[cat][idx] for cat in categories]
+            line_items.extend(classes)
+
+        line_items.append(label)
+        line_items.extend(map(str, coord))
+        _write_line(fhand, line_items, sep)

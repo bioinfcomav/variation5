@@ -6,3 +6,7 @@
 variation/*hdf5
 snps.hdf5
 test/test_data/performance/
+build
+*__pycache__*
+variation/gt_parsers/vcf_field_parsers.c
+variation/gt_parsers/vcf_field_parsers.cpython*

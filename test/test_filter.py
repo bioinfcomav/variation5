@@ -12,6 +12,7 @@ from os.path import join
 from tempfile import NamedTemporaryFile
 
 import numpy
+
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (filter_mafs, filter_obs_het,

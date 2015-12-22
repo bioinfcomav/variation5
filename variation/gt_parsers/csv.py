@@ -143,9 +143,16 @@ class CSVParser():
 
             snp_id = items[self._snp_id_column]
             alleles, gts = self._parse_gts(items)
+            if not alleles:
+                if self._ignore_empty_vars:
+                    continue
+                else:
+                    raise RuntimeError('snp {} is empty'.format(snp_id))
+
             var_info = self._var_info[snp_id]
 
             alt_alleles = list(alleles[1:]) if len(alleles) > 1 else None
+
             ref_allele = alleles[0]
             if max_field_str_lens['ref'] < len(ref_allele):
                 max_field_str_lens['ref'] = len(ref_allele)
@@ -156,11 +163,6 @@ class CSVParser():
                 max_len = max(len(allele) for allele in alt_alleles)
                 if max_field_str_lens['alt'] < max_len:
                     max_field_str_lens['alt'] = max_len
-            if not alleles:
-                if self._ignore_empty_vars:
-                    continue
-                else:
-                    raise RuntimeError('snp {} is empty'.format(snp_id))
 
             variation = (var_info['chrom'], var_info['pos'], snp_id,
                          alleles[0], alt_alleles, None, None, None, gts)

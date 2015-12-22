@@ -7,7 +7,8 @@ import numpy
 import h5py
 
 from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT,
-                       DEF_DSET_PARAMS)
+                       DEF_DSET_PARAMS, MISSING_INT, MISSING_STR,
+    MISSING_FLOAT)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
@@ -196,7 +197,6 @@ class _ChunkGenerator:
 
     @property
     def chunks(self):
-
         vars_parser = self.vars_parser
         hdf5 = self.hdf5
         vars_in_chunk = self.vars_in_chunk
@@ -248,7 +248,7 @@ class _ChunkGenerator:
                         item = snp[5]
                     elif basepath == 'FILTER':
                         if struct['field'] == b'PASS':
-                            item = False if filters is None else True
+                            item = True if filters == [] else False
                         else:
                             item = struct['field'] in filters
                     elif basepath == 'INFO':
@@ -355,10 +355,12 @@ def _preprocess_header_line(h5, _id, record, group=None):
                 if key == 'Description':
                     value = '"{}"'.format(value)
                 line += ',{}={}'.format(key, value)
-            for key, value in record.items():
-                if key in required_fields[group]:
-                    continue
-                line += ',{}={}'.format(key, value)
+#             for key, value in record.items():
+#                 print(record.items(), group)
+#                 print(key in required_fields[group])
+#                 if key in required_fields[group]:
+#                     continue
+#                 line += ',{}={}'.format(key, value)
             line += '>'
         return line
 
@@ -390,16 +392,18 @@ def _prepare_fieldnames_line(h5, fieldnames):
 
 
 def _get_value_filter(h5, n_snp, filter_paths):
-    filters = []
+    filters = None
     for key in filter_paths:
+        if filters is None:
+            filters = []
         if h5[key][n_snp] != False:
             filters.append(key.split('/')[-1])
-    if filters:
-        return ';'.join(filters)
-    elif 'no_filter' in filters:
+    if filters is None:
         return '.'
-    else:
-        return 'PASS'
+    if 'PASS' in filters and len(filters) > 1:
+        msg = "FILTER value is wrong. PASS not allowed with another filter"
+        raise RuntimeError(msg)
+    return ';'.join(filters)
 
 
 def _get_value_info(h5, var_index, info_paths):
@@ -444,13 +448,18 @@ def _get_value_info(h5, var_index, info_paths):
     return ';'.join(info)
 
 
+GT_CONVERTER_CACHE = {num: str(num) for num in range(200)}
+GT_CONVERTER_CACHE[MISSING_INT] = '.'
+GT_CONVERTER_CACHE[MISSING_FLOAT] = '.'
+GT_CONVERTER_CACHE[MISSING_STR] = '.'
+
+
 def _get_calls_per_sample(h5, var_index, n_sample, calls_path):
     calls_sample = []
     for key in calls_path:
         value = remove_nans(h5[key][var_index][n_sample])
         if 'GT' in key:
-            value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
-                     for x in value]
+            value = [GT_CONVERTER_CACHE[x] for x in value]
             value = '/'.join(value)
 
             if '.' in value:

@@ -37,7 +37,6 @@ def _gt_data_to_list_old(mapper_function, sample_gt):
     return sample_gt
 
 
-
 def _detect_fields_in_vcf(metadata, fields):
     check_fields = []
     for field in fields:

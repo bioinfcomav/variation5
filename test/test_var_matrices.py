@@ -271,7 +271,7 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/variations/filter/q10'][:] == expected)
         expected = numpy.array([False, False, False, False, False])
         assert numpy.all(h5['/variations/filter/s50'][:] == expected)
-        expected = [True, True, True, True, True]
+        expected = [True, False, True, True, True]
         assert numpy.all(h5['/variations/filter/PASS'][:] == expected)
 
         # Variations info fields
@@ -311,88 +311,25 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
         os.remove(path)
 
-    def xtest_vcf_to_hdf5_bin(self):
-        tmp_fhand = NamedTemporaryFile()
-        out_fpath = tmp_fhand.name
-        tmp_fhand.close()
-
-        in_fpath = join(TEST_DATA_DIR, 'phylome.sample.vcf')
-
-        cmd = [sys.executable, join(BIN_DIR, 'vcf_to_hdf5.py'), in_fpath, '-o',
-               out_fpath, '-i', '-a', '4']
-        check_output(cmd)
-        h5 = h5py.File(out_fpath, 'r')
-        assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
-        assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
-        assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
-        os.remove(out_fpath)
-
-        # Input compressed with gzip
-        in_fpath = join(TEST_DATA_DIR, 'phylome.sample.vcf.gz')
-        cmd = [sys.executable, join(BIN_DIR, 'vcf_to_hdf5.py'), in_fpath, '-o',
-               out_fpath, '-i', '-a', '4']
-        check_output(cmd)
-        h5 = h5py.File(out_fpath, 'r')
-        assert numpy.all(h5['/calls/GT'].shape == (2, 42, 2))
-        assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
-        assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
-
-    def xtest_csv_to_hdf5_bin(self):
-        tmp_fhand = NamedTemporaryFile()
-        out_fpath = tmp_fhand.name
-        tmp_fhand.close()
-
-        in_fpath = join(TEST_DATA_DIR, 'csv', 'iupac_ex.txt')
-
-        cmd = [sys.executable, join(BIN_DIR, 'csv_to_hdf5.py'), in_fpath, '-o',
-               out_fpath, '-s', '\t', '-i', '-a', '2', '-f', 'chrom,pos']
-        check_output(cmd)
-        h5 = h5py.File(out_fpath, 'r')
-        exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
-        assert list(h5['/variations/chrom'][:]) == exp
-        assert list(h5['/variations/ref'][:]) == [b'T', b'C', b'T']
-        assert list(h5['/variations/pos'][:]) == [331954, 681961,
-                                                  1511764]
-        exp = numpy.array([[[1, 1], [0, 0], [-1, -1]],
-                           [[0, 0], [0, 0], [-1, -1]],
-                           [[0, 0], [0, 0], [1, 0]]])
-        assert numpy.all(h5['/calls/GT'][:] == exp)
-        os.remove(out_fpath)
-
-
-class VcfTest(unittest.TestCase):
-
-    def test_vcf_detect_fields(self):
-        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf_fhand2 = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
-                        kept_fields=['/variations/qual'])
-        vcf2 = VCFParser(vcf_fhand2, pre_read_max_size=1000,
-                         ignored_fields=['/variations/qual'])
-        snps = VariationsArrays(ignore_undefined_fields=True)
-        snps.put_vars(vcf)
-        metadata = snps.metadata
-        snps2 = VariationsArrays(ignore_undefined_fields=True)
-        snps2.put_vars(vcf2)
-        metadata2 = snps2.metadata
-        assert '/calls/HQ' in metadata.keys()
-        assert '/variations/qual' not in metadata2.keys()
-        vcf_fhand.close()
-        vcf_fhand2.close()
-
 
 class VcfWrittenTest(unittest.TestCase):
 
-    def xtest_write_vcf(self):
+    def test_write_vcf(self):
         # With missing info in variations
         tmp_fhand = NamedTemporaryFile()
         out_fpath = tmp_fhand.name
         tmp_fhand.close()
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def_without_info.vcf'),
                          'rb')
-        vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2})
-        h5_without_info = VariationsH5(fpath=out_fpath, mode='w')
-        h5_without_info.put_vars(vcf)
+        vcf = VCFParser(vcf_fhand)
+
+        max_field_lens = {'INFO': {}, 'CALLS': {b'GQ': 1, b'GT': 1, b'HQ': 2, b'DP': 1}, 'FILTER': 1, 'alt': 2}
+        max_field_str_lens = {'ref': 4, 'INFO': {}, 'id': 10, 'FILTER': 0, 'alt': 5, 'chrom': 2}
+
+        h5_without_info = VariationsH5(fpath=out_fpath, mode='w',
+                                       ignore_undefined_fields=True)
+        h5_without_info.put_vars(vcf,  max_field_lens=max_field_lens,
+                                 max_field_str_lens=max_field_str_lens)
         vcf_fhand.close()
 
         lines = _to_vcf(h5_without_info, vcf_format='VCFv4.0')
@@ -402,16 +339,21 @@ class VcfWrittenTest(unittest.TestCase):
         exp_lines = [line.strip() for line in exp_lines]
         for line in lines:
             assert line in exp_lines
-        exp_fhand.close()
 
+        exp_fhand.close()
         # With all fields available
         tmp_fhand = NamedTemporaryFile()
         tmp_fhand.close()
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
                         pre_read_max_size=10000)
-        variations = VariationsArrays()
-        variations.put_vars(vcf)
+
+        max_field_lens = {'CALLS': {b'GT': 1, b'HQ': 2, b'DP': 1, b'GQ': 1}, 'FILTER': 1, 'INFO': {b'AA': 1, b'AF': 2, b'DP': 1, b'DB': 1, b'NS': 1, b'H2': 1}, 'alt': 2}
+        max_field_str_lens = {'INFO': {}, 'alt': 5, 'chrom': 2, 'ref': 4, 'id': 10, 'FILTER': 0}
+
+        variations = VariationsArrays(ignore_undefined_fields=True)
+        variations.put_vars(vcf, max_field_lens=max_field_lens,
+                            max_field_str_lens=max_field_str_lens)
         vcf_fhand.close()
 
         lines = _to_vcf(variations, vcf_format='VCFv4.0')
@@ -422,23 +364,26 @@ class VcfWrittenTest(unittest.TestCase):
         for line in lines:
             assert line in exp_lines
         exp_fhand.close()
-
         # With hdf5 file
         tomato_h5 = VariationsH5(join(TEST_DATA_DIR,
                                       'tomato.apeki_gbs.calmd.h5'), "r")
         exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "r")
         lines = _to_vcf(tomato_h5)
+
+        #only checking snps
         exp_lines = list(exp_fhand)
-        exp_lines = [line.strip() for line in exp_lines]
+        exp_lines = [line.strip() for line in exp_lines if not line.startswith('#')]
         i = 0
         for line in lines:
-            assert line in exp_lines
+            if line.startswith('#'):
+                continue
+            assert line == exp_lines[i]
             i += 1
-            if i > 100:
+            if i > 42:
                 break
         exp_fhand.close()
 
-    def xtest_write_header(self):
+    def test_write_header(self):
         files = ['format_def_without_info.vcf',
                  'format_def_without_filter.vcf',
                  'format_without_flt_info_qual.vcf']
@@ -453,9 +398,9 @@ class VcfWrittenTest(unittest.TestCase):
             var_array = VariationsArrays(ignore_undefined_fields=True)
             var_array.put_vars(vcf)
             for line in _prepare_vcf_header(var_array, vcf_format='VCFv4.0'):
-                assert line.encode() in header_lines
+                assert line.encode('utf-8') in header_lines
             vcf_fhand.close()
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
+#     import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf']
     unittest.main()

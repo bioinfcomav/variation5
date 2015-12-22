@@ -30,24 +30,21 @@ def is_non_variant(chunks):
 
 
 def count_variant(chunks):
-    """Cuenta variantes con al menos una observación allelica no referenciada
-    Count variants with at least one non-reference allele observation."""
+    """Count variants with at least one non-reference allele observation."""
     count_var = 0
     count_var += numpy.count_nonzero(is_variant(chunks))
     return count_var
 
 
 def count_non_variant(chunks):
-    """Cuenta variantes con ninguna una observación allelica no referenciada
-    Count variants with no non-reference allele observation."""
+    """Count variants with no non-reference allele observation."""
     count_var = 0
     count_var += numpy.count_nonzero(is_non_variant(chunks))
     return count_var
 
 
 def is_singleton(chunks, allele):
-    """Find variants with only a single instance of `allele` observed.
-    Encuentra variantes con solo una instancia del alelo observado"""
+    """Find variants with only a single instance of `allele` observed"""
     gts = _get_chunks_gt(chunks)
     is_single = numpy.ndarray(gts.shape[0])
     start = 0
@@ -63,8 +60,7 @@ def count_singleton(chunks, allele=1):
 
 
 def is_doubleton(chunks, allele=1):
-    """Find variants with only two instance of `allele` observed.
-    Encuentra variantes con dos instancias del alelo observado"""
+    """Find variants with only two instance of `allele` observed."""
     gts = _get_chunks_gt(chunks)
     start = 0
     is_double = numpy.ndarray(gts.shape[0])
@@ -80,8 +76,7 @@ def count_doubleton(chunks, allele=1):
 
 
 def allele_number(chunks):
-    """Count the number of non-missing allele calls per variant.
-    Cuenta el numero de allelos no-missing por snp"""
+    """Count the number of non-missing allele calls per variant."""
     gts = _get_chunks_gt(chunks)
     allele_num = numpy.ndarray(gts.shape[0])
     start = 0
@@ -93,8 +88,7 @@ def allele_number(chunks):
 
 
 def allele_count(chunks, allele=1):
-    """Calculate number of observations of the given allele per variant.
-    Cuenta el numero de observaciones de un allelo dado por snp"""
+    """Calculate number of observations of the given allele per variant."""
     gts = _get_chunks_gt(chunks)
     a_count = numpy.ndarray(gts.shape[0])
     start = 0

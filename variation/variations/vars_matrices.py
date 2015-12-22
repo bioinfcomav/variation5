@@ -8,11 +8,12 @@ import h5py
 
 from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT,
                        DEF_DSET_PARAMS, MISSING_INT, MISSING_STR,
-    MISSING_FLOAT)
+                       MISSING_FLOAT)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
 from variation.utils.misc import remove_nans
+from variation.variations.stats import GT_FIELD
 # Missing docstring
 # pylint: disable=C0111
 
@@ -779,6 +780,23 @@ class _VariationMatrices():
                                  max_field_str_lens=max_field_str_lens,
                                  kept_fields=self.kept_fields,
                                  ignored_fields=self.ignored_fields)
+
+    @property
+    def gts_as_mat012(self):
+        '''It transforms the GT matrix into 0 (major allele homo), 1 (het),
+        2(other hom)'''
+        gts = self[GT_FIELD]
+        counts = counts_by_row(gts, missing_value=MISSING_INT)
+        if counts is None:
+            return numpy.full((gts.shape[0], gts.shape[1]),
+                              fill_value=MISSING_INT)
+
+        major_alleles = numpy.argmax(counts, axis=1)
+        if is_dataset(gts):
+            gts = gts[:]
+        gts012 = numpy.sum(gts != major_alleles[:, None, None], axis=2)
+        gts012[numpy.any(gts == MISSING_INT, axis=2)] = MISSING_INT
+        return gts012
 
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):

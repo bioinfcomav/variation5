@@ -22,6 +22,7 @@ from variation.variations.vars_matrices import (VariationsArrays,
 from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR, BIN_DIR
 from variation.utils.misc import remove_nans
+from variation.variations.stats import GT_FIELD
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -400,6 +401,19 @@ class VcfWrittenTest(unittest.TestCase):
             for line in _prepare_vcf_header(var_array, vcf_format='VCFv4.0'):
                 assert line.encode('utf-8') in header_lines
             vcf_fhand.close()
+
+
+class Mat012Test(unittest.TestCase):
+    def test_mat012(self):
+        gts = numpy.array([[[0, 0], [0, 1], [2, 2], [-1, 3]],
+                           [[0, 0], [0, 0], [1, 1], [2, 2]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        gts012 = varis.gts_as_mat012
+        expected = [[0, 1, 2, -1], [0, 0, 2, 2], [-1, -1, -1, -1]]
+        assert numpy.allclose(gts012, expected, equal_nan=True)
+
 
 if __name__ == "__main__":
 #     import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf']

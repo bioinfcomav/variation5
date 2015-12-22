@@ -1,7 +1,10 @@
 
+from collections import Counter
+
 from numpy.linalg import eigh, svd
 from numpy import newaxis, add, transpose, sqrt, argsort, array, dot
 from numpy import sum as nsum
+import numpy
 
 from sklearn.manifold import MDS
 from scipy.spatial.distance import squareform
@@ -11,6 +14,9 @@ import allel
 from variation.variations.stats import GT_FIELD
 from variation.variations import VariationsArrays
 from variation.variations.filters import keep_biallelic
+from variation import MISSING_INT
+from variation.matrix.stats import counts_by_row
+from variation.matrix.methods import is_dataset
 
 
 def non_param_multi_dim_scaling(dists, n_dims=3, n_threads=None, metric=True):
@@ -142,19 +148,10 @@ def _standarize_matrix(matrix):
 def do_pca(variations):
     'It does a Principal Component Analysis'
 
-    # keep biallelic snps
-    # TODO: We should select only the GT matrix
-    snps = VariationsArrays(variations)
-    keep_biallelic(variations, snps)
-
-    genotypes = allel.GenotypeArray(snps[GT_FIELD])
-    # print(genotypes.shape)
-    # print(genotypes)
-
     # transform the genotype data into a 2-dimensional matrix where each cell
     # has the number of non-reference alleles per call
 
-    matrix = genotypes.to_n_alt()
+    matrix = variations.gts_as_mat012
 
     n_rows, n_cols = matrix.shape
     if n_rows < n_cols:

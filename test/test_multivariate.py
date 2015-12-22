@@ -2,6 +2,8 @@
 import unittest
 from os.path import join
 
+import numpy
+
 from test.test_utils import TEST_DATA_DIR
 from variation.variations.multivariate import (non_param_multi_dim_scaling,
                                                do_pcoa, do_pca)

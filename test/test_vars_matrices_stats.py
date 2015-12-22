@@ -29,9 +29,8 @@ from variation.variations.stats import (calc_maf, histogram,
                                         calc_maf_depth_distribs_per_sample,
                                         PositionalStatsCalculator, call_is_hom,
                                         calc_cum_distrib, _calc_r2,
-    calc_r2_windows)
+                                        calc_r2_windows)
 from test.test_utils import TEST_DATA_DIR
-from scipy.spatial.distance import squareform
 
 
 class StatsTest(unittest.TestCase):
@@ -469,10 +468,10 @@ class StatsTest(unittest.TestCase):
                     'chr1 35 60 {}'.format(9 / 25)]
         for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
             assert line.strip() == exp
-    
+
     def test_calc_r2_windows(self):
         variations = VariationsArrays()
-        chrom = numpy.array([b'chr1'] * 4 )
+        chrom = numpy.array([b'chr1'] * 4)
         pos = numpy.array([1, 4, 6, 20])
         gts = numpy.array([[[0, 0], [1, 1], [0, 0]],
                            [[0, 0], [1, 1], [0, 0]],
@@ -483,11 +482,12 @@ class StatsTest(unittest.TestCase):
         variations['/calls/GT'] = gts
         expected = [1.0, 1.0000002, 1.0, 1.0000002, 1.0, 1.0]
         assert numpy.allclose(_calc_r2(gts), expected)
-        
+
         chrom, pos, r2 = calc_r2_windows(variations, 10)
         assert numpy.allclose(r2, [1.0000002384185933, numpy.nan],
                               equal_nan=True)
         assert numpy.all(chrom == b'chr1')
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'StatsTest.test_calc_r2_windows']

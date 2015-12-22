@@ -7,7 +7,7 @@ import operator
 import numpy
 import matplotlib.pyplot as plt
 
-from variation.matrix.methods import iterate_matrix_chunks, calc_min_max
+from variation.matrix.methods import iterate_matrix_chunks
 
 
 def _row_value_counter_array(array, value, axes):

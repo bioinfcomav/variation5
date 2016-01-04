@@ -258,21 +258,39 @@ def calc_called_gt(variations, rates=True, axis=1):
         return total - missing
 
 
+def _call_is_het(variations, min_call_dp):
+    is_hom, is_missing = _call_is_hom(variations, min_call_dp)
+    is_het = numpy.logical_not(is_hom)
+    is_het[is_missing] = False
+    return is_het, is_missing
+
+
 def call_is_het(gts):
-    is_het = numpy.logical_not(call_is_hom(gts))
-    missing_gts = is_missing(gts, axis=2)
-    is_het[missing_gts] = False
-    return is_het
+    return _call_is_het({GT_FIELD: gts}, min_call_dp=0)[0]
 
 
-def call_is_hom(gts):
+def _call_is_hom(variations, min_call_dp):
+    gts = variations[GT_FIELD]
+    if is_dataset(gts):
+        gts = gts[:]
+
     is_hom = numpy.full(gts.shape[:-1], True, dtype=numpy.bool)
     for idx in range(1, gts.shape[2]):
         is_hom = numpy.logical_and(gts[:, :, idx] == gts[:, :, idx - 1],
                                    is_hom)
     missing_gts = is_missing(gts, axis=2)
+    if min_call_dp:
+        dps = variations[DP_FIELD]
+        if is_dataset(dps):
+            dps = dps[:]
+        low_dp = dps < min_call_dp
+        missing_gts = numpy.logical_or(missing_gts, low_dp)
     is_hom[missing_gts] = False
-    return is_hom
+    return is_hom, missing_gts
+
+
+def call_is_hom(gts):
+    return _call_is_hom({GT_FIELD: gts}, min_call_dp=0)[0]
 
 
 def call_is_hom_ref(gts):
@@ -283,12 +301,10 @@ def call_is_hom_alt(gts):
     return numpy.logical_and(call_is_hom(gts), gts[:, :, 0] != 0)
 
 
-def _calc_obs_het_counts(variations, axis):
-    gts = variations[GT_FIELD]
-    if is_dataset(gts):
-        gts = gts[:]
-    is_het = call_is_het(gts)
-    return numpy.sum(is_het, axis=axis)
+def _calc_obs_het_counts(variations, axis, min_call_dp):
+    is_het, is_missing = _call_is_het(variations, min_call_dp)
+    return (numpy.sum(is_het, axis=axis),
+            numpy.sum(numpy.logical_not(is_missing), axis=axis))
 
 
 def _mask_stats_with_few_samples(stats, variations, min_num_genotypes,
@@ -301,9 +317,10 @@ def _mask_stats_with_few_samples(stats, variations, min_num_genotypes,
 
 
 def calc_obs_het(variations,
-                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
-    het = _calc_obs_het_counts(variations, axis=1)
-    called_gts = calc_called_gt(variations, rates=False)
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                 min_call_dp=0):
+    het, called_gts = _calc_obs_het_counts(variations, axis=1,
+                                           min_call_dp=min_call_dp)
     # To avoid problems with NaNs
     with numpy.errstate(invalid='ignore'):
         het = het / called_gts
@@ -312,7 +329,7 @@ def calc_obs_het(variations,
 
 
 def _calc_obs_het_by_sample(variations):
-    return _calc_obs_het_counts(variations, axis=0)
+    return _calc_obs_het_counts(variations, axis=0, min_call_dp=0)
 
 
 def calc_obs_het_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
@@ -324,9 +341,8 @@ def calc_obs_het_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
     obs_het_by_sample = None
     called_gts = None
     for chunk in chunks:
-        chunk_obs_het_by_sample = _calc_obs_het_by_sample(chunk)
-        chunk_called_gts = calc_called_gt(chunk, rates=False,
-                                          axis=0)
+        chunk_obs_het_by_sample, missing = _calc_obs_het_by_sample(chunk)
+        chunk_called_gts = missing
         if called_gts is None:
             obs_het_by_sample = chunk_obs_het_by_sample
             called_gts = chunk_called_gts

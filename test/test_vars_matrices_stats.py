@@ -167,12 +167,21 @@ class StatsTest(unittest.TestCase):
         gts = numpy.array([[[0, 0], [0, 1], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]]])
 
-        varis = {'/calls/GT': gts}
+        dps = numpy.array([[5, 10, 10, 10],
+                           [10, 10, 10, 10]])
+
+        varis = {'/calls/GT': gts, '/calls/DP': dps}
         het = calc_obs_het(varis, min_num_genotypes=0)
         assert numpy.allclose(het, [0.5, 0])
 
         het = calc_obs_het(varis, min_num_genotypes=10)
         assert numpy.allclose(het, [numpy.NaN, numpy.NaN], equal_nan=True)
+
+        het = calc_obs_het(varis, min_num_genotypes=0, min_call_dp=10)
+        assert numpy.allclose(het, [1, 0])
+
+        het = calc_obs_het(varis, min_num_genotypes=0, min_call_dp=5)
+        assert numpy.allclose(het, [0.5, 0])
 
     def test_calc_obs_het_sample(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -490,5 +499,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_maf_distrib']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_allele_obs_distrib_2D']
     unittest.main()

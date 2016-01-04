@@ -79,5 +79,5 @@ DEF_METADATA = {'CALLS': {b'GT': {'Description': 'Genotype',
                                'chrom': {'dtype': 'str'},
                                'id': {'dtype': 'str'},
                                'pos': {'dtype': 'int32'},
-                               'qual': {'dtype': 'float16'},
+                               'qual': {'dtype': 'float32'},
                                'ref': {'dtype': 'str'}}}

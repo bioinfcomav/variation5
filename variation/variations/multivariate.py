@@ -6,7 +6,7 @@ from numpy import newaxis, add, transpose, sqrt, argsort, array, dot
 from numpy import sum as nsum
 import numpy
 
-from sklearn.manifold import MDS
+from sklearn.manifold import MDS, Isomap
 from scipy.spatial.distance import squareform
 
 import allel
@@ -151,13 +151,13 @@ def do_pca(variations):
     # transform the genotype data into a 2-dimensional matrix where each cell
     # has the number of non-reference alleles per call
 
-    matrix = variations.gts_as_mat012
+    matrix = variations.gts_as_mat012.T
 
     n_rows, n_cols = matrix.shape
-    if n_rows < n_cols:
+    if n_cols < n_rows:
         # This restriction is in the matplotlib implementation, but I don't
         # know the reason
-        msg = 'The implementation requires more rows than columns'
+        msg = 'The implementation requires more SNPs than samples'
         raise RuntimeError(msg)
 
     # Implementation based on the matplotlib PCA class
@@ -175,3 +175,10 @@ def do_pca(variations):
     return {'projections': projections,
             'var_percentages': pcnts,
             'princomps': princomps}
+
+
+def isomap(variations, n_components=3):
+    matrix = variations.gts_as_mat012.T
+    isomap = Isomap(n_components=n_components)
+    projections = isomap.fit_transform(matrix)
+    return {'projections': projections}

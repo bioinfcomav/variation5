@@ -11,7 +11,7 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import MISSING_INT, SNPS_PER_CHUNK
-from variation.matrix.methods import append_matrix, is_dataset,\
+from variation.matrix.methods import append_matrix, is_dataset, \
     iterate_matrix_chunks
 from variation.iterutils import first
 
@@ -105,8 +105,10 @@ def filter_mafs(variations, filtered_vars=None, min_maf=None, max_maf=None,
 
 
 def _filter_obs_het(variations, filtered_vars, min_=None, max_=None,
-                    min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
-    obs_het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
+                    min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                    min_call_dp=0):
+    obs_het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes,
+                           min_call_dp=min_call_dp)
     with numpy.errstate(invalid='ignore'):
         selector_max = None if max_ is None else obs_het <= max_
         selector_min = None if min_ is None else obs_het >= min_
@@ -124,15 +126,17 @@ def _filter_obs_het(variations, filtered_vars, min_=None, max_=None,
 
 def filter_obs_het(variations, filtered_vars=None, min_het=None, max_het=None,
                    min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                   by_chunk=True):
+                   min_call_dp=0, by_chunk=True):
     if by_chunk:
         filter_funct = partial(_filter_obs_het, min_=min_het, max_=max_het,
-                               min_num_genotypes=min_num_genotypes)
+                               min_num_genotypes=min_num_genotypes,
+                               min_call_dp=min_call_dp)
         return _filter_by_chunk(variations, filtered_vars, filter_funct)
     else:
         return _filter_obs_het(variations, filtered_vars=filtered_vars,
                                min_=min_het, max_=max_het,
-                               min_num_genotypes=min_num_genotypes)
+                               min_num_genotypes=min_num_genotypes,
+                               min_call_dp=min_call_dp)
 
 
 def _filter_min_called_gts(variations, filtered_vars=None, min_=None,
@@ -363,8 +367,8 @@ def filter_samples(variations, samples, filtered_vars=None,
 
     return filter_samples_by_index(variations, idx_to_keep, reverse=reverse,
                                    by_chunk=by_chunk)
-    
-    
+
+
 def locate_unlinked(gts, window_size=100, step=20, threshold=.1, chunk_size=None,
                     gts_to_gns=False):
     """modified from https://github.com/cggh/scikit-allel"""
@@ -380,11 +384,11 @@ def locate_unlinked(gts, window_size=100, step=20, threshold=.1, chunk_size=None
 
     # compute in chunks to avoid loading big arrays into memory
     chunk_size = get_blen_array(gts, chunk_size)
-    chunk_size = max(chunk_size, 10*window_size)  # avoid too small chunks
+    chunk_size = max(chunk_size, 10 * window_size) # avoid too small chunks
     n_variants = gts.shape[0]
     for i in range(0, n_variants, chunk_size):
         # N.B., ensure overlap with next window
-        j = min(n_variants, i+chunk_size+window_size)
+        j = min(n_variants, i + chunk_size + window_size)
         chunk_gts = numpy.asarray(gts[i:j], dtype='i1')
         if gts_to_gns:
             chunk_gts = GenotypeArray(chunk_gts)
@@ -403,10 +407,10 @@ def filter_unlinked_vars(variations, window_size, step=20, filtered_vars=None,
     gts = variations[GT_FIELD]
     if filtered_vars is None:
         filtered_vars = VariationsArrays()
-        
+
     unlinked_mask = locate_unlinked(gts, window_size, step, r2_threshold,
                                     chunk_size=chunk_size, gts_to_gns=True)
-    
+
     if by_chunk:
         selected_rows_chunks = iterate_matrix_chunks(unlinked_mask,
                                                      chunk_size=chunk_size)
@@ -419,5 +423,5 @@ def filter_unlinked_vars(variations, window_size, step=20, filtered_vars=None,
     else:
         filtered_vars = _filter_chunk2(variations, filtered_vars,
                                        selected_rows=unlinked_mask)
-    return filtered_vars 
-    
+    return filtered_vars
+

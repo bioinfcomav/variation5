@@ -2,13 +2,14 @@
 from functools import reduce
 from itertools import combinations_with_replacement, permutations
 import operator
+import math
 
 import numpy
 from scipy.stats.stats import chisquare
 from allel.stats.ld import rogers_huff_r
 from allel.model.ndarray import GenotypeArray
 
-from variation import MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH
+from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH)
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
@@ -41,7 +42,11 @@ REQUIRED_FIELDS_FOR_STAT = {'calc_maf': [GT_FIELD],
 
 
 def _calc_histogram(vector, n_bins, range_):
-    vector = remove_nans(vector)
+    missing_value = MISSING_VALUES[vector.dtype]
+    if math.isnan(missing_value):
+        vector = remove_nans(vector)
+    else:
+        vector = vector[vector != missing_value]
     return numpy.histogram(vector, bins=n_bins, range=range_)
 
 
@@ -876,13 +881,13 @@ def calc_r2_windows(variations, window_size, step=None):
     if is_dataset(pos):
         pos = pos[:]
     gts = variations[GT_FIELD]
-    
+
     window_chrom = []
     window_pos = []
     window_r2 = []
-    
+
     chrom_names = numpy.unique(chrom)
-    
+
     for chrom_name in chrom_names:
         chrom_mask = chrom == chrom_name
         chrom_pos = pos[chrom_mask]
@@ -897,7 +902,7 @@ def calc_r2_windows(variations, window_size, step=None):
                 continue
 
             r2 = numpy.mean(_calc_r2(gts[chrom_window_mask, :, :]))
-            
+
             window_chrom.append(chrom_name)
             window_pos.append(start)
             window_r2.append(r2)

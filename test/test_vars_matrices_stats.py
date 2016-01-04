@@ -490,5 +490,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_r2_windows']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_maf_distrib']
     unittest.main()

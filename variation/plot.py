@@ -188,7 +188,7 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
 
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
-        function(*params['args'], **params['kwargs'])
+        function(*params.get('args', []), **params.get('kwargs', {}))
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return result

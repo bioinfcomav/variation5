@@ -919,7 +919,8 @@ def calc_r2_windows(variations, window_size, step=None):
             if not numpy.any(chrom_window_mask):
                 continue
 
-            r2 = numpy.mean(_calc_r2(gts[chrom_window_mask, :, :]))
+            r2s = _calc_r2(gts[chrom_window_mask, :, :])
+            r2 = numpy.mean(r2s) if r2s.size else float('nan')
 
             window_chrom.append(chrom_name)
             window_pos.append(start)

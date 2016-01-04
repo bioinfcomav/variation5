@@ -499,5 +499,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_allele_obs_distrib_2D']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_r2_windows']
     unittest.main()

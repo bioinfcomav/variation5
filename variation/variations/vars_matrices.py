@@ -746,6 +746,8 @@ class _VariationMatrices():
                 slice_ = numpy.random.choice([True, False], size=num_vars,
                                              p=[random_sample_rate,
                                                 1 - random_sample_rate])
+                if not slice_.any():
+                    continue
             for path, dset in dsets.items():
                 var_array[path] = dset[slice_, ...]
             var_array._set_metadata(self.metadata)

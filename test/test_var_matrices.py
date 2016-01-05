@@ -115,6 +115,11 @@ class VcfH5Test(unittest.TestCase):
         hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.5))
         assert hdf5.num_variations >= hdf5_2.num_variations
 
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        hdf5_2 = VariationsArrays()
+        hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0))
+        assert hdf5_2.num_variations == 0
+
 
 def _init_var_mat(klass):
     if klass is VariationsH5:

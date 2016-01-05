@@ -8,9 +8,7 @@
 import os
 import unittest
 import gzip
-import sys
 from tempfile import NamedTemporaryFile
-from subprocess import check_output
 from os.path import join
 
 import h5py
@@ -20,7 +18,7 @@ from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5,
                                                 _prepare_vcf_header, _to_vcf)
 from variation.gt_parsers.vcf import VCFParser
-from test.test_utils import TEST_DATA_DIR, BIN_DIR
+from test.test_utils import TEST_DATA_DIR
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
 
@@ -111,6 +109,11 @@ class VcfH5Test(unittest.TestCase):
             assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
         finally:
             os.remove(out_fpath)
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        hdf5_2 = VariationsArrays()
+        hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.5))
+        assert hdf5.num_variations >= hdf5_2.num_variations
 
 
 def _init_var_mat(klass):
@@ -329,7 +332,7 @@ class VcfWrittenTest(unittest.TestCase):
 
         h5_without_info = VariationsH5(fpath=out_fpath, mode='w',
                                        ignore_undefined_fields=True)
-        h5_without_info.put_vars(vcf,  max_field_lens=max_field_lens,
+        h5_without_info.put_vars(vcf, max_field_lens=max_field_lens,
                                  max_field_str_lens=max_field_str_lens)
         vcf_fhand.close()
 
@@ -371,7 +374,7 @@ class VcfWrittenTest(unittest.TestCase):
         exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "r")
         lines = _to_vcf(tomato_h5)
 
-        #only checking snps
+        # only checking snps
         exp_lines = list(exp_fhand)
         exp_lines = [line.strip() for line in exp_lines if not line.startswith('#')]
         i = 0
@@ -416,5 +419,5 @@ class Mat012Test(unittest.TestCase):
 
 
 if __name__ == "__main__":
-#     import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf']
+    # import sys; sys.argv = ['', 'VcfH5Test.test_create_hdf5_with_chunks']
     unittest.main()

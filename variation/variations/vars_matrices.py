@@ -724,25 +724,30 @@ class _VariationMatrices():
         return paths
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None,
-                       chunk_size=None):
+                       chunk_size=None, random_sample_rate=1):
         paths = self._filter_fields(kept_fields=kept_fields,
                                     ignored_fields=ignored_fields)
 
         dsets = {field: self[field] for field in paths}
 
-        # how many snps are per chunk?
-
         if chunk_size is None:
             chunk_size = self._vars_in_chunk
-        nsnps = self.num_variations
 
+        nsnps = self.num_variations
         for start in range(0, nsnps, chunk_size):
             var_array = VariationsArrays(vars_in_chunk=chunk_size)
             stop = start + chunk_size
             if stop > nsnps:
                 stop = nsnps
+            if random_sample_rate == 1:
+                slice_ = slice(start, stop)
+            else:
+                num_vars = stop - start
+                slice_ = numpy.random.choice([True, False], size=num_vars,
+                                             p=[random_sample_rate,
+                                                1 - random_sample_rate])
             for path, dset in dsets.items():
-                var_array[path] = dset[start:stop]
+                var_array[path] = dset[slice_, ...]
             var_array._set_metadata(self.metadata)
             var_array._set_samples(self.samples)
             yield var_array

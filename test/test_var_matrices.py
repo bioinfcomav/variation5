@@ -21,6 +21,7 @@ from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
+from variation.variations.index import PosIndex
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -110,10 +111,21 @@ class VcfH5Test(unittest.TestCase):
         finally:
             os.remove(out_fpath)
 
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         hdf5_2 = VariationsArrays()
-        hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.5))
+        hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.2))
         assert hdf5.num_variations >= hdf5_2.num_variations
+        chrom = hdf5_2['/variations/chrom'][0]
+        pos = hdf5_2['/variations/pos'][0]
+        index = PosIndex(hdf5)
+        idx = index.index_pos(chrom, pos)
+        old_snp = hdf5['/calls/GT'][idx]
+        new_snp = hdf5_2['/calls/GT'][0]
+        assert numpy.all(old_snp == new_snp)
+
+        old_snp = hdf5['/calls/DP'][idx]
+        new_snp = hdf5_2['/calls/DP'][0]
+        assert numpy.all(old_snp == new_snp)
 
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         hdf5_2 = VariationsArrays()

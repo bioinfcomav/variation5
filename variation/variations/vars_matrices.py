@@ -680,9 +680,10 @@ class _VariationMatrices():
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
-    def get_chunk(self, index):
+    def get_chunk(self, index, kept_fields=None, ignored_fields=None):
 
-        paths = self.keys()
+        paths = self._filter_fields(kept_fields=kept_fields,
+                                    ignored_fields=ignored_fields)
 
         dsets = {field: self[field] for field in paths}
 
@@ -697,14 +698,12 @@ class _VariationMatrices():
         var_array._set_samples(self.samples)
         return var_array
 
-    def iterate_chunks(self, kept_fields=None, ignored_fields=None,
-                       chunk_size=None):
-
+    def _filter_fields(self, kept_fields, ignored_fields):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
             raise ValueError(msg)
-        # We read the hdf5 file to keep the datasets metadata
+
         # We remove the unwanted fields
         paths = self.keys()
         if kept_fields:
@@ -722,6 +721,12 @@ class _VariationMatrices():
                 msg += ', '.join(not_in_matrix)
                 raise ValueError(msg)
             paths = set(paths).difference(ignored_fields)
+        return paths
+
+    def iterate_chunks(self, kept_fields=None, ignored_fields=None,
+                       chunk_size=None):
+        paths = self._filter_fields(kept_fields=kept_fields,
+                                    ignored_fields=ignored_fields)
 
         dsets = {field: self[field] for field in paths}
 

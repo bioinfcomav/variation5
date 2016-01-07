@@ -743,11 +743,13 @@ class _VariationMatrices():
                 slice_ = slice(start, stop)
             else:
                 num_vars = stop - start
-                slice_ = numpy.random.choice([True, False], size=num_vars,
-                                             p=[random_sample_rate,
-                                                1 - random_sample_rate])
-                if not slice_.any():
+                num_vars_keep = round(num_vars * random_sample_rate)
+                if not num_vars_keep:
                     continue
+                slice_ = numpy.random.choice(num_vars, num_vars_keep,
+                                             replace=False)
+                slice_.sort()
+                slice_ += start
             for path, dset in dsets.items():
                 var_array[path] = dset[slice_, ...]
             var_array._set_metadata(self.metadata)

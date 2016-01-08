@@ -12,7 +12,7 @@ from functools import partial
 import numpy
 
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
-from variation.variations.stats import (calc_maf, histogram,
+from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         histogram_for_chunks,
                                         _calc_maf_depth,
                                         calc_missing_gt, calc_obs_het,
@@ -29,7 +29,7 @@ from variation.variations.stats import (calc_maf, histogram,
                                         calc_maf_depth_distribs_per_sample,
                                         PositionalStatsCalculator, call_is_hom,
                                         calc_cum_distrib, _calc_r2,
-                                        calc_r2_windows)
+                                        calc_r2_windows, GT_FIELD)
 from test.test_utils import TEST_DATA_DIR
 
 
@@ -50,14 +50,27 @@ class StatsTest(unittest.TestCase):
         gts = numpy.array([[[0], [0], [0], [0]], [[0], [0], [1], [1]],
                            [[0], [0], [0], [1]], [[-1], [-1], [-1], [-1]]])
         varis = VariationsArrays()
-        varis['/calls/GT'] = gts
+        varis[GT_FIELD] = gts
         mafs = calc_maf(varis, min_num_genotypes=1)
         assert numpy.allclose(mafs, numpy.array([1., 0.5, 0.75, numpy.NaN]),
                               equal_nan=True)
 
+        macs = calc_mac(varis, min_num_genotypes=1)
+        assert numpy.allclose(macs, numpy.array([4, 2, 3, numpy.NaN]),
+                              equal_nan=True)
+
         varis = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         mafs = calc_maf(varis)
+        assert numpy.all(mafs[numpy.logical_not(numpy.isnan(mafs))] >= 0.5)
+        assert numpy.all(mafs[numpy.logical_not(numpy.isnan(mafs))] <= 1)
         assert mafs.shape == (943,)
+
+        macs = calc_mac(varis)
+        # assert macs.shape == (943,)
+        min_mac = varis['/calls/GT'].shape[1] / 2
+        max_mac = varis['/calls/GT'].shape[1]
+        assert numpy.all(macs[numpy.logical_not(numpy.isnan(mafs))] >= min_mac)
+        assert numpy.all(macs[numpy.logical_not(numpy.isnan(mafs))] <= max_mac)
 
     def test_calc_maf_distrib(self):
         gts = numpy.array([[[0], [0], [0], [0]], [[0], [0], [1], [1]],

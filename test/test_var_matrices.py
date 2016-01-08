@@ -348,8 +348,11 @@ class VcfWrittenTest(unittest.TestCase):
                          'rb')
         vcf = VCFParser(vcf_fhand)
 
-        max_field_lens = {'INFO': {}, 'CALLS': {b'GQ': 1, b'GT': 1, b'HQ': 2, b'DP': 1}, 'FILTER': 1, 'alt': 2}
-        max_field_str_lens = {'ref': 4, 'INFO': {}, 'id': 10, 'FILTER': 0, 'alt': 5, 'chrom': 2}
+        max_field_lens = {'INFO': {}, 'CALLS': {b'GQ': 1, b'GT': 1, b'HQ': 2,
+                                                b'DP': 1}, 'FILTER': 1,
+                          'alt': 2}
+        max_field_str_lens = {'ref': 4, 'INFO': {}, 'id': 10, 'FILTER': 0,
+                              'alt': 5, 'chrom': 2}
 
         h5_without_info = VariationsH5(fpath=out_fpath, mode='w',
                                        ignore_undefined_fields=True)
@@ -373,8 +376,12 @@ class VcfWrittenTest(unittest.TestCase):
         vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
                         pre_read_max_size=10000)
 
-        max_field_lens = {'CALLS': {b'GT': 1, b'HQ': 2, b'DP': 1, b'GQ': 1}, 'FILTER': 1, 'INFO': {b'AA': 1, b'AF': 2, b'DP': 1, b'DB': 1, b'NS': 1, b'H2': 1}, 'alt': 2}
-        max_field_str_lens = {'INFO': {}, 'alt': 5, 'chrom': 2, 'ref': 4, 'id': 10, 'FILTER': 0}
+        max_field_lens = {'CALLS': {b'GT': 1, b'HQ': 2, b'DP': 1, b'GQ': 1},
+                          'FILTER': 1,
+                          'INFO': {b'AA': 1, b'AF': 2, b'DP': 1,
+                                   b'DB': 1, b'NS': 1, b'H2': 1}, 'alt': 2}
+        max_field_str_lens = {'INFO': {}, 'alt': 5, 'chrom': 2, 'ref': 4,
+                              'id': 10, 'FILTER': 0}
 
         variations = VariationsArrays(ignore_undefined_fields=True)
         variations.put_vars(vcf, max_field_lens=max_field_lens,
@@ -397,7 +404,8 @@ class VcfWrittenTest(unittest.TestCase):
 
         # only checking snps
         exp_lines = list(exp_fhand)
-        exp_lines = [line.strip() for line in exp_lines if not line.startswith('#')]
+        exp_lines = [line.strip() for line in exp_lines
+                     if not line.startswith('#')]
         i = 0
         for line in lines:
             if line.startswith('#'):

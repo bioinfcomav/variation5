@@ -188,7 +188,6 @@ class FilterTest(unittest.TestCase):
         res = filtered_h5_1[GT_FIELD] == filtered_h5_2[GT_FIELD]
         assert numpy.all(res)
 
-
     def test_filter_quality_genotype(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],

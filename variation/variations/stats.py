@@ -9,8 +9,9 @@ from scipy.stats.stats import chisquare
 from allel.stats.ld import rogers_huff_r
 from allel.model.ndarray import GenotypeArray
 
-from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH)
-from variation.matrix.stats import counts_by_row
+from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH,
+                       MISSING_INT)
+from variation.matrix.stats import counts_by_row, counts_and_allels_by_row
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.utils.misc import remove_nans
@@ -110,10 +111,27 @@ def _calc_range(vectors):
     return range_
 
 
-def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+def _calc_mac(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    gt_counts, alleles = counts_and_allels_by_row(variations[GT_FIELD])
+    if MISSING_INT in alleles:
+        missing_allele_idx = alleles.index(MISSING_INT)
+        num_missing = numpy.copy(gt_counts[:, missing_allele_idx])
+        gt_counts[:, missing_allele_idx] = 0
+    else:
+        num_missing = 0
+    max_ = numpy.amax(gt_counts, axis=1)
+    num_samples = variations[GT_FIELD].shape[1]
+    ploidy = variations[GT_FIELD].shape[2]
+    num_chroms = num_samples * ploidy
+    mac = num_samples - (num_chroms - num_missing - max_) / ploidy
+    # we set the snps with no data to nan
+    mac[max_ == 0] = numpy.nan
+    return mac
 
+
+def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gts = variations[GT_FIELD]
-    gt_counts = counts_by_row(gts, missing_value=MISSING_VALUES[int])
+    gt_counts = counts_by_row(gts, missing_value=MISSING_INT)
     max_ = numpy.amax(gt_counts, axis=1)
     sum_ = numpy.sum(gt_counts, axis=1)
 
@@ -121,6 +139,20 @@ def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     with numpy.errstate(invalid='ignore'):
         mafs_gt = max_ / sum_
     return _mask_stats_with_few_samples(mafs_gt, variations, min_num_genotypes)
+
+
+def _calc_mac_by_chunk(variations,
+                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                       chunk_size=SNPS_PER_CHUNK):
+    macs = None
+    for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=chunk_size):
+        chunk_maf = _calc_mac(chunk, min_num_genotypes=min_num_genotypes)
+        if macs is None:
+            macs = chunk_maf
+        else:
+            macs = numpy.append(macs, chunk_maf)
+    return macs
 
 
 def _calc_maf_by_chunk(variations,
@@ -135,6 +167,14 @@ def _calc_maf_by_chunk(variations,
         else:
             mafs = numpy.append(mafs, chunk_maf)
     return mafs
+
+
+def calc_mac(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+             chunk_size=SNPS_PER_CHUNK):
+    if chunk_size is None:
+        return _calc_mac(variations, min_num_genotypes=min_num_genotypes)
+    else:
+        return _calc_mac_by_chunk(variations, min_num_genotypes, chunk_size)
 
 
 def calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,

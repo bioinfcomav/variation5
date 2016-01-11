@@ -113,6 +113,9 @@ def _calc_range(vectors):
 
 def _calc_mac(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gt_counts, alleles = counts_and_allels_by_row(variations[GT_FIELD])
+    if gt_counts is None:
+        return numpy.array([])
+
     if MISSING_INT in alleles:
         missing_allele_idx = alleles.index(MISSING_INT)
         num_missing = numpy.copy(gt_counts[:, missing_allele_idx])
@@ -132,6 +135,8 @@ def _calc_mac(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
 def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gts = variations[GT_FIELD]
     gt_counts = counts_by_row(gts, missing_value=MISSING_INT)
+    if gt_counts is None:
+        return numpy.array([])
     max_ = numpy.amax(gt_counts, axis=1)
     sum_ = numpy.sum(gt_counts, axis=1)
 
@@ -152,6 +157,8 @@ def _calc_mac_by_chunk(variations,
             macs = chunk_maf
         else:
             macs = numpy.append(macs, chunk_maf)
+    if macs is None:
+        return numpy.array([])
     return macs
 
 
@@ -166,6 +173,8 @@ def _calc_maf_by_chunk(variations,
             mafs = chunk_maf
         else:
             mafs = numpy.append(mafs, chunk_maf)
+    if mafs is None:
+        return numpy.array([])
     return mafs
 
 
@@ -278,6 +287,8 @@ def _calc_items_in_row(mat):
 
 def calc_missing_gt(variations, rates=True, axis=1):
     gts = variations[GT_FIELD]
+    if gts.shape[0] == 0:
+        return numpy.array([])
     if is_dataset(gts):
         gts = gts[:]
     missing = numpy.any(gts == MISSING_VALUES[int], axis=2).sum(axis=axis)
@@ -291,6 +302,9 @@ def calc_missing_gt(variations, rates=True, axis=1):
 
 def calc_called_gt(variations, rates=True, axis=1):
     missing = calc_missing_gt(variations, rates=rates, axis=axis)
+    if missing.shape[0] == 0:
+        return numpy.array([])
+
     if rates:
         return 1 - missing
     else:
@@ -300,6 +314,8 @@ def calc_called_gt(variations, rates=True, axis=1):
 
 def _call_is_het(variations, min_call_dp):
     is_hom, is_missing = _call_is_hom(variations, min_call_dp)
+    if is_hom.shape[0] == 0:
+        return is_hom, is_missing
     is_het = numpy.logical_not(is_hom)
     is_het[is_missing] = False
     return is_het, is_missing
@@ -311,6 +327,10 @@ def call_is_het(gts):
 
 def _call_is_hom(variations, min_call_dp):
     gts = variations[GT_FIELD]
+
+    if gts.shape[0] == 0:
+        return numpy.array([]), numpy.array([])
+
     if is_dataset(gts):
         gts = gts[:]
 
@@ -343,6 +363,8 @@ def call_is_hom_alt(gts):
 
 def _calc_obs_het_counts(variations, axis, min_call_dp):
     is_het, is_missing = _call_is_het(variations, min_call_dp)
+    if is_het.shape[0] == 0:
+        return is_het, is_missing
     return (numpy.sum(is_het, axis=axis),
             numpy.sum(numpy.logical_not(is_missing), axis=axis))
 
@@ -448,6 +470,8 @@ def _calc_allele_counts(gts):
 def calc_allele_freq(variations,
                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gts = variations[GT_FIELD]
+    if gts.shape[0] == 0:
+        return numpy.array([])
     max_num_allele = variations[ALT_FIELD].shape[1] + 1
     allele_counts = _calc_allele_counts(gts)
     total_counts = numpy.sum(allele_counts, axis=1)
@@ -462,6 +486,8 @@ def _calc_expected_het(variations,
                        min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     allele_freq = calc_allele_freq(variations,
                                    min_num_genotypes=min_num_genotypes)
+    if allele_freq.shape[0] == 0:
+        return numpy.array([])
     ploidy = variations[GT_FIELD].shape[2]
     return 1 - numpy.sum(allele_freq ** ploidy, axis=1)
 
@@ -509,6 +535,8 @@ def calc_inbreeding_coef(variations, chunk_size=SNPS_PER_CHUNK,
             inbreed_coef = chunk_inbreed_coef
         else:
             inbreed_coef = numpy.append(inbreed_coef, chunk_inbreed_coef)
+    if inbreed_coef is None:
+        return numpy.array([])
     return inbreed_coef
 
 
@@ -516,6 +544,8 @@ def _calc_hwe_chi2_test(variations, num_allele,
                         min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     ploidy = variations.ploidy
     gts = variations[GT_FIELD]
+    if gts.shape[0] == 0:
+        return numpy.array([])
 
     allele_freq = calc_allele_freq(variations,
                                    min_num_genotypes=min_num_genotypes)
@@ -756,6 +786,8 @@ def calc_field_distribs_per_sample(variations, field, range_=None,
 def _calc_maf_depth(variations, min_depth=DEF_MIN_DEPTH):
     ro = variations[RO_FIELD]
     ao = variations[AO_FIELD]
+    if ro.shape[0] == 0:
+        return numpy.array([])
     if len(ro.shape) == len(ao.shape):
         ao = ao.reshape((ao.shape[0], ao.shape[1], 1))
     if is_dataset(ro):
@@ -781,6 +813,7 @@ def calc_maf_depth_distribs_per_sample(variations, min_depth=DEF_MIN_DEPTH,
         chunks = [variations]
 
     histograms = None
+    bins = None
     for chunk in chunks:
         chunk_hists = None
         maf_depth = _calc_maf_depth(chunk, min_depth)

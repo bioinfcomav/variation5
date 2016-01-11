@@ -8,11 +8,12 @@ from allel.opt.stats import gn_locate_unlinked_int8
 
 from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_called_gt, GQ_FIELD, DP_FIELD,
-                                        MIN_NUM_GENOTYPES_FOR_POP_STAT)
+                                        MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                                        calc_mac)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import MISSING_INT, SNPS_PER_CHUNK
-from variation.matrix.methods import append_matrix, is_dataset, \
-    iterate_matrix_chunks
+from variation.matrix.methods import (append_matrix, is_dataset,
+                                      iterate_matrix_chunks)
 from variation.iterutils import first
 
 
@@ -101,6 +102,39 @@ def filter_mafs(variations, filtered_vars=None, min_maf=None, max_maf=None,
     else:
         return _filter_mafs(variations, filtered_vars=filtered_vars,
                             min_=min_maf, max_=max_maf,
+                            min_num_genotypes=min_num_genotypes)
+
+
+def _filter_macs(variations, filtered_vars=None, min_=None, max_=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    mafs = calc_mac(variations, min_num_genotypes=min_num_genotypes)
+
+    with numpy.errstate(invalid='ignore'):
+        selector_max = None if max_ is None else mafs <= max_
+        selector_min = None if min_ is None else mafs >= min_
+
+    if selector_max is None and selector_min is not None:
+        selected_rows = selector_min
+    elif selector_max is not None and selector_min is None:
+        selected_rows = selector_max
+    elif selector_max is not None and selector_min is not None:
+        selected_rows = selector_min & selector_max
+    else:
+        selected_rows = _filter_no_row(variations)
+
+    return _filter_chunk2(variations, filtered_vars, selected_rows)
+
+
+def filter_macs(variations, filtered_vars=None, min_mac=None, max_mac=None,
+                min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                by_chunk=True):
+    if by_chunk:
+        filter_funct = partial(_filter_macs, min_=min_mac, max_=max_mac,
+                               min_num_genotypes=min_num_genotypes)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
+    else:
+        return _filter_macs(variations, filtered_vars=filtered_vars,
+                            min_=min_mac, max_=max_mac,
                             min_num_genotypes=min_num_genotypes)
 
 

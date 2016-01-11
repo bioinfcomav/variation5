@@ -126,7 +126,7 @@ def _calc_mac(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     mac = num_samples - (num_chroms - num_missing - max_) / ploidy
     # we set the snps with no data to nan
     mac[max_ == 0] = numpy.nan
-    return mac
+    return _mask_stats_with_few_samples(mac, variations, min_num_genotypes)
 
 
 def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):

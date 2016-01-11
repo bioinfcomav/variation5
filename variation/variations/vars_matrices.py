@@ -580,7 +580,10 @@ class _VariationMatrices():
 
     @property
     def ploidy(self):
-        return self['/calls/GT'].shape[2]
+        if self[GT_FIELD].shape[0] == 0:
+            return None
+        else:
+            return self[GT_FIELD].shape[2]
 
     def create_matrix_from_matrix(self, path, matrix):
 

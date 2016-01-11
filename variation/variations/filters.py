@@ -403,8 +403,8 @@ def filter_samples(variations, samples, filtered_vars=None,
                                    by_chunk=by_chunk)
 
 
-def locate_unlinked(gts, window_size=100, step=20, threshold=.1, chunk_size=None,
-                    gts_to_gns=False):
+def locate_unlinked(gts, window_size=100, step=20, threshold=.1,
+                    chunk_size=None, gts_to_gns=False):
     """modified from https://github.com/cggh/scikit-allel"""
     # check inputs
     if not gts_to_gns:
@@ -418,7 +418,7 @@ def locate_unlinked(gts, window_size=100, step=20, threshold=.1, chunk_size=None
 
     # compute in chunks to avoid loading big arrays into memory
     chunk_size = get_blen_array(gts, chunk_size)
-    chunk_size = max(chunk_size, 10 * window_size) # avoid too small chunks
+    chunk_size = max(chunk_size, 10 * window_size)  # avoid too small chunks
     n_variants = gts.shape[0]
     for i in range(0, n_variants, chunk_size):
         # N.B., ensure overlap with next window
@@ -458,4 +458,3 @@ def filter_unlinked_vars(variations, window_size, step=20, filtered_vars=None,
         filtered_vars = _filter_chunk2(variations, filtered_vars,
                                        selected_rows=unlinked_mask)
     return filtered_vars
-

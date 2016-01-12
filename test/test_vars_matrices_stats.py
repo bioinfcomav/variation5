@@ -12,7 +12,7 @@ from functools import partial
 import numpy
 
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
-from variation.variations.stats import (calc_maf, histogram,
+from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         histogram_for_chunks,
                                         _calc_maf_depth,
                                         calc_missing_gt, calc_obs_het,
@@ -29,7 +29,7 @@ from variation.variations.stats import (calc_maf, histogram,
                                         calc_maf_depth_distribs_per_sample,
                                         PositionalStatsCalculator, call_is_hom,
                                         calc_cum_distrib, _calc_r2,
-                                        calc_r2_windows)
+                                        calc_r2_windows, GT_FIELD)
 from test.test_utils import TEST_DATA_DIR
 
 
@@ -47,17 +47,43 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(cum_distrib == [exp, exp])
 
     def test_maf(self):
+        gts = numpy.array([])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        mafs = calc_maf(varis, chunk_size=None)
+        assert mafs.shape == (0,)
+        mafs = calc_maf(varis)
+        assert mafs.shape == (0,)
+
+        mafs = calc_mac(varis, chunk_size=None)
+        assert mafs.shape == (0,)
+        mafs = calc_mac(varis)
+        assert mafs.shape == (0,)
+
         gts = numpy.array([[[0], [0], [0], [0]], [[0], [0], [1], [1]],
                            [[0], [0], [0], [1]], [[-1], [-1], [-1], [-1]]])
         varis = VariationsArrays()
-        varis['/calls/GT'] = gts
+        varis[GT_FIELD] = gts
         mafs = calc_maf(varis, min_num_genotypes=1)
         assert numpy.allclose(mafs, numpy.array([1., 0.5, 0.75, numpy.NaN]),
                               equal_nan=True)
 
+        macs = calc_mac(varis, min_num_genotypes=1)
+        assert numpy.allclose(macs, numpy.array([4, 2, 3, numpy.NaN]),
+                              equal_nan=True)
+
         varis = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         mafs = calc_maf(varis)
+        assert numpy.all(mafs[numpy.logical_not(numpy.isnan(mafs))] >= 0.5)
+        assert numpy.all(mafs[numpy.logical_not(numpy.isnan(mafs))] <= 1)
         assert mafs.shape == (943,)
+
+        macs = calc_mac(varis)
+        # assert macs.shape == (943,)
+        min_mac = varis['/calls/GT'].shape[1] / 2
+        max_mac = varis['/calls/GT'].shape[1]
+        assert numpy.all(macs[numpy.logical_not(numpy.isnan(mafs))] >= min_mac)
+        assert numpy.all(macs[numpy.logical_not(numpy.isnan(mafs))] <= max_mac)
 
     def test_calc_maf_distrib(self):
         gts = numpy.array([[[0], [0], [0], [0]], [[0], [0], [1], [1]],
@@ -113,6 +139,14 @@ class StatsTest(unittest.TestCase):
 
     def test_calc_maf_depth_distribs_per_sample(self):
         variations = VariationsArrays()
+        variations['/calls/AO'] = numpy.array([])
+        variations['/calls/RO'] = numpy.array([])
+        distribs, bins = calc_maf_depth_distribs_per_sample(variations,
+                                                            chunk_size=None)
+        assert distribs is None
+        assert bins is None
+
+        variations = VariationsArrays()
         variations['/calls/AO'] = numpy.array([[[0, 0], [0, 0], [15, -1]]])
         variations['/calls/RO'] = numpy.array([[10, 5, 15]])
         variations.samples = list(range(3))
@@ -129,6 +163,13 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(distribs1 == distribs2)
 
     def test_calc_missing_gt_rates(self):
+        gts = numpy.array([])
+        varis = {'/calls/GT': gts}
+        called_vars = calc_called_gt(varis, rates=False)
+        assert called_vars.shape[0] == 0
+        called_vars = calc_called_gt(varis, rates=True)
+        assert called_vars.shape[0] == 0
+
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         arrays = VariationsArrays()
         arrays.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
@@ -157,6 +198,12 @@ class StatsTest(unittest.TestCase):
         assert numpy.allclose(rates, expected)
 
     def test_calc_obs_het(self):
+        gts = numpy.array([])
+        dps = numpy.array([])
+        varis = {'/calls/GT': gts, '/calls/DP': dps}
+        het = calc_obs_het(varis, min_num_genotypes=0)
+        assert het.shape[0] == 0
+
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
@@ -167,12 +214,21 @@ class StatsTest(unittest.TestCase):
         gts = numpy.array([[[0, 0], [0, 1], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]]])
 
-        varis = {'/calls/GT': gts}
+        dps = numpy.array([[5, 10, 10, 10],
+                           [10, 10, 10, 10]])
+
+        varis = {'/calls/GT': gts, '/calls/DP': dps}
         het = calc_obs_het(varis, min_num_genotypes=0)
         assert numpy.allclose(het, [0.5, 0])
 
         het = calc_obs_het(varis, min_num_genotypes=10)
         assert numpy.allclose(het, [numpy.NaN, numpy.NaN], equal_nan=True)
+
+        het = calc_obs_het(varis, min_num_genotypes=0, min_call_dp=10)
+        assert numpy.allclose(het, [1, 0])
+
+        het = calc_obs_het(varis, min_num_genotypes=0, min_call_dp=5)
+        assert numpy.allclose(het, [0.5, 0])
 
     def test_calc_obs_het_sample(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -189,6 +245,11 @@ class StatsTest(unittest.TestCase):
         varis = {'/calls/GT': gts}
         het = calc_obs_het_by_sample(varis, chunk_size=None)
         assert numpy.allclose(het, [0, 1 / 3, 0, numpy.NaN], equal_nan=True)
+
+        gts = numpy.array([])
+        varis = {'/calls/GT': gts}
+        het = calc_obs_het_by_sample(varis, chunk_size=None)
+        assert het.shape[0] == 0
 
     def test_calc_gt_type_stats(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -222,6 +283,11 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(dens_var == expected)
 
     def test_calc_allele_freq(self):
+        gts = numpy.array([])
+        varis = {'/calls/GT': gts, '/variations/alt': numpy.array([])}
+        allele_freq = calc_allele_freq(varis, min_num_genotypes=0)
+        assert allele_freq.shape[0] == 0
+
         gts = numpy.array([[[0, 0], [1, 1], [0, -1], [-1, -1]],
                            [[0, -1], [0, 0], [0, -1], [-1, -1]],
                            [[0, 1], [0, 2], [0, 0], [-1, -1]]])
@@ -248,7 +314,21 @@ class StatsTest(unittest.TestCase):
         expected = numpy.array([1 - (0.4 / 0.42)])
         assert numpy.allclose(result, expected)
 
+        variations = {'/calls/GT': numpy.array([]),
+                      '/variations/alt': numpy.array([])}
+        result = calc_inbreeding_coef(variations, min_num_genotypes=0,
+                                      chunk_size=None)
+        assert result.shape[0] == 0
+
     def test_calculate_hwe(self):
+        variations = VariationsArrays()
+        gts = numpy.array([])
+        variations['/calls/GT'] = gts
+        variations['/variations/alt'] = gts
+        result = calc_hwe_chi2_test(variations, min_num_genotypes=0,
+                                    chunk_size=None)
+        assert result.shape[0] == 0
+
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [0, 1], [0, 1], [0, 0], [0, 1], [0, 0],
                             [0, 0], [0, 1], [1, 1], [0, 0]],
@@ -490,5 +570,5 @@ class StatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_maf_distrib']
+    # import sys;sys.argv = ['', 'StatsTest.test_maf']
     unittest.main()

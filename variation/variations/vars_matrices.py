@@ -580,7 +580,10 @@ class _VariationMatrices():
 
     @property
     def ploidy(self):
-        return self['/calls/GT'].shape[2]
+        if self[GT_FIELD].shape[0] == 0:
+            return None
+        else:
+            return self[GT_FIELD].shape[2]
 
     def create_matrix_from_matrix(self, path, matrix):
 
@@ -680,9 +683,10 @@ class _VariationMatrices():
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
-    def get_chunk(self, index):
+    def get_chunk(self, index, kept_fields=None, ignored_fields=None):
 
-        paths = self.keys()
+        paths = self._filter_fields(kept_fields=kept_fields,
+                                    ignored_fields=ignored_fields)
 
         dsets = {field: self[field] for field in paths}
 
@@ -697,14 +701,12 @@ class _VariationMatrices():
         var_array._set_samples(self.samples)
         return var_array
 
-    def iterate_chunks(self, kept_fields=None, ignored_fields=None,
-                       chunk_size=None):
-
+    def _filter_fields(self, kept_fields, ignored_fields):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
             raise ValueError(msg)
-        # We read the hdf5 file to keep the datasets metadata
+
         # We remove the unwanted fields
         paths = self.keys()
         if kept_fields:
@@ -722,22 +724,37 @@ class _VariationMatrices():
                 msg += ', '.join(not_in_matrix)
                 raise ValueError(msg)
             paths = set(paths).difference(ignored_fields)
+        return paths
+
+    def iterate_chunks(self, kept_fields=None, ignored_fields=None,
+                       chunk_size=None, random_sample_rate=1):
+        paths = self._filter_fields(kept_fields=kept_fields,
+                                    ignored_fields=ignored_fields)
 
         dsets = {field: self[field] for field in paths}
 
-        # how many snps are per chunk?
-
         if chunk_size is None:
             chunk_size = self._vars_in_chunk
-        nsnps = self.num_variations
 
+        nsnps = self.num_variations
         for start in range(0, nsnps, chunk_size):
             var_array = VariationsArrays(vars_in_chunk=chunk_size)
             stop = start + chunk_size
             if stop > nsnps:
                 stop = nsnps
+            if random_sample_rate == 1:
+                slice_ = slice(start, stop)
+            else:
+                num_vars = stop - start
+                num_vars_keep = round(num_vars * random_sample_rate)
+                if not num_vars_keep:
+                    continue
+                slice_ = numpy.random.choice(num_vars, num_vars_keep,
+                                             replace=False)
+                slice_.sort()
+                slice_ += start
             for path, dset in dsets.items():
-                var_array[path] = dset[start:stop]
+                var_array[path] = dset[slice_, ...]
             var_array._set_metadata(self.metadata)
             var_array._set_samples(self.samples)
             yield var_array

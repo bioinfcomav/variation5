@@ -66,6 +66,10 @@ def row_value_counter_fact(value, ratio=False):
 
 
 def counts_by_row(mat, missing_value=None):
+    return counts_and_allels_by_row(mat, missing_value=missing_value)[0]
+
+
+def counts_and_allels_by_row(mat, missing_value=None):
 
     alleles = sorted(numpy.unique(mat))
     allele_counts = None
@@ -82,7 +86,7 @@ def counts_by_row(mat, missing_value=None):
         else:
             allele_counts = numpy.column_stack((allele_counts, counts))
 
-    return allele_counts
+    return allele_counts, alleles
 
 
 def plot_hist(hist, bins, print_plot=False):

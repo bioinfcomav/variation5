@@ -9,8 +9,9 @@ from scipy.stats.stats import chisquare
 from allel.stats.ld import rogers_huff_r
 from allel.model.ndarray import GenotypeArray
 
-from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH)
-from variation.matrix.stats import counts_by_row
+from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH,
+                       MISSING_INT)
+from variation.matrix.stats import counts_by_row, counts_and_allels_by_row
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.utils.misc import remove_nans
@@ -110,10 +111,32 @@ def _calc_range(vectors):
     return range_
 
 
-def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+def _calc_mac(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    gt_counts, alleles = counts_and_allels_by_row(variations[GT_FIELD])
+    if gt_counts is None:
+        return numpy.array([])
 
+    if MISSING_INT in alleles:
+        missing_allele_idx = alleles.index(MISSING_INT)
+        num_missing = numpy.copy(gt_counts[:, missing_allele_idx])
+        gt_counts[:, missing_allele_idx] = 0
+    else:
+        num_missing = 0
+    max_ = numpy.amax(gt_counts, axis=1)
+    num_samples = variations[GT_FIELD].shape[1]
+    ploidy = variations[GT_FIELD].shape[2]
+    num_chroms = num_samples * ploidy
+    mac = num_samples - (num_chroms - num_missing - max_) / ploidy
+    # we set the snps with no data to nan
+    mac[max_ == 0] = numpy.nan
+    return _mask_stats_with_few_samples(mac, variations, min_num_genotypes)
+
+
+def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gts = variations[GT_FIELD]
-    gt_counts = counts_by_row(gts, missing_value=MISSING_VALUES[int])
+    gt_counts = counts_by_row(gts, missing_value=MISSING_INT)
+    if gt_counts is None:
+        return numpy.array([])
     max_ = numpy.amax(gt_counts, axis=1)
     sum_ = numpy.sum(gt_counts, axis=1)
 
@@ -121,6 +144,22 @@ def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     with numpy.errstate(invalid='ignore'):
         mafs_gt = max_ / sum_
     return _mask_stats_with_few_samples(mafs_gt, variations, min_num_genotypes)
+
+
+def _calc_mac_by_chunk(variations,
+                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                       chunk_size=SNPS_PER_CHUNK):
+    macs = None
+    for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=chunk_size):
+        chunk_maf = _calc_mac(chunk, min_num_genotypes=min_num_genotypes)
+        if macs is None:
+            macs = chunk_maf
+        else:
+            macs = numpy.append(macs, chunk_maf)
+    if macs is None:
+        return numpy.array([])
+    return macs
 
 
 def _calc_maf_by_chunk(variations,
@@ -134,7 +173,17 @@ def _calc_maf_by_chunk(variations,
             mafs = chunk_maf
         else:
             mafs = numpy.append(mafs, chunk_maf)
+    if mafs is None:
+        return numpy.array([])
     return mafs
+
+
+def calc_mac(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+             chunk_size=SNPS_PER_CHUNK):
+    if chunk_size is None:
+        return _calc_mac(variations, min_num_genotypes=min_num_genotypes)
+    else:
+        return _calc_mac_by_chunk(variations, min_num_genotypes, chunk_size)
 
 
 def calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
@@ -238,6 +287,8 @@ def _calc_items_in_row(mat):
 
 def calc_missing_gt(variations, rates=True, axis=1):
     gts = variations[GT_FIELD]
+    if gts.shape[0] == 0:
+        return numpy.array([])
     if is_dataset(gts):
         gts = gts[:]
     missing = numpy.any(gts == MISSING_VALUES[int], axis=2).sum(axis=axis)
@@ -251,6 +302,9 @@ def calc_missing_gt(variations, rates=True, axis=1):
 
 def calc_called_gt(variations, rates=True, axis=1):
     missing = calc_missing_gt(variations, rates=rates, axis=axis)
+    if missing.shape[0] == 0:
+        return numpy.array([])
+
     if rates:
         return 1 - missing
     else:
@@ -258,21 +312,45 @@ def calc_called_gt(variations, rates=True, axis=1):
         return total - missing
 
 
+def _call_is_het(variations, min_call_dp):
+    is_hom, is_missing = _call_is_hom(variations, min_call_dp)
+    if is_hom.shape[0] == 0:
+        return is_hom, is_missing
+    is_het = numpy.logical_not(is_hom)
+    is_het[is_missing] = False
+    return is_het, is_missing
+
+
 def call_is_het(gts):
-    is_het = numpy.logical_not(call_is_hom(gts))
-    missing_gts = is_missing(gts, axis=2)
-    is_het[missing_gts] = False
-    return is_het
+    return _call_is_het({GT_FIELD: gts}, min_call_dp=0)[0]
 
 
-def call_is_hom(gts):
+def _call_is_hom(variations, min_call_dp):
+    gts = variations[GT_FIELD]
+
+    if gts.shape[0] == 0:
+        return numpy.array([]), numpy.array([])
+
+    if is_dataset(gts):
+        gts = gts[:]
+
     is_hom = numpy.full(gts.shape[:-1], True, dtype=numpy.bool)
     for idx in range(1, gts.shape[2]):
         is_hom = numpy.logical_and(gts[:, :, idx] == gts[:, :, idx - 1],
                                    is_hom)
     missing_gts = is_missing(gts, axis=2)
+    if min_call_dp:
+        dps = variations[DP_FIELD]
+        if is_dataset(dps):
+            dps = dps[:]
+        low_dp = dps < min_call_dp
+        missing_gts = numpy.logical_or(missing_gts, low_dp)
     is_hom[missing_gts] = False
-    return is_hom
+    return is_hom, missing_gts
+
+
+def call_is_hom(gts):
+    return _call_is_hom({GT_FIELD: gts}, min_call_dp=0)[0]
 
 
 def call_is_hom_ref(gts):
@@ -283,12 +361,12 @@ def call_is_hom_alt(gts):
     return numpy.logical_and(call_is_hom(gts), gts[:, :, 0] != 0)
 
 
-def _calc_obs_het_counts(variations, axis):
-    gts = variations[GT_FIELD]
-    if is_dataset(gts):
-        gts = gts[:]
-    is_het = call_is_het(gts)
-    return numpy.sum(is_het, axis=axis)
+def _calc_obs_het_counts(variations, axis, min_call_dp):
+    is_het, is_missing = _call_is_het(variations, min_call_dp)
+    if is_het.shape[0] == 0:
+        return is_het, is_missing
+    return (numpy.sum(is_het, axis=axis),
+            numpy.sum(numpy.logical_not(is_missing), axis=axis))
 
 
 def _mask_stats_with_few_samples(stats, variations, min_num_genotypes,
@@ -301,9 +379,10 @@ def _mask_stats_with_few_samples(stats, variations, min_num_genotypes,
 
 
 def calc_obs_het(variations,
-                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
-    het = _calc_obs_het_counts(variations, axis=1)
-    called_gts = calc_called_gt(variations, rates=False)
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                 min_call_dp=0):
+    het, called_gts = _calc_obs_het_counts(variations, axis=1,
+                                           min_call_dp=min_call_dp)
     # To avoid problems with NaNs
     with numpy.errstate(invalid='ignore'):
         het = het / called_gts
@@ -312,7 +391,7 @@ def calc_obs_het(variations,
 
 
 def _calc_obs_het_by_sample(variations):
-    return _calc_obs_het_counts(variations, axis=0)
+    return _calc_obs_het_counts(variations, axis=0, min_call_dp=0)
 
 
 def calc_obs_het_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
@@ -324,9 +403,8 @@ def calc_obs_het_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
     obs_het_by_sample = None
     called_gts = None
     for chunk in chunks:
-        chunk_obs_het_by_sample = _calc_obs_het_by_sample(chunk)
-        chunk_called_gts = calc_called_gt(chunk, rates=False,
-                                          axis=0)
+        chunk_obs_het_by_sample, missing = _calc_obs_het_by_sample(chunk)
+        chunk_called_gts = missing
         if called_gts is None:
             obs_het_by_sample = chunk_obs_het_by_sample
             called_gts = chunk_called_gts
@@ -392,6 +470,8 @@ def _calc_allele_counts(gts):
 def calc_allele_freq(variations,
                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gts = variations[GT_FIELD]
+    if gts.shape[0] == 0:
+        return numpy.array([])
     max_num_allele = variations[ALT_FIELD].shape[1] + 1
     allele_counts = _calc_allele_counts(gts)
     total_counts = numpy.sum(allele_counts, axis=1)
@@ -406,6 +486,8 @@ def _calc_expected_het(variations,
                        min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     allele_freq = calc_allele_freq(variations,
                                    min_num_genotypes=min_num_genotypes)
+    if allele_freq.shape[0] == 0:
+        return numpy.array([])
     ploidy = variations[GT_FIELD].shape[2]
     return 1 - numpy.sum(allele_freq ** ploidy, axis=1)
 
@@ -453,6 +535,8 @@ def calc_inbreeding_coef(variations, chunk_size=SNPS_PER_CHUNK,
             inbreed_coef = chunk_inbreed_coef
         else:
             inbreed_coef = numpy.append(inbreed_coef, chunk_inbreed_coef)
+    if inbreed_coef is None:
+        return numpy.array([])
     return inbreed_coef
 
 
@@ -460,6 +544,8 @@ def _calc_hwe_chi2_test(variations, num_allele,
                         min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     ploidy = variations.ploidy
     gts = variations[GT_FIELD]
+    if gts.shape[0] == 0:
+        return numpy.array([])
 
     allele_freq = calc_allele_freq(variations,
                                    min_num_genotypes=min_num_genotypes)
@@ -700,6 +786,8 @@ def calc_field_distribs_per_sample(variations, field, range_=None,
 def _calc_maf_depth(variations, min_depth=DEF_MIN_DEPTH):
     ro = variations[RO_FIELD]
     ao = variations[AO_FIELD]
+    if ro.shape[0] == 0:
+        return numpy.array([])
     if len(ro.shape) == len(ao.shape):
         ao = ao.reshape((ao.shape[0], ao.shape[1], 1))
     if is_dataset(ro):
@@ -725,6 +813,7 @@ def calc_maf_depth_distribs_per_sample(variations, min_depth=DEF_MIN_DEPTH,
         chunks = [variations]
 
     histograms = None
+    bins = None
     for chunk in chunks:
         chunk_hists = None
         maf_depth = _calc_maf_depth(chunk, min_depth)
@@ -903,7 +992,8 @@ def calc_r2_windows(variations, window_size, step=None):
             if not numpy.any(chrom_window_mask):
                 continue
 
-            r2 = numpy.mean(_calc_r2(gts[chrom_window_mask, :, :]))
+            r2s = _calc_r2(gts[chrom_window_mask, :, :])
+            r2 = numpy.mean(r2s) if r2s.size else float('nan')
 
             window_chrom.append(chrom_name)
             window_pos.append(start)

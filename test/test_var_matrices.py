@@ -8,21 +8,21 @@
 import os
 import unittest
 import gzip
-import sys
 from tempfile import NamedTemporaryFile
-from subprocess import check_output
 from os.path import join
 
 import h5py
 import numpy
+import scipy
 
 from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5,
                                                 _prepare_vcf_header, _to_vcf)
 from variation.gt_parsers.vcf import VCFParser
-from test.test_utils import TEST_DATA_DIR, BIN_DIR
+from test.test_utils import TEST_DATA_DIR
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
+from variation.variations.index import PosIndex
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -111,6 +111,30 @@ class VcfH5Test(unittest.TestCase):
             assert numpy.all(hdf5['/calls/GT'][:] == hdf5_2['/calls/GT'][:])
         finally:
             os.remove(out_fpath)
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        hdf5_2 = VariationsArrays()
+        hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.2))
+        _, prob = scipy.stats.ttest_ind(hdf5['/variations/pos'][:],
+                                        hdf5_2['/variations/pos'][:])
+        assert prob > 0.05
+        assert hdf5_2.num_variations / hdf5.num_variations - 0.2 < 0.1
+        chrom = hdf5_2['/variations/chrom'][0]
+        pos = hdf5_2['/variations/pos'][0]
+        index = PosIndex(hdf5)
+        idx = index.index_pos(chrom, pos)
+        old_snp = hdf5['/calls/GT'][idx]
+        new_snp = hdf5_2['/calls/GT'][0]
+        assert numpy.all(old_snp == new_snp)
+
+        old_snp = hdf5['/calls/DP'][idx]
+        new_snp = hdf5_2['/calls/DP'][0]
+        assert numpy.all(old_snp == new_snp)
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        hdf5_2 = VariationsArrays()
+        hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0))
+        assert hdf5_2.num_variations == 0
 
 
 def _init_var_mat(klass):
@@ -324,12 +348,15 @@ class VcfWrittenTest(unittest.TestCase):
                          'rb')
         vcf = VCFParser(vcf_fhand)
 
-        max_field_lens = {'INFO': {}, 'CALLS': {b'GQ': 1, b'GT': 1, b'HQ': 2, b'DP': 1}, 'FILTER': 1, 'alt': 2}
-        max_field_str_lens = {'ref': 4, 'INFO': {}, 'id': 10, 'FILTER': 0, 'alt': 5, 'chrom': 2}
+        max_field_lens = {'INFO': {}, 'CALLS': {b'GQ': 1, b'GT': 1, b'HQ': 2,
+                                                b'DP': 1}, 'FILTER': 1,
+                          'alt': 2}
+        max_field_str_lens = {'ref': 4, 'INFO': {}, 'id': 10, 'FILTER': 0,
+                              'alt': 5, 'chrom': 2}
 
         h5_without_info = VariationsH5(fpath=out_fpath, mode='w',
                                        ignore_undefined_fields=True)
-        h5_without_info.put_vars(vcf,  max_field_lens=max_field_lens,
+        h5_without_info.put_vars(vcf, max_field_lens=max_field_lens,
                                  max_field_str_lens=max_field_str_lens)
         vcf_fhand.close()
 
@@ -349,8 +376,12 @@ class VcfWrittenTest(unittest.TestCase):
         vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
                         pre_read_max_size=10000)
 
-        max_field_lens = {'CALLS': {b'GT': 1, b'HQ': 2, b'DP': 1, b'GQ': 1}, 'FILTER': 1, 'INFO': {b'AA': 1, b'AF': 2, b'DP': 1, b'DB': 1, b'NS': 1, b'H2': 1}, 'alt': 2}
-        max_field_str_lens = {'INFO': {}, 'alt': 5, 'chrom': 2, 'ref': 4, 'id': 10, 'FILTER': 0}
+        max_field_lens = {'CALLS': {b'GT': 1, b'HQ': 2, b'DP': 1, b'GQ': 1},
+                          'FILTER': 1,
+                          'INFO': {b'AA': 1, b'AF': 2, b'DP': 1,
+                                   b'DB': 1, b'NS': 1, b'H2': 1}, 'alt': 2}
+        max_field_str_lens = {'INFO': {}, 'alt': 5, 'chrom': 2, 'ref': 4,
+                              'id': 10, 'FILTER': 0}
 
         variations = VariationsArrays(ignore_undefined_fields=True)
         variations.put_vars(vcf, max_field_lens=max_field_lens,
@@ -371,9 +402,10 @@ class VcfWrittenTest(unittest.TestCase):
         exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "r")
         lines = _to_vcf(tomato_h5)
 
-        #only checking snps
+        # only checking snps
         exp_lines = list(exp_fhand)
-        exp_lines = [line.strip() for line in exp_lines if not line.startswith('#')]
+        exp_lines = [line.strip() for line in exp_lines
+                     if not line.startswith('#')]
         i = 0
         for line in lines:
             if line.startswith('#'):
@@ -416,5 +448,5 @@ class Mat012Test(unittest.TestCase):
 
 
 if __name__ == "__main__":
-#     import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf']
+    # import sys; sys.argv = ['', 'VcfH5Test.test_create_hdf5_with_chunks']
     unittest.main()

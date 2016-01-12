@@ -48,8 +48,7 @@ def _parse_vcf(chrom, vcf_fpath, tmp_dir, max_field_lens, max_field_str_lens,
     vcf_parser = VCFParser(get_vcf_lines_for_chrom(chrom, vcf_fpath),
                            kept_fields=kept_fields,
                            ignored_fields=ignored_fields,
-                           max_field_lens=max_field_lens,
-                           max_field_str_lens=max_field_str_lens)
+                           max_field_lens=max_field_lens)
 
     tmp_h5.put_vars(vcf_parser, max_field_lens=max_field_lens,
                     max_field_str_lens=max_field_str_lens)

@@ -146,6 +146,7 @@ class VcfH5Test(unittest.TestCase):
         hdf5_3 = VariationsArrays()
         hdf5_3.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.01))
 
+
 def _init_var_mat(klass):
     if klass is VariationsH5:
         fhand = NamedTemporaryFile(suffix='.h5')

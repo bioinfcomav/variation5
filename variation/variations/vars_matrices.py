@@ -756,6 +756,10 @@ class _VariationMatrices():
                                              replace=False)
                 slice_.sort()
                 slice_ += start
+
+                if len(slice_) == 1:
+                    slice_ = slice(slice_[0], slice_[0] + 1)
+
             for path, dset in dsets.items():
                 var_array[path] = dset[slice_, ...]
             var_array._set_metadata(self.metadata)

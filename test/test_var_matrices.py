@@ -127,6 +127,12 @@ class VcfH5Test(unittest.TestCase):
         new_snp = hdf5_2['/calls/GT'][0]
         assert numpy.all(old_snp == new_snp)
 
+        # putting empty chunks
+        hdf5_2.put_chunks(None)
+        hdf5_2.put_chunks([])
+        chunk = hdf5.get_chunk(slice(1000, None))
+        hdf5_2.put_chunks([chunk])
+
         old_snp = hdf5['/calls/DP'][idx]
         new_snp = hdf5_2['/calls/DP'][0]
         assert numpy.all(old_snp == new_snp)

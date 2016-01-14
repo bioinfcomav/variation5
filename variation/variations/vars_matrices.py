@@ -665,6 +665,9 @@ class _VariationMatrices():
 
     def put_chunks(self, chunks, kept_fields=None, ignored_fields=None):
         matrices = None
+        if chunks is None:
+            return
+
         for chunk in chunks:
             if matrices is None:
                 matrices = self._create_or_get_mats_from_chunk(chunk)

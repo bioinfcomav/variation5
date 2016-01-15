@@ -14,6 +14,7 @@ from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
+
 # Missing docstring
 # pylint: disable=C0111
 
@@ -356,12 +357,6 @@ def _preprocess_header_line(h5, _id, record, group=None):
                 if key == 'Description':
                     value = '"{}"'.format(value)
                 line += ',{}={}'.format(key, value)
-#             for key, value in record.items():
-#                 print(record.items(), group)
-#                 print(key in required_fields[group])
-#                 if key in required_fields[group]:
-#                     continue
-#                 line += ',{}={}'.format(key, value)
             line += '>'
         return line
 
@@ -585,7 +580,7 @@ class _VariationMatrices():
         else:
             return self[GT_FIELD].shape[2]
 
-    def create_matrix_from_matrix(self, path, matrix):
+    def _create_matrix_from_matrix(self, path, matrix):
 
         result = _dset_metadata_from_matrix(matrix)
         shape, dtype, chunks, maxshape, fillvalue = result
@@ -611,7 +606,7 @@ class _VariationMatrices():
         matrices = {}
         for path in mats_chunks.keys():
             mat_chunk = mats_chunks[path]
-            matrix = self.create_matrix_from_matrix(path, mat_chunk)
+            matrix = self._create_matrix_from_matrix(path, mat_chunk)
             matrices[path] = matrix
         return matrices
 

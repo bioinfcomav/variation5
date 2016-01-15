@@ -773,14 +773,17 @@ class _VariationMatrices():
             self._index = PosIndex(self)
             index = self._index
 
+        chroms = self['/variations/chrom']
         for chrom in index.chroms:
             chrom_start, chrom_end = index.get_chrom_range(chrom)
             pos = chrom_start
+            print('chrom', chrom)
             while True:
                 if pos > chrom_end:
                     break
                 idx0 = index.index_pos(chrom, pos)
                 idx1 = index.index_pos(chrom, pos + win_step)
+                assert chroms[idx0] == chrom
                 yield self.get_chunk(slice(idx0, idx1),
                                      kept_fields=kept_fields,
                                      ignored_fields=ignored_fields)

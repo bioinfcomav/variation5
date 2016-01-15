@@ -1,4 +1,5 @@
 from array import array
+from collections import OrderedDict
 
 CHUNK_SIZE = 200
 
@@ -6,13 +7,21 @@ CHUNK_SIZE = 200
 class PosIndex():
     def __init__(self, array):
         self.array = array
-        self.dictionary = self._create_dict()
+        self._index = self._create_dict()
+
+    @property
+    def chroms(self):
+        return iter(self._index.keys())
+
+    def get_chrom_range(self, chrom):
+        chrom_locs = self._index[chrom]
+        return chrom_locs[0], chrom_locs[-1]
 
     def index_pos(self, chrom, pos):
-        return self._bisect(self.dictionary[chrom], pos)
+        return self._bisect(self._index[chrom], pos)
 
     def _create_dict(self):
-        idx = {}
+        idx = OrderedDict()
         snps = self.array
         n_snps = snps['/variations/chrom'].shape[0]
         for start in range(0, n_snps, CHUNK_SIZE):

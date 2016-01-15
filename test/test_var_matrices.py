@@ -239,6 +239,15 @@ class VarMatsTests(unittest.TestCase):
             assert chunk['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(chunk['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
 
+    def test_iterate_wins(self):
+        fpath = join(TEST_DATA_DIR, 'ril.hdf5')
+        hd5 = VariationsH5(fpath, mode='r')
+        wins = hd5.iterate_wins(win_size=1000000)
+
+        hd5_2 = VariationsArrays()
+        hd5_2.put_chunks(wins)
+        numpy.all(hd5['/variations/pos'] == hd5_2['/variations/pos'])
+
     def test_delete_item_from_variationArray(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
@@ -458,5 +467,5 @@ class Mat012Test(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VcfH5Test.test_create_hdf5_with_chunks']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_iterate_wins']
     unittest.main()

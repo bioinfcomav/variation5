@@ -14,6 +14,7 @@ from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
+from variation.variations.index import PosIndex
 
 # Missing docstring
 # pylint: disable=C0111
@@ -572,6 +573,7 @@ class _VariationMatrices():
         self.ignore_undefined_fields = ignore_undefined_fields
         self.kept_fields = kept_fields
         self.ignored_fields = ignored_fields
+        self._index = None
 
     @property
     def ploidy(self):
@@ -678,6 +680,8 @@ class _VariationMatrices():
                 dset = matrices[path]
                 append_matrix(dset, dset_chunk)
 
+        self._index = None
+
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
@@ -761,6 +765,27 @@ class _VariationMatrices():
             var_array._set_samples(self.samples)
             yield var_array
 
+    def iterate_wins(self, win_size, win_step=None, kept_fields=None,
+                     ignored_fields=None):
+        if win_step is None:
+            win_step = win_size
+        if self._index is None:
+            self._index = PosIndex(self)
+            index = self._index
+
+        for chrom in index.chroms:
+            chrom_start, chrom_end = index.get_chrom_range(chrom)
+            pos = chrom_start
+            while True:
+                if pos > chrom_end:
+                    break
+                idx0 = index.index_pos(chrom, pos)
+                idx1 = index.index_pos(chrom, pos + win_step)
+                yield self.get_chunk(slice(idx0, idx1),
+                                     kept_fields=kept_fields,
+                                     ignored_fields=ignored_fields)
+                pos += win_step
+
     def _set_metadata(self, metadata):
         self._metadata = metadata
 
@@ -794,6 +819,7 @@ class _VariationMatrices():
 
     def put_vars(self, var_parser, max_field_lens=None,
                  max_field_str_lens=None):
+        self._index = None
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk,
                                  max_field_lens=max_field_lens,
                                  max_field_str_lens=max_field_str_lens,

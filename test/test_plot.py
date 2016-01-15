@@ -16,7 +16,7 @@ import numpy
 from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             qqplot, manhattan_plot, plot_barplot, plot_distrib,
                             plot_hist2d, plot_boxplot_from_distribs_series,
-                            write_curlywhirly)
+                            write_curlywhirly, _look_for_first_different)
 
 
 class PlotTest(unittest.TestCase):
@@ -78,12 +78,18 @@ class PlotTest(unittest.TestCase):
                    fhand=fhand)
 
     def test_manhattan_plot(self):
+
+        assert _look_for_first_different([1, 1, 3], 0) == 2
+        assert _look_for_first_different([1, 1, 3], 1) == 2
+        assert _look_for_first_different([1, 1, 3], 2) == 3
+        assert _look_for_first_different([1, 1, 1], 0) == 3
+
         chrom = numpy.array([b'chr1'] * 3 + [b'chr2'] * 3 + [b'chr3'] * 3)
         pos = numpy.array([1, 2, 3, 2, 5, 10, 1, 2, 3])
         statistic = numpy.array([2, 3, 2, 5, 3, 1, 3, 4, 2])
         with NamedTemporaryFile(suffix='.png') as fhand:
             manhattan_plot(chrom, pos, statistic, fhand=fhand,
-                           figsize=(10, 10), ylim=0, marker='k')
+                           figsize=(10, 10))
 
     def test_plot_hist2d(self):
         x = numpy.random.rand(1000)
@@ -106,5 +112,5 @@ class PlotTest(unittest.TestCase):
         assert fhand.getvalue().splitlines()[1].startswith('class1\tacc1\t')
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PlotTest.test_plot_boxplot_series']
+    # import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
     unittest.main()

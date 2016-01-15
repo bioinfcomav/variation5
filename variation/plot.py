@@ -1,5 +1,6 @@
 
 from itertools import cycle
+import bisect
 
 import numpy
 import matplotlib.pyplot as plt
@@ -254,59 +255,61 @@ def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
     return result
 
 
+def _look_for_first_different(items, index):
+    '''It returns the index of the first index to the left of the givin index
+    that is different'''
+    item = items[index]
+    right = bisect.bisect_right(items, item, lo=index + 1)
+    return right
+
+
 def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
                    no_interactive_win=False, figsize=None, fhand=None,
                    colors=['darkorchid', 'darkturquoise'],
-                   yfunc=lambda x: x, ylim=0, yline=None, remove_nans=True,
-                   show_chroms=True, marker='o'):
-    if remove_nans:
-        mask = numpy.logical_not(numpy.isnan(values))
-        chrom = chrom[mask]
-        pos = pos[mask]
-        values = values[mask]
+                   show_chroms=True):
 
     print_figure = False
     if axes is None:
         print_figure = True
         axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
 
-    x = numpy.array([])
-    y = numpy.array([])
-    col = numpy.array([])
-    chrom_names = numpy.unique(chrom)
-    last_pos = 0
     colors = cycle(colors)
-    xticks = []
-    for chrom_name, color in zip(chrom_names, colors):
-        mask = chrom == chrom_name
-        chrom_pos = pos[mask]
-        col = numpy.append(col, numpy.repeat(color, chrom_pos.shape[0]))
-        xs = chrom_pos + last_pos
-        x = numpy.append(x, xs)
-        xticks.append((xs[0] + xs[-1]) / 2)
-        ys = yfunc(values[mask])
-        y = numpy.append(y, ys)
-        last_pos = xs[-1]
-        if marker != 'o':
-            result = axes.plot(xs, ys, marker, c=color)
-    if marker == 'o':
-        result = axes.scatter(x, y, c=col, marker=marker, alpha=0.8,
-                              edgecolors='none')
-    axes.set_xticks(xticks)
+
+    start = 0
+    x_offset = 0
+    chroms = []
+    while True:
+        if start >= len(chrom):
+            break
+        end = _look_for_first_different(chrom, start)
+        this_chrom = chrom[start]
+        x = pos[start: end] + x_offset
+        y = values[start: end]
+        col = next(colors)
+        axes.scatter(x, y, c=col, alpha=0.8,
+                     edgecolors='none')
+        x_offset = x[-1]
+        chroms.append((this_chrom, x[-1]))
+        start = end
+
     if show_chroms:
-        axes.set_xticklabels(decode(chrom_names), rotation=-90, size='small')
-    else:
-        axes.set_xticklabels([''])
-    axes.set_xlim(0, x[-1])
-    axes.set_ylim(ylim)
-    if yline is not None:
-        axes.axhline(y=yline, color='0.5', linewidth=2)
-    for function_name, params in mpl_params.items():
-        function = getattr(axes, function_name)
-        function(*params['args'], **params['kwargs'])
+        xlabels = []
+        xticks = []
+        x_offset = 0
+        for chrom, x1 in chroms:
+            chrom_mean_x_pos = (x_offset + x1) / 2
+            axes.axvline(x1, color='0.75')
+            xlabels.append(chrom)
+            xticks.append(chrom_mean_x_pos)
+            x_offset = x1
+
+        axes.set_xticks(xticks)
+        axes.set_xticklabels(xlabels)
+
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
-    return result
+
+    return
 
 
 def plot_lines(x, y, fhand=None, axes=None,

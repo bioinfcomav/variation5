@@ -292,9 +292,6 @@ def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
         axes.scatter(x, y, c=col, alpha=0.8,
                      edgecolors='none')
         x_offset = x[-1]
-        # print('len', len(pos))
-        # print('chrom', this_chrom)
-        # print('idx start end', start, end)
         chroms.append((this_chrom, x[-1]))
         start = end
 
@@ -310,7 +307,7 @@ def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
             x_offset = x1
 
         axes.set_xticks(xticks)
-        axes.set_xticklabels(xlabels)
+        axes.set_xticklabels(xlabels, rotation='vertical')
 
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)

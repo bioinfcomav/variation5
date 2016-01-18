@@ -788,6 +788,14 @@ class _VariationMatrices():
                                      ignored_fields=ignored_fields)
                 pos += win_step
 
+    @property
+    def chroms(self):
+        if self._index is None:
+            self._index = PosIndex(self)
+            index = self._index
+
+        return index.chroms
+
     def _set_metadata(self, metadata):
         self._metadata = metadata
 

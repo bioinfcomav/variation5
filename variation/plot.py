@@ -1,6 +1,7 @@
 
 from itertools import cycle
 import bisect
+from collections import OrderedDict
 
 import numpy
 
@@ -15,15 +16,22 @@ from scipy.stats.morestats import probplot
 plt.style.use('ggplot')
 
 
-def _get_mplot_axes(axes, fhand, figsize=None, plot_type=111):
-    if axes is not None:
-        return axes, None
+def _get_mplot_fig_and_canvas(fhand, figsize=None):
     if fhand is None:
         fig = plt.figure(figsize=figsize)
     else:
         fig = Figure(figsize=figsize)
 
     canvas = FigureCanvas(fig)
+    return fig, canvas
+
+
+def _get_mplot_axes(axes, fhand, figsize=None, plot_type=111):
+    if axes is not None:
+        return axes, None
+
+    fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
+
     axes = fig.add_subplot(plot_type)
     return axes, canvas
 
@@ -263,10 +271,86 @@ def _look_for_first_different(items, index):
     return right
 
 
+CHROM_COLORS = ['darkorchid', 'darkturquoise']
+
+
 def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
                    no_interactive_win=False, figsize=None, fhand=None,
-                   colors=['darkorchid', 'darkturquoise'],
-                   show_chroms=True):
+                   colors=CHROM_COLORS, show_chroms=True,
+                   split_by_chrom=False):
+    if split_by_chrom:
+        if axes is not None:
+            msg = 'axes is incompatible with split_by_chrom'
+            raise ValueError(msg)
+        return _manhattan_plot_by_chrom(chrom, pos, values,
+                                        mpl_params=mpl_params,
+                                        no_interactive_win=no_interactive_win,
+                                        figsize=figsize, fhand=fhand,
+                                        colors=colors)
+    else:
+        return _manhattan_plot(chrom, pos, values, axes=axes,
+                               mpl_params=mpl_params,
+                               no_interactive_win=no_interactive_win,
+                               figsize=figsize, fhand=fhand,
+                               colors=colors, show_chroms=show_chroms)
+
+
+def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params={},
+                             no_interactive_win=False, figsize=None,
+                             fhand=None, colors=CHROM_COLORS):
+    # We collect the start and end indexes for each chromosome
+    start = 0
+    chroms = OrderedDict()
+    while True:
+        if start >= len(chrom):
+            break
+        chrom_name = chrom[start]
+        end = _look_for_first_different(chrom, start)
+        if pos[start] < 0:
+            msg = 'No pos in a chrom can be negative'
+            raise ValueError(msg)
+        chroms[chrom_name] = start, end
+        start = end
+
+    fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
+    num_chroms = len(chroms)
+    chrom_max_len = 0
+    axess = []
+    for chrom_idx, (chrom, (start, end)) in enumerate(chroms.items()):
+        plot_type = '%i%i%i' % (num_chroms, 1, chrom_idx + 1)
+
+        chrom_axes = fig.add_subplot(plot_type)
+        axess.append(chrom_axes)
+        x = pos[start: end]
+        y = values[start: end]
+        chrom_axes.scatter(x, y, alpha=0.8, edgecolors='none')
+
+        chrom_axes.set_title(chrom)
+
+        max_pos = x[-1]
+        if max_pos > chrom_max_len:
+            chrom_max_len = max_pos
+
+    for axes in axess:
+        axes.set_xlim(right=chrom_max_len)
+        axes.tick_params(axis='x',
+                         which='both',
+                         bottom='off',
+                         top='off',
+                         labelbottom='off')
+    last_axes = axess[-1]
+    last_axes.tick_params(axis='x',
+                          which='both',
+                          bottom='on',
+                          top='off',
+                          labelbottom='on')
+
+    _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+
+
+def _manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
+                    no_interactive_win=False, figsize=None, fhand=None,
+                    colors=CHROM_COLORS, show_chroms=True):
 
     print_figure = False
     if axes is None:

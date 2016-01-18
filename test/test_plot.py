@@ -91,6 +91,12 @@ class PlotTest(unittest.TestCase):
             manhattan_plot(chrom, pos, statistic, fhand=fhand,
                            figsize=(10, 10))
 
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            manhattan_plot(chrom, pos, statistic, fhand=fhand,
+                           split_by_chrom=True)
+            input(fhand.name)
+
+
     def test_plot_hist2d(self):
         x = numpy.random.rand(1000)
         y = numpy.random.rand(1000)
@@ -112,5 +118,5 @@ class PlotTest(unittest.TestCase):
         assert fhand.getvalue().splitlines()[1].startswith('class1\tacc1\t')
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
+    import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
     unittest.main()

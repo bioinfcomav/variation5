@@ -299,6 +299,7 @@ def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params={},
                              no_interactive_win=False, figsize=None,
                              fhand=None, colors=CHROM_COLORS):
     # We collect the start and end indexes for each chromosome
+
     start = 0
     chroms = OrderedDict()
     while True:
@@ -313,6 +314,12 @@ def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params={},
         start = end
 
     fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
+
+    if figsize is None:
+        size = fig.get_size_inches()
+        size[1] = size[1] * (len(chroms) - 1)
+        fig.set_size_inches(size)
+
     num_chroms = len(chroms)
     chrom_max_len = 0
     axess = []
@@ -338,6 +345,8 @@ def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params={},
                          bottom='off',
                          top='off',
                          labelbottom='off')
+        _set_mpl_params(axes, mpl_params)
+
     last_axes = axess[-1]
     last_axes.tick_params(axis='x',
                           which='both',
@@ -393,10 +402,20 @@ def _manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
         axes.set_xticks(xticks)
         axes.set_xticklabels(xlabels, rotation='vertical')
 
+    _set_mpl_params(axes, mpl_params)
+
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
     return
+
+
+def _set_mpl_params(axes, mpl_params):
+    if mpl_params is None:
+        return None
+    for function_name, params in mpl_params.items():
+        function = getattr(axes, function_name)
+        function(*params.get('args', []), **params.get('kwargs', {}))
 
 
 def plot_lines(x, y, fhand=None, axes=None,
@@ -407,9 +426,9 @@ def plot_lines(x, y, fhand=None, axes=None,
         print_figure = True
     axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
     result = axes.plot(x, y, **kwargs)
-    for function_name, params in mpl_params.items():
-        function = getattr(axes, function_name)
-        function(*params['args'], **params['kwargs'])
+
+    _set_mpl_params(axes, mpl_params)
+
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return result

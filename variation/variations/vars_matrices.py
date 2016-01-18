@@ -775,9 +775,8 @@ class _VariationMatrices():
 
         chroms = self['/variations/chrom']
         for chrom in index.chroms:
-            chrom_start, chrom_end = index.get_chrom_range(chrom)
+            chrom_start, chrom_end = index.get_chrom_range_pos(chrom)
             pos = chrom_start
-            print('chrom', chrom)
             while True:
                 if pos > chrom_end:
                     break

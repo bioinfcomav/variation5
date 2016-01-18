@@ -16,7 +16,7 @@ class PosIndex():
 
     def get_chrom_range(self, chrom):
         chrom_locs = self._index[chrom]
-        return chrom_locs[0], chrom_locs[-1]
+        return chrom_locs['start'], chrom_locs['end'] - 1
 
     def index_pos(self, chrom, pos):
         return self._bisect(self.variations['/variations/pos'], pos,

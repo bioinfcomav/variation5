@@ -29,6 +29,7 @@ class IndexTest(unittest.TestCase):
         assert index.index_pos(4, 2) == 9
         assert index.index_pos(4, 3) == 10
         assert index.index_pos(4, 4) == 10
+        assert index.get_chrom_range(1) == (0, 2)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']

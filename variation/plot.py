@@ -3,9 +3,9 @@ from itertools import cycle
 import bisect
 
 import numpy
+
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from numpy.core.defchararray import decode
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from pandas.core.frame import DataFrame
@@ -283,12 +283,18 @@ def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
             break
         end = _look_for_first_different(chrom, start)
         this_chrom = chrom[start]
+        if pos[start] < 0:
+            msg = 'No pos in a chrom can be negative'
+            raise ValueError(msg)
         x = pos[start: end] + x_offset
         y = values[start: end]
         col = next(colors)
         axes.scatter(x, y, c=col, alpha=0.8,
                      edgecolors='none')
         x_offset = x[-1]
+        # print('len', len(pos))
+        # print('chrom', this_chrom)
+        # print('idx start end', start, end)
         chroms.append((this_chrom, x[-1]))
         start = end
 

@@ -7,6 +7,17 @@ MISSING_STR = ''
 MISSING_BYTE = b''
 MISSING_BOOL = False
 
+GT_FIELD = '/calls/GT'
+GQ_FIELD = '/calls/GQ'
+ALT_FIELD = '/variations/alt'
+REF_FIELD = '/variations/ref'
+QUAL_FIELD = '/variations/qual'
+DP_FIELD = '/calls/DP'
+AO_FIELD = '/calls/AO'
+RO_FIELD = '/calls/RO'
+CHROM_FIELD = '/variations/chrom'
+POS_FIELD = '/variations/pos'
+
 
 class _MissingValues():
     def __init__(self):
@@ -55,10 +66,10 @@ MISSING_VALUES = _MissingValues()
 # performance
 SNPS_PER_CHUNK = 200
 
-DEF_DSET_PARAMS = {'compression': 'gzip',  # Not much slower than lzf,
+DEF_DSET_PARAMS = {'compression': 'gzip', # Not much slower than lzf,
                                            # but compresses much more
                    'shuffle': True,
-                   'fletcher32': True  # checksum, slower but safer
+                   'fletcher32': True # checksum, slower but safer
                    }
 
 PRE_READ_MAX_SIZE = 10000

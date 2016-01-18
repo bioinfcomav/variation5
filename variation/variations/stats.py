@@ -10,7 +10,8 @@ from allel.stats.ld import rogers_huff_r
 from allel.model.ndarray import GenotypeArray
 
 from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH,
-                       MISSING_INT)
+                       MISSING_INT, GT_FIELD, ALT_FIELD, DP_FIELD,
+                       GQ_FIELD, CHROM_FIELD, POS_FIELD, RO_FIELD, AO_FIELD)
 from variation.matrix.stats import counts_by_row, counts_and_allels_by_row
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
@@ -20,18 +21,6 @@ from variation.variations.index import PosIndex
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
 DEF_NUM_BINS = 20
-GT_FIELD = '/calls/GT'
-GQ_FIELD = '/calls/GQ'
-ALT_FIELD = '/variations/alt'
-REF_FIELD = '/variations/ref'
-QUAL_FIELD = '/variations/qual'
-REF_OBS = '/calls/RO'
-ALT_OBS = '/calls/AO'
-DP_FIELD = '/calls/DP'
-AO_FIELD = '/calls/AO'
-RO_FIELD = '/calls/RO'
-CHROM_FIELD = '/variations/chrom'
-POS_FIELD = '/variations/pos'
 
 
 REQUIRED_FIELDS_FOR_STAT = {'calc_maf': [GT_FIELD],
@@ -612,11 +601,11 @@ def calc_hwe_chi2_test(variations, num_allele=2,
 
 def _get_allele_observations(variations, mask_func, weights_field=None,
                              mask_field=GT_FIELD):
-    mat1 = variations[REF_OBS]
-    alt_obs = variations[ALT_OBS]
+    mat1 = variations[RO_FIELD]
+    alt_obs = variations[AO_FIELD]
     if is_dataset(alt_obs):
         alt_obs = alt_obs[:]
-    mat2 = numpy.max(variations[ALT_OBS], axis=2)
+    mat2 = numpy.max(variations[AO_FIELD], axis=2)
 
     mask1 = is_missing(mat1, axis=None)
     mask2 = is_missing(mat2, axis=None)
@@ -661,7 +650,7 @@ def _hist2d_allele_observations_by_chunk(variations, n_bins=DEF_NUM_BINS,
                                          weights_field=None,
                                          chunk_size=SNPS_PER_CHUNK,
                                          mask_field=GT_FIELD):
-    fields = [REF_OBS, ALT_OBS, GT_FIELD]
+    fields = [RO_FIELD, AO_FIELD, GT_FIELD]
     if range_ is None:
         xrange = None
         yrange = None

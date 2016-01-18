@@ -317,9 +317,9 @@ def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params={},
     chrom_max_len = 0
     axess = []
     for chrom_idx, (chrom, (start, end)) in enumerate(chroms.items()):
-        plot_type = '%i%i%i' % (num_chroms, 1, chrom_idx + 1)
+        plot_type = (num_chroms, 1, chrom_idx + 1)
 
-        chrom_axes = fig.add_subplot(plot_type)
+        chrom_axes = fig.add_subplot(*plot_type)
         axess.append(chrom_axes)
         x = pos[start: end]
         y = values[start: end]

@@ -268,9 +268,9 @@ cdef _parse_gt(bytes gt, list empty_gt):
         return PARSED_GT_CACHE[gt]
     except KeyError:
         pass
-
     if gt == b'.':
-        gt_splited = empty_gt
+        c_gt = empty_gt
+
     else:
         if phased in gt:
             is_phased = True
@@ -278,10 +278,9 @@ cdef _parse_gt(bytes gt, list empty_gt):
         else:
             is_phased = False
             gt_splited = gt.split(not_phased)
-
         for i from 0 <= i < len(gt_splited) by 1:
             c_gt[i] = _to_int(gt_splited[i])
-#             gt = [_to_int(allele) for allele in gt]
+    #             gt = [_to_int(allele) for allele in gt]
     PARSED_GT_CACHE[gt] = c_gt
     return c_gt
 

@@ -86,7 +86,7 @@ class VCFParser():
             user_max_field_lens = max_field_lens
         self._max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
         self._max_field_str_lens = {'FILTER': 0, 'INFO': {},
-                                   'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
+                                    'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
         self._init_max_field_lens()
         for key1, value1 in user_max_field_lens.items():
             if isinstance(value1, dict):
@@ -147,7 +147,7 @@ class VCFParser():
                 continue
             gts = line.split(b'\t')[9:]
             for gt in gts:
-                if gt is b'.':
+                if gt == b'.':
                     continue
                 gt = gt.split(b':')[0]
                 alleles = gt.split(b'/') if b'/' in gt else gt.split(b'|')
@@ -305,7 +305,6 @@ class VCFLineParser:
         kept_fields = self.kept_fields
         metadata = self.metadata
         empty_gt = self.empty_gt
-
         line = line[:-1]
         items = line.split(b'\t')
         chrom, pos, id_, ref, alt, qual, flt, info, fmt = items[:9]
@@ -346,4 +345,5 @@ class VCFLineParser:
                            max_field_str_lens)
         calls = _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
                              metadata, empty_gt)
+
         return chrom, pos, id_, ref, alt, qual, flt, info, calls

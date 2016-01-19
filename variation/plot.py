@@ -435,7 +435,12 @@ def plot_lines(x, y, fhand=None, axes=None,
 
 
 def _write_line(fhand, items, sep):
-    line = sep.join(items)
+    try:
+        line = sep.join(items)
+    except TypeError:
+        items = map(str, items)
+        msg = 'Problem when trying to write the items: ' + ','.join(items)
+        raise TypeError(msg)
     fhand.write(line)
     fhand.write('\n')
 

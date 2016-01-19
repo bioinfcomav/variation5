@@ -17,6 +17,9 @@ from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             qqplot, manhattan_plot, plot_barplot, plot_distrib,
                             plot_hist2d, plot_boxplot_from_distribs_series,
                             write_curlywhirly, _look_for_first_different)
+from variation.variations.plot import pairwise_ld
+from variation.variations import VariationsH5
+from test.test_utils import TEST_DATA_DIR
 
 
 class PlotTest(unittest.TestCase):
@@ -115,7 +118,11 @@ class PlotTest(unittest.TestCase):
         write_curlywhirly(fhand, labels, coords, classifications=classes)
         assert fhand.getvalue().splitlines()[1].startswith('class1\tacc1\t')
 
+    def test_pairwise_ld(self):
+        hdf5 = VariationsH5(os.path.join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            pairwise_ld(hdf5, fhand=fhand)
+
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
     unittest.main()
-

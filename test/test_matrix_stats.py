@@ -61,6 +61,16 @@ class RowValueCounterTest(unittest.TestCase):
 
         counts = counts_by_row(matrix, missing_value=-1)
 
+        gts = [[[-1, -1], [-1, -1], [-1, -1], [0, 0], [0, 0], [0, 0]]]
+        gts = numpy.array(gts)
+        counts = counts_by_row(gts, missing_value=-1)
+        assert numpy.all(counts == [[6]])
+
+        gts = [[[0, 0], [0, 0], [0, 0]],
+               [[0, 0], [0, 0], [0, 0]]]
+        gts = numpy.array(gts)
+        counts = counts_by_row(gts, missing_value=-1)
+        assert numpy.all(counts == [[6, 6]])
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'RowValueCounterTest.test_count_alleles']

@@ -124,9 +124,8 @@ def do_pcax(variations, n_components=10):
     print(geno_allele_counts)
     print(geno_allele_counts.shape)
 
-    coords, model = allel.stats.pca(geno_allele_counts,
-                                    n_components=n_components,
-                                    scaler='patterson')
+    coords, _ = allel.stats.pca(geno_allele_counts, n_components=n_components,
+                                scaler='patterson')
     return {'projections': coords}
 
 

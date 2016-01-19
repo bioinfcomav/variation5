@@ -91,7 +91,7 @@ def counts_and_allels_by_row(mat, missing_value=None):
         new_shape = allele_counts.shape[0], 1
         dtype = allele_counts.dtype
         allele_counts = numpy.copy(allele_counts.reshape(new_shape))
-        allele_counts = allele_counts.astype(allele_counts.dtype)
+        allele_counts = allele_counts.astype(dtype)
 
     return allele_counts, alleles
 

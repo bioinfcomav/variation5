@@ -25,6 +25,16 @@ class PosIndex():
         return (pos_in_chroms[chrom_locs['start']],
                 pos_in_chroms[chrom_locs['end'] - 1])
 
+    @property
+    def covered_length(self):
+        pos = self.variations[POS_FIELD]
+        length = 0
+        for chrom_locs in self._index.values():
+            start = pos[chrom_locs['start']]
+            end = pos[chrom_locs['end'] - 1]
+            length += end - start
+        return length
+
     def index_pos(self, chrom, pos):
         return self._bisect(self.variations[POS_FIELD], pos,
                             lo=self._index[chrom]['start'],

@@ -31,6 +31,8 @@ class IndexTest(unittest.TestCase):
         assert index.index_pos(4, 4) == 10
         assert index.get_chrom_range_index(1) == (0, 2)
         assert index.get_chrom_range_pos(1) == (1, 3)
+        assert index.covered_length == 10
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']

@@ -765,16 +765,22 @@ class _VariationMatrices():
             var_array._set_samples(self.samples)
             yield var_array
 
-    def iterate_wins(self, win_size, win_step=None, kept_fields=None,
-                     ignored_fields=None):
-        if win_step is None:
-            win_step = win_size
+    @property
+    def pos_index(self):
         if self._index is None:
             self._index = PosIndex(self)
-            index = self._index
+        return self._index
 
-        chroms = self['/variations/chrom']
-        for chrom in index.chroms:
+    def iterate_wins(self, win_size, win_step=None, kept_fields=None,
+                     ignored_fields=None, chroms=None):
+        if win_step is None:
+            win_step = win_size
+        index = self.pos_index
+
+        if chroms is None:
+            chroms = index.chroms
+        chrom_mat = self['/variations/chrom']
+        for chrom in chroms:
             chrom_start, chrom_end = index.get_chrom_range_pos(chrom)
             pos = chrom_start
             while True:
@@ -782,7 +788,7 @@ class _VariationMatrices():
                     break
                 idx0 = index.index_pos(chrom, pos)
                 idx1 = index.index_pos(chrom, pos + win_step)
-                assert chroms[idx0] == chrom
+                assert chrom_mat[idx0] == chrom
                 yield self.get_chunk(slice(idx0, idx1),
                                      kept_fields=kept_fields,
                                      ignored_fields=ignored_fields)
@@ -790,9 +796,7 @@ class _VariationMatrices():
 
     @property
     def chroms(self):
-        if self._index is None:
-            self._index = PosIndex(self)
-            index = self._index
+        index = self.pos_index
 
         return index.chroms
 

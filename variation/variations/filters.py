@@ -2,6 +2,7 @@ from functools import partial
 from itertools import chain
 
 import numpy
+
 from allel.chunked.util import get_blen_array
 from allel.model.ndarray import GenotypeArray
 from allel.opt.stats import gn_locate_unlinked_int8
@@ -418,7 +419,8 @@ def locate_unlinked(gts, window_size=100, step=20, threshold=.1,
 
     # compute in chunks to avoid loading big arrays into memory
     chunk_size = get_blen_array(gts, chunk_size)
-    chunk_size = max(chunk_size, 10 * window_size)  # avoid too small chunks
+    # avoid too small chunks
+    chunk_size = max(chunk_size, 10 * window_size)
     n_variants = gts.shape[0]
     for i in range(0, n_variants, chunk_size):
         # N.B., ensure overlap with next window

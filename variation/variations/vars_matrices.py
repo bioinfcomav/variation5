@@ -786,6 +786,11 @@ class _VariationMatrices():
             while True:
                 if pos > chrom_end:
                     break
+                try:
+                    index.get_chrom_range_pos(chrom)
+                except IndexError:
+                    # No snps for this chrom
+                    break
                 idx0 = index.index_pos(chrom, pos)
                 idx1 = index.index_pos(chrom, pos + win_step)
                 if chrom_mat[idx0] != chrom:

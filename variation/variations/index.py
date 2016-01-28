@@ -16,10 +16,16 @@ class PosIndex():
         return iter(self._index.keys())
 
     def get_chrom_range_index(self, chrom):
-        chrom_locs = self._index[chrom]
+        try:
+            chrom_locs = self._index[chrom]
+        except IndexError:
+            raise IndexError('No snps for chrom: ' + str(chrom))
+
         return chrom_locs['start'], chrom_locs['end'] - 1
 
     def get_chrom_range_pos(self, chrom):
+        if chrom not in self._index:
+            raise IndexError('No snps for chrom: ' + str(chrom))
         chrom_locs = self._index[chrom]
         pos_in_chroms = self.variations[POS_FIELD]
         return (pos_in_chroms[chrom_locs['start']],
@@ -43,9 +49,12 @@ class PosIndex():
     def _create_dict(self):
         idx = OrderedDict()
         snps = self.variations
-        for chrom in numpy.unique(snps[CHROM_FIELD]):
-            start = bisect_left(snps[CHROM_FIELD], chrom)
-            end = bisect_right(snps[CHROM_FIELD], chrom)
+        chrom_mat = snps[CHROM_FIELD]
+        for chrom in numpy.unique(chrom_mat):
+            start = bisect_left(chrom_mat, chrom)
+            end = bisect_right(chrom_mat, chrom)
+            if chrom_mat[start] != chrom:
+                raise RuntimeError('Maybe SNPs are not sorted')
             idx[chrom] = {'start': start, 'end': end}
         return idx
 

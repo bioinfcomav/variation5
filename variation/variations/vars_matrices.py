@@ -788,7 +788,10 @@ class _VariationMatrices():
                     break
                 idx0 = index.index_pos(chrom, pos)
                 idx1 = index.index_pos(chrom, pos + win_step)
-                assert chrom_mat[idx0] == chrom
+                if chrom_mat[idx0] != chrom:
+                    msg = 'chroms do not match: ' + str(chrom_mat[idx0])
+                    msg += ', ' + str(chrom)
+                    raise RuntimeError(msg)
                 yield self.get_chunk(slice(idx0, idx1),
                                      kept_fields=kept_fields,
                                      ignored_fields=ignored_fields)

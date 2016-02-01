@@ -4,6 +4,8 @@ from array import array
 
 import numpy
 
+from variation.matrix.methods import is_dataset
+
 
 def _calc_sort_order(variations):
     chrom = variations['/variations/chrom']
@@ -14,6 +16,8 @@ def _calc_sort_order(variations):
 
 def _calc_sort_order_by_chrom(variations):
     chrom = variations['/variations/chrom']
+    if is_dataset(chrom):
+        chrom = chrom[:]
     pos = variations['/variations/pos']
     chrom_names = numpy.sort(numpy.unique(chrom))
     for chrom_name in chrom_names:

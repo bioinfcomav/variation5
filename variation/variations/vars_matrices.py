@@ -451,21 +451,27 @@ GT_CONVERTER_CACHE[MISSING_FLOAT] = '.'
 GT_CONVERTER_CACHE[MISSING_STR] = '.'
 
 
-def _get_calls_per_sample(h5, var_index, n_sample, calls_path):
+def _get_calls_per_sample(calls_data, n_sample, calls_path, num_alt):
     calls_sample = []
     for key in calls_path:
-        value = remove_nans(h5[key][var_index][n_sample])
+        value = remove_nans(calls_data[key][n_sample])
+
         if 'GT' in key:
             value = [GT_CONVERTER_CACHE[x] for x in value]
             value = '/'.join(value)
 
             if '.' in value:
                 return '.'
-
-        elif h5.metadata[key]['Number'] != 1:
+        elif 'AO' in key:
+            value = value[:num_alt]
             value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
                      for x in value]
             value = ','.join(value)
+
+#         elif h5.metadata[key]['Number'] != 1:
+#             value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
+#                      for x in value]
+#             value = ','.join(value)
         else:
             if value == MISSING_VALUES[value.dtype]:
                 value = '.'
@@ -475,11 +481,15 @@ def _get_calls_per_sample(h5, var_index, n_sample, calls_path):
     return ':'.join(calls_sample)
 
 
-def _get_calls_samples(h5, var_index, calls_paths):
+def _get_calls_samples(h5, var_index, calls_paths, num_alt):
     calls_samples = []
+    call_data = {}
+    for key in calls_paths:
+        call_data[key] = h5[key][var_index]
+
     for n_sample in range(len(h5.samples)):
-        calls_samples.append(_get_calls_per_sample(h5, var_index, n_sample,
-                                                   calls_paths))
+        calls_samples.append(_get_calls_per_sample(call_data, n_sample,
+                                                   calls_paths, num_alt))
     return '\t'.join(calls_samples)
 
 
@@ -514,7 +524,6 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
             info_paths.append(key)
         elif 'filter' in key:
             filter_paths.append(key)
-
     fieldnames = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER',
                   'INFO', 'FORMAT']
     yield _prepare_fieldnames_line(variations, fieldnames)
@@ -538,11 +547,16 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
                 var[vcf_field] = str(value)
         alt = [x.decode() for x in variations['/variations/alt'][var_index]
                if x.decode() != MISSING_VALUES['str']]
+        num_alt = len(alt)
+
         if len(alt) == 0:
             alt = '.'
         else:
             alt = ','.join(alt)
         var['ALT'] = alt
+
+        if 'ID' not in var:
+            var['ID'] = '.'
 
         if len(filter_paths) == 0:
             var['FILTER'] = '.'
@@ -560,7 +574,7 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
         new_calls_paths, new_format_paths = new_paths
         var['FORMAT'] = ':'.join(new_format_paths)
         var['CALLS'] = _get_calls_samples(variations, var_index,
-                                          new_calls_paths)
+                                          new_calls_paths, num_alt)
         yield '\t'.join([var[field] for field in fieldnames])
 
 

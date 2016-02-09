@@ -24,7 +24,8 @@ from variation.variations.filters import (filter_mafs, filter_macs,
                                           keep_biallelic,
                                           filter_monomorphic_snps,
                                           keep_biallelic_and_monomorphic,
-                                          filter_samples, filter_unlinked_vars)
+                                          filter_samples, filter_unlinked_vars,
+    filter_samples_by_missing)
 from variation.iterutils import first
 from variation.variations.stats import (GT_FIELD, CHROM_FIELD, POS_FIELD,
                                         GQ_FIELD)
@@ -406,6 +407,17 @@ class FilterSamplesTest(unittest.TestCase):
         varis2 = filter_samples(hdf5, samples=samples, reverse=True,
                                 by_chunk=False)
         assert numpy.all(varis[GT_FIELD] == varis2[GT_FIELD])
+
+    def test_filter_samples_by_missing(self):
+        variations = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        chunk = first(variations.iterate_chunks())
+
+        new_var = filter_samples_by_missing(chunk, 0.9)
+        assert len(new_var.samples) == 0
+
+        new_var = filter_samples_by_missing(chunk, 0.1)
+        assert len(new_var.samples) == len(chunk.samples)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'FilterSamplesTest']

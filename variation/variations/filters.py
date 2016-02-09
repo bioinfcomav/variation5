@@ -347,9 +347,20 @@ def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
         filtered_vars = VariationsArrays()
 
     samples = variations.samples
+    try:
+        dtype = sample_cols.dtype
+        is_bool = numpy.issubdtype(dtype, numpy.bool)
+    except AttributeError:
+        item = first(iter(sample_cols))
+        is_bool = isinstance(item, bool)
+    if not is_bool:
+        sample_cols = [idx in sample_cols for idx in range(len(samples))]
+
+    if 'shape' not in dir(sample_cols):
+        sample_cols = numpy.array(sample_cols, dtype=numpy.bool)
+
     if reverse:
-        sample_cols = [idx for idx in range(len(samples))
-                       if idx not in sample_cols]
+        sample_cols = numpy.logical_not(sample_cols)
 
     for path in variations.keys():
         matrix = variations[path]
@@ -362,7 +373,9 @@ def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
         else:
             filtered_vars[path] = matrix
     filtered_vars.metadata = variations.metadata
-    filtered_vars.samples = [samples[idx] for idx in sample_cols]
+    kept_samples = [samples[idx] for idx, keep in enumerate(sample_cols)
+                    if keep]
+    filtered_vars.samples = kept_samples
     return filtered_vars
 
 
@@ -401,6 +414,15 @@ def filter_samples(variations, samples, filtered_vars=None,
     idx_to_keep = [var_samples.index(sample) for sample in samples]
 
     return filter_samples_by_index(variations, idx_to_keep, reverse=reverse,
+                                   by_chunk=by_chunk)
+
+
+def filter_samples_by_missing(variations, min_called_rate, filtered_vars=None,
+                              by_chunk=True):
+    missing_rates = calc_called_gt(variations, rates=True, axis=0)
+    idx_to_keep = missing_rates > min_called_rate
+
+    return filter_samples_by_index(variations, idx_to_keep,
                                    by_chunk=by_chunk)
 
 

@@ -2,9 +2,11 @@ import posixpath
 import json
 import copy
 from collections import Counter
+from math import factorial
 
 import numpy
 import h5py
+
 
 from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT,
                        DEF_DSET_PARAMS, MISSING_INT, MISSING_STR,
@@ -377,6 +379,8 @@ def _prepare_vcf_header(h5, vcf_format):
               '/other/pedigree', '/other/pedigreedb']
     for group, field in zip(groups, fields):
         for key in sorted(metadata.keys()):
+            if key not in h5:
+                continue
             if not isinstance(metadata[key], dict) or field not in key:
                 continue
             _id = key.split('/')[-1]
@@ -450,38 +454,65 @@ GT_CONVERTER_CACHE[MISSING_INT] = '.'
 GT_CONVERTER_CACHE[MISSING_FLOAT] = '.'
 GT_CONVERTER_CACHE[MISSING_STR] = '.'
 
+POSSIBLE_GENOS_CACHE = {1: {}, 2: {}, 3: {}}
 
-def _get_calls_per_sample(calls_data, n_sample, calls_path, num_alt):
+
+def _possible_genotypes(num_alleles, ploidy):
+    try:
+        return POSSIBLE_GENOS_CACHE[ploidy][num_alleles]
+    except KeyError:
+        possible_geno = factorial(num_alleles + ploidy - 1) / (factorial(ploidy) * factorial(num_alleles - 1))
+        POSSIBLE_GENOS_CACHE[ploidy][num_alleles] = possible_geno
+        return possible_geno
+
+
+def _get_calls_per_sample(calls_data, n_sample, calls_path, num_alt, metadata,
+                          ploidy):
     calls_sample = []
     for key in calls_path:
-        value = remove_nans(calls_data[key][n_sample])
+        value = calls_data[key][n_sample]
 
-        if 'GT' in key:
-            value = [GT_CONVERTER_CACHE[x] for x in value]
-            value = '/'.join(value)
-
-            if '.' in value:
-                return '.'
-        elif 'AO' in key:
+        format_data_number = metadata[key]['Number']
+        if format_data_number == 'A':
             value = value[:num_alt]
-            value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
-                     for x in value]
+            if 'AO' in key:
+                value = [GT_CONVERTER_CACHE[val] for val in value]
+            else:
+                value = [str(val) for val in value]
             value = ','.join(value)
 
-#         elif h5.metadata[key]['Number'] != 1:
-#             value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
-#                      for x in value]
-#             value = ','.join(value)
-        else:
-            if value == MISSING_VALUES[value.dtype]:
+        elif format_data_number == 'G':
+            value = value[:_possible_genotypes(num_alt + 1, ploidy)]
+            value = [str(val) for val in value]
+            value = ','.join(value)
+
+        elif format_data_number not in ('A', 'G', 1):
+            value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
+                     for x in value[:format_data_number]]
+            value = ','.join(value)
+        elif format_data_number == 1:
+            if 'GT' in key:
+                value = [GT_CONVERTER_CACHE[x] for x in value]
+                value = '/'.join(value)
+
+                if '.' in value:
+                    return '.'
+            elif value == MISSING_VALUES[value.dtype]:
                 value = '.'
+            elif key in ['/calls/DP', '/calls/RO']:
+                try:
+                    value = GT_CONVERTER_CACHE[value]
+                except KeyError:
+                    value = str(value)
             else:
-                value = str(value[0])
+                value = str(value)
+        else:
+            raise NotImplemented('We dont know this vcf format number')
         calls_sample.append(value)
     return ':'.join(calls_sample)
 
 
-def _get_calls_samples(h5, var_index, calls_paths, num_alt):
+def _get_calls_samples(h5, var_index, calls_paths, num_alt, metadata, ploidy):
     calls_samples = []
     call_data = {}
     for key in calls_paths:
@@ -489,7 +520,8 @@ def _get_calls_samples(h5, var_index, calls_paths, num_alt):
 
     for n_sample in range(len(h5.samples)):
         calls_samples.append(_get_calls_per_sample(call_data, n_sample,
-                                                   calls_paths, num_alt))
+                                                   calls_paths, num_alt,
+                                                   metadata, ploidy))
     return '\t'.join(calls_samples)
 
 
@@ -535,47 +567,51 @@ def _to_vcf(variations, vcf_format=VCF_FORMAT):
                         'REF': '/variations/ref',
                         'QUAL': '/variations/qual',
                         'ID': '/variations/id'}
-    for var_index in range(variations['/calls/GT'][:].shape[0]):
-        var = {}
-        for vcf_field, var_path in fields_vcf_paths.items():
-            if var_path in variations.keys():
-                value = variations[var_path][var_index]
-                if value == MISSING_VALUES[variations[var_path].dtype]:
-                    value = '.'
-                elif '|S' in str(variations[var_path].dtype):
-                    value = value.decode()
-                var[vcf_field] = str(value)
-        alt = [x.decode() for x in variations['/variations/alt'][var_index]
-               if x.decode() != MISSING_VALUES['str']]
-        num_alt = len(alt)
+    for chunk in variations.iterate_chunks():
+        for var_index in range(chunk['/calls/GT'][:].shape[0]):
+            var = {}
+            for vcf_field, var_path in fields_vcf_paths.items():
+                if var_path in chunk.keys():
+                    value = chunk[var_path][var_index]
+                    if value == MISSING_VALUES[chunk[var_path].dtype]:
+                        value = '.'
+                    elif '|S' in str(chunk[var_path].dtype):
+                        value = value.decode()
+                    var[vcf_field] = str(value)
+            alt = [x.decode() for x in chunk['/variations/alt'][var_index]
+                   if x.decode() != MISSING_VALUES['str']]
+            num_alt = len(alt)
 
-        if len(alt) == 0:
-            alt = '.'
-        else:
-            alt = ','.join(alt)
-        var['ALT'] = alt
+            if len(alt) == 0:
+                alt = '.'
+            else:
+                alt = ','.join(alt)
+            var['ALT'] = alt
 
-        if 'ID' not in var:
-            var['ID'] = '.'
+            if 'ID' not in var:
+                var['ID'] = '.'
 
-        if len(filter_paths) == 0:
-            var['FILTER'] = '.'
-        else:
-            var['FILTER'] = _get_value_filter(variations, var_index,
-                                              filter_paths)
-        if len(info_paths) == 0:
-            var['INFO'] = '.'
-        else:
-            var['INFO'] = _get_value_info(variations, var_index, info_paths)
+            if len(filter_paths) == 0:
+                var['FILTER'] = '.'
+            else:
+                var['FILTER'] = _get_value_filter(chunk, var_index,
+                                                  filter_paths)
+            if len(info_paths) == 0:
+                var['INFO'] = '.'
+            else:
+                var['INFO'] = _get_value_info(chunk, var_index, info_paths)
 
-        # Remove fields that are missing in all samples
-        new_paths = _preprocess_format_calls_paths(variations, var_index,
-                                                   format_paths, calls_paths)
-        new_calls_paths, new_format_paths = new_paths
-        var['FORMAT'] = ':'.join(new_format_paths)
-        var['CALLS'] = _get_calls_samples(variations, var_index,
-                                          new_calls_paths, num_alt)
-        yield '\t'.join([var[field] for field in fieldnames])
+            # Remove fields that are missing in all samples
+            new_paths = _preprocess_format_calls_paths(chunk, var_index,
+                                                       format_paths, calls_paths)
+            new_calls_paths, new_format_paths = new_paths
+            var['FORMAT'] = ':'.join(new_format_paths)
+            var['CALLS'] = _get_calls_samples(chunk, var_index,
+                                              new_calls_paths, num_alt,
+                                              variations.metadata,
+                                              variations.ploidy)
+            yield '\t'.join([var[field] for field in fieldnames])
+        break
 
 
 class _VariationMatrices():

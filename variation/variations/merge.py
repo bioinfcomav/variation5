@@ -11,8 +11,8 @@ import numpy
 
 from variation import MISSING_VALUES, MISSING_BYTE, DEF_METADATA
 from variation.iterutils import PeekableIterator
-from variation.variations.stats import (CHROM_FIELD, POS_FIELD, REF_FIELD,
-                                        ALT_FIELD, QUAL_FIELD, GT_FIELD)
+from variation import (CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD,
+                       QUAL_FIELD, GT_FIELD)
 from variation.matrix.methods import is_dataset
 
 
@@ -20,7 +20,7 @@ def _iterate_vars(variations):
     kept_fields = [CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD, GT_FIELD]
     if QUAL_FIELD in variations.keys():
         kept_fields.append(QUAL_FIELD)
-        
+
     for chunk in variations.iterate_chunks(kept_fields=kept_fields):
         vars_chrom = chunk[CHROM_FIELD]
         vars_pos = chunk[POS_FIELD]
@@ -39,7 +39,7 @@ def _iterate_vars(variations):
             if vars_qual is not None:
                 vars_qual = vars_qual[:]
             vars_gts = vars_gts[:]
-        
+
         for var_idx in range(chunk.num_variations):
             chrom = vars_chrom[var_idx]
             pos = vars_pos[var_idx]

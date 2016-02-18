@@ -16,8 +16,7 @@ import numpy
 import scipy
 
 from variation.variations.vars_matrices import (VariationsArrays,
-                                                VariationsH5,
-                                                _prepare_vcf_header, _to_vcf)
+                                                VariationsH5)
 from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR
 from variation.utils.misc import remove_nans
@@ -356,104 +355,6 @@ class VarMatsTests(unittest.TestCase):
         os.remove(path)
 
 
-class VcfWrittenTest(unittest.TestCase):
-
-    def test_write_vcf(self):
-        # With missing info in variations
-        tmp_fhand = NamedTemporaryFile()
-        out_fpath = tmp_fhand.name
-        tmp_fhand.close()
-        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def_without_info.vcf'),
-                         'rb')
-        vcf = VCFParser(vcf_fhand)
-
-        max_field_lens = {'INFO': {}, 'CALLS': {b'GQ': 1, b'GT': 1, b'HQ': 2,
-                                                b'DP': 1}, 'FILTER': 1,
-                          'alt': 2}
-        max_field_str_lens = {'ref': 4, 'INFO': {}, 'id': 10, 'FILTER': 0,
-                              'alt': 5, 'chrom': 2}
-
-        h5_without_info = VariationsH5(fpath=out_fpath, mode='w',
-                                       ignore_undefined_fields=True)
-        h5_without_info.put_vars(vcf, max_field_lens=max_field_lens,
-                                 max_field_str_lens=max_field_str_lens)
-        vcf_fhand.close()
-
-        lines = _to_vcf(h5_without_info, vcf_format='VCFv4.0')
-        exp_fhand = open(join(TEST_DATA_DIR,
-                              'format_def_without_info_exp.vcf'), 'r')
-        exp_lines = list(exp_fhand)
-        exp_lines = [line.strip() for line in exp_lines]
-        for line in lines:
-            assert line in exp_lines
-
-        exp_fhand.close()
-        # With all fields available
-        tmp_fhand = NamedTemporaryFile()
-        tmp_fhand.close()
-        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
-                        pre_read_max_size=10000)
-
-        max_field_lens = {'CALLS': {b'GT': 1, b'HQ': 2, b'DP': 1, b'GQ': 1},
-                          'FILTER': 1,
-                          'INFO': {b'AA': 1, b'AF': 2, b'DP': 1,
-                                   b'DB': 1, b'NS': 1, b'H2': 1}, 'alt': 2}
-        max_field_str_lens = {'INFO': {}, 'alt': 5, 'chrom': 2, 'ref': 4,
-                              'id': 10, 'FILTER': 0}
-
-        variations = VariationsArrays(ignore_undefined_fields=True)
-        variations.put_vars(vcf, max_field_lens=max_field_lens,
-                            max_field_str_lens=max_field_str_lens)
-        vcf_fhand.close()
-
-        lines = _to_vcf(variations, vcf_format='VCFv4.0')
-        exp_fhand = open(join(TEST_DATA_DIR,
-                              'format_def_exp.vcf'), 'r')
-        exp_lines = list(exp_fhand)
-        exp_lines = [line.strip() for line in exp_lines]
-        for line in lines:
-            assert line in exp_lines
-        exp_fhand.close()
-        # With hdf5 file
-        tomato_h5 = VariationsH5(join(TEST_DATA_DIR,
-                                      'tomato.apeki_gbs.calmd.h5'), "r")
-        exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "r")
-        lines = _to_vcf(tomato_h5)
-
-        # only checking snps
-        exp_lines = list(exp_fhand)
-        exp_lines = [line.strip() for line in exp_lines
-                     if not line.startswith('#')]
-        i = 0
-        for line in lines:
-            if line.startswith('#'):
-                continue
-            assert line == exp_lines[i]
-            i += 1
-            if i > 42:
-                break
-        exp_fhand.close()
-
-    def test_write_header(self):
-        files = ['format_def_without_info.vcf',
-                 'format_def_without_filter.vcf',
-                 'format_without_flt_info_qual.vcf']
-        for file in files:
-            vcf_fhand = open(join(TEST_DATA_DIR, file), 'rb')
-            header_lines = [line.strip() for line in vcf_fhand
-                            if line.startswith(b'##')]
-            vcf_fhand.close()
-            vcf_fhand = open(join(TEST_DATA_DIR, file), 'rb')
-            vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
-                            pre_read_max_size=10000)
-            var_array = VariationsArrays(ignore_undefined_fields=True)
-            var_array.put_vars(vcf)
-            for line in _prepare_vcf_header(var_array, vcf_format='VCFv4.0'):
-                assert line.encode('utf-8') in header_lines
-            vcf_fhand.close()
-
-
 class Mat012Test(unittest.TestCase):
     def test_mat012(self):
         gts = numpy.array([[[0, 0], [0, 1], [2, 2], [-1, 3]],
@@ -467,5 +368,5 @@ class Mat012Test(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VarMatsTests.test_iterate_wins']
+    # import sys; sys.argv = ['', 'VcfWrittenTest.test_real_file']
     unittest.main()

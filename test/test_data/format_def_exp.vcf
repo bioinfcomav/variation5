@@ -4,7 +4,7 @@
 ##reference=1000GenomesPilot-NCBI36
 ##source=myImputationProgramV3.1
 ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
-##INFO=<ID=AF,Number=.,Type=Float,Description="Allele Frequency">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">
 ##INFO=<ID=DB,Number=0,Type=Flag,Description="dbSNP membership, build 129">
 ##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
 ##INFO=<ID=H2,Number=0,Type=Flag,Description="HapMap2 membership">

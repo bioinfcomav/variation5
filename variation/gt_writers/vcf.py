@@ -1,12 +1,11 @@
 from math import factorial
 
 import numpy as np
-import h5py
 
 from variation import (VCF_FORMAT, MISSING_FLOAT, MISSING_STR, MISSING_INT,
                        MISSING_VALUES)
 from variation.utils.misc import remove_nans
-# from variation.gt_writers.vcf_field_writer import _get_calls_per_sample
+# from variation.gt_writers.vcf_field_writer import cy_create_snv_line
 
 
 GROUP_FIELD_MAPPING = {'/variations/info': 'INFO', '/calls': 'FORMAT',
@@ -78,13 +77,6 @@ def _write_vcf_header(variations, out_fhand):
     out_fhand.write(header.encode())
 
 
-def _write_snvs(variations, out_fhand, grouped_paths):
-    metadata = variations.metadata
-    for var_index in range(variations['/calls/GT'][:].shape[0]):
-        line = _create_snv_line(variations, var_index, grouped_paths, metadata)
-        out_fhand.write(line.encode())
-
-
 def write_vcf(variations, out_fhand, vcf_format=VCF_FORMAT):
     _write_vcf_meta(variations, out_fhand, vcf_format=vcf_format)
     _write_vcf_header(variations, out_fhand)
@@ -92,10 +84,15 @@ def write_vcf(variations, out_fhand, vcf_format=VCF_FORMAT):
     grouped_paths = _group_variations_paths(variations)
     for chunk in variations.iterate_chunks(chunk_size=200):
         _write_snvs(chunk, out_fhand, grouped_paths)
-        break
 
 
-# above this we can convert to cython
+def _write_snvs(variations, out_fhand, grouped_paths):
+    metadata = variations.metadata
+    for var_index in range(variations['/calls/GT'][:].shape[0]):
+        line = _create_snv_line(variations, var_index, grouped_paths, metadata)
+        out_fhand.write(line.encode())
+
+
 def _create_snv_line(variations, var_index, grouped_paths, metadata):
         var = {}
         for field, data in ONEDATA_FIELD_GROUP_MAPPING.items():

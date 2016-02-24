@@ -3,11 +3,12 @@ import subprocess
 import gzip
 import pickle
 from multiprocessing import Pool
-from tempfile import NamedTemporaryFile, gettempdir
+from tempfile import NamedTemporaryFile
 from functools import partial
 
 from variation.variations.vars_matrices import VariationsH5
 from variation.gt_parsers.vcf import VCFParser
+from variation.utils.file_utils import remove_temp_file_in_dir
 
 
 def get_chroms_in_vcf(vcf_fpath):
@@ -79,15 +80,6 @@ def _remove_temp_chrom_h5s(h5_chroms_fpaths):
             os.remove(h5_chrom_fpath)
 
 
-def _remove_temp_chrom_in_dir(tmp_dir):
-    if tmp_dir is None:
-        tmp_dir = gettempdir()
-    for fname in os.listdir(tmp_dir):
-        fpath = os.path.join(tmp_dir, fname)
-        if fpath.endswith('.tmp.h5'):
-            os.remove(fpath)
-
-
 def vcf_to_h5(vcf_fpath, out_h5_fpath, n_threads, preread_nvars, tmp_dir,
               kept_fields=None, ignored_fields=None):
     if not os.path.exists(tmp_dir):
@@ -109,7 +101,7 @@ def vcf_to_h5(vcf_fpath, out_h5_fpath, n_threads, preread_nvars, tmp_dir,
         try:
             h5_chroms_fpaths = pool.map(partial_parse_vcf, chroms)
         except Exception:
-            _remove_temp_chrom_in_dir(tmp_dir)
+            remove_temp_file_in_dir(tmp_dir, '.tmp.h5')
             raise
 
     try:

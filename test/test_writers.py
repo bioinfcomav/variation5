@@ -6,8 +6,8 @@ from variation.gt_parsers.vcf import VCFParser
 
 from test.test_utils import TEST_DATA_DIR
 from tempfile import NamedTemporaryFile
-from variation.gt_writers.vcf import _write_vcf_header, _write_vcf_meta, \
-    write_vcf
+from variation.gt_writers.vcf import (_write_vcf_header, _write_vcf_meta,
+                                      write_vcf, write_vcf_parallel)
 
 
 class VcfWrittenTest(unittest.TestCase):
@@ -123,6 +123,34 @@ class VcfWrittenTest(unittest.TestCase):
                         break
         exp_fhand.close()
 
+    def test_parallel_vcf_write(self):
+        tomato_h5 = VariationsH5(join(TEST_DATA_DIR,
+                                      'tomato.apeki_gbs.calmd.h5'), "r")
+
+        exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "rb")
+        with NamedTemporaryFile(mode='wb') as tmp_fhand:
+            write_vcf_parallel(tomato_h5, tmp_fhand, n_threads=4,
+                               tmp_dir='/tmp')
+            # only checking snps
+            exp_lines = list(exp_fhand)
+            exp_lines = [line for line in exp_lines
+                             if not line.startswith(b'#')]
+            with open(tmp_fhand.name, 'rb') as refhand:
+                i = 0
+                for line in refhand:
+                    if line.startswith(b'#'):
+                        continue
+                    try:
+                        assert line == exp_lines[i]
+                    except AssertionError:
+                        print(line.decode())
+                        print(exp_lines[i].decode())
+                    i += 1
+                    if i > 42:
+                        break
+        exp_fhand.close()
+
+
     def xtest_real_file(self):
         fpath = '/home/peio/work_in/test_variation5/write_vcf/original.h5'
         vcf_fpath = '/home/peio/work_in/test_variation5/write_vcf/traditom_tier1.vcf'
@@ -137,5 +165,5 @@ class VcfWrittenTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf_from_h5']
+#     import sys; sys.argv = ['', 'VcfWrittenTest.test_parallel_vcf_write']
     unittest.main()

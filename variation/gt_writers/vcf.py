@@ -1,3 +1,4 @@
+import os
 from math import factorial
 
 import numpy as np
@@ -5,6 +6,10 @@ import numpy as np
 from variation import (VCF_FORMAT, MISSING_FLOAT, MISSING_STR, MISSING_INT,
                        MISSING_VALUES)
 from variation.utils.misc import remove_nans
+from multiprocessing import Pool
+from functools import partial
+from tempfile import NamedTemporaryFile
+from variation.utils.file_utils import remove_temp_file_in_dir
 # from variation.gt_writers.vcf_field_writer import cy_create_snv_line
 
 
@@ -77,12 +82,59 @@ def _write_vcf_header(variations, out_fhand):
     out_fhand.write(header.encode())
 
 
+def numbered_chunks(variations):
+    for index, chunk in enumerate(variations.iterate_chunks()):
+        yield index, chunk
+
+
+def _merge_vcfs(vcf_fpaths, out_fhand):
+    for vcf_fpath in sorted(vcf_fpaths):
+        vcf_fhand = open(vcf_fpath, 'rb')
+        out_fhand.write(vcf_fhand.read())
+        vcf_fhand.close()
+
+
+def write_vcf_parallel(variations, out_fhand, n_threads, tmp_dir,
+                       chunk_size=None, vcf_format=VCF_FORMAT):
+    _write_vcf_meta(variations, out_fhand, vcf_format=vcf_format)
+    _write_vcf_header(variations, out_fhand)
+
+    grouped_paths = _group_variations_paths(variations)
+    _partial_write_snvs = partial(_write_snvs_parallel, tmp_dir=tmp_dir,
+                                  grouped_paths=grouped_paths)
+
+    with Pool(n_threads) as pool:
+        try:
+            vcf_fpaths = pool.map(_partial_write_snvs, numbered_chunks(variations))
+        except Exception:
+            remove_temp_file_in_dir(tmp_dir, '.vcf.h5')
+            raise
+    try:
+        _merge_vcfs(vcf_fpaths, out_fhand)
+    except Exception:
+        raise
+    finally:
+        for vcf_fpath in vcf_fpaths:
+            if os.path.exists(vcf_fpath):
+                os.remove(vcf_fpath)
+
+
+def _write_snvs_parallel(numbered_chunk, tmp_dir, grouped_paths):
+    order, variations = numbered_chunk
+    tmp_fhand = NamedTemporaryFile(delete=False, dir=tmp_dir,
+                                   prefix='{}-'.format(order),
+                                   suffix='.tmp.vcf')
+    _write_snvs(variations, tmp_fhand, grouped_paths)
+    tmp_fhand.close()
+    return tmp_fhand.name
+
+
 def write_vcf(variations, out_fhand, vcf_format=VCF_FORMAT):
     _write_vcf_meta(variations, out_fhand, vcf_format=vcf_format)
     _write_vcf_header(variations, out_fhand)
 
     grouped_paths = _group_variations_paths(variations)
-    for chunk in variations.iterate_chunks(chunk_size=200):
+    for chunk in variations.iterate_chunks():
         _write_snvs(chunk, out_fhand, grouped_paths)
 
 
@@ -162,8 +214,13 @@ def _get_info_value(variations, index, info_paths, metadata, num_alt):
             if value:
                 info.append(field_key)
         elif meta_number == 'A':
-
-            value = value[:num_alt]
+            try:
+                value = value[:num_alt]
+            except IndexError:
+                if num_alt == 1:
+                    value = np.array(value)
+                else:
+                    raise
             if '|S' in dtype:
                 value = [val.decode() for val in value]
             else:
@@ -206,7 +263,7 @@ def _get_filters_value(variations, index, filter_paths):
         raise RuntimeError(msg)
     return ';'.join(filters)
 
-INT_STR_CONVERTER = {num: str(num) for num in range(1000)}
+INT_STR_CONVERTER = {num: str(num) for num in range(30000)}
 INT_STR_CONVERTER[MISSING_INT] = '.'
 INT_STR_CONVERTER[MISSING_FLOAT] = '.'
 INT_STR_CONVERTER[MISSING_STR] = '.'
@@ -218,7 +275,7 @@ def _possible_genotypes(num_alleles, ploidy):
     try:
         return POSSIBLE_GENOS_CACHE[ploidy][num_alleles]
     except KeyError:
-        possible_geno = factorial(num_alleles + ploidy - 1) / (factorial(ploidy) * factorial(num_alleles - 1))
+        possible_geno = int(factorial(num_alleles + ploidy - 1) / (factorial(ploidy) * factorial(num_alleles - 1)))
         POSSIBLE_GENOS_CACHE[ploidy][num_alleles] = possible_geno
         return possible_geno
 
@@ -232,7 +289,15 @@ def _get_calls_per_sample(calls_data, n_sample, calls_path, num_alt, metadata,
         format_data_number = metadata[key]['Number']
         if format_data_number == 'A':
 
-            value = value[:num_alt]
+            try:
+                value = value[:num_alt]
+            except IndexError:
+                print(key, value, format_data_number, num_alt)
+                if num_alt == 1:
+                    value = [value]
+                else:
+                    raise
+
             if 'AO' in key:
                 value = [INT_STR_CONVERTER[val] for val in value]
             else:

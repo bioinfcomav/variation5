@@ -2,19 +2,16 @@ import posixpath
 import json
 import copy
 from collections import Counter
-from math import factorial
 
 import numpy
 import h5py
 
 
-from variation import (SNPS_PER_CHUNK, MISSING_VALUES, VCF_FORMAT,
-                       DEF_DSET_PARAMS, MISSING_INT, MISSING_STR,
-                       MISSING_FLOAT)
+from variation import (SNPS_PER_CHUNK, MISSING_VALUES, DEF_DSET_PARAMS,
+                       MISSING_INT)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import append_matrix, is_dataset
-from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
 from variation.gt_writers.vcf import write_vcf

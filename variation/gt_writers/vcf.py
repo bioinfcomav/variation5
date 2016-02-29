@@ -160,10 +160,14 @@ def _create_snv_line(variations, var_index, grouped_paths, metadata):
                 var[field] = value
             else:
                 var[field] = '.'
-        alt = [x.decode() for x in variations['/variations/alt'][var_index]
-               if x.decode() != MISSING_STR]
-        num_alt = len(alt)
-        var['ALT'] = '.' if num_alt == 0 else ','.join(alt)
+        if '/variations/alt' in variations:
+            alt = [x.decode() for x in variations['/variations/alt'][var_index]
+                   if x.decode() != MISSING_STR]
+            num_alt = len(alt)
+            var['ALT'] = '.' if num_alt == 0 else ','.join(alt)
+        else:
+            var['ALT'] = '.'
+            num_alt = 0
 
         if grouped_paths['filter']:
             var['FILTER'] = _get_filters_value(variations, var_index,

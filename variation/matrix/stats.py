@@ -86,6 +86,9 @@ def counts_and_allels_by_row(mat, missing_value=None):
         else:
             allele_counts = numpy.column_stack((allele_counts, counts))
 
+    if allele_counts is None:
+        return None, None
+
     if len(allele_counts.shape) == 1:
         # it happens if there is only one non missing allele
         new_shape = allele_counts.shape[0], 1

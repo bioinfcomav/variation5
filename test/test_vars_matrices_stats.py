@@ -270,17 +270,46 @@ class StatsTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks())
-        density_h5 = calc_snp_density(hdf5, 1000)
-        density_array = calc_snp_density(snps, 1000)
-        assert numpy.all(density_array == density_h5)
-        var = {'/variations/chrom': numpy.array(['sh', 'sh', 'sh', 'sh', 'sh',
-                                                 'sh', 'sh', 'sh', 'sh', 'sh',
-                                                 'sh', 'sh', 'sh', 'sh']),
+        density_h5 = list(calc_snp_density(hdf5, 1000))
+        density_array = list(calc_snp_density(snps, 1000))
+        assert density_array == density_h5
+        var = {'/variations/chrom': numpy.array(['ch', 'ch', 'ch', 'ch', 'ch',
+                                                 'ch', 'ch', 'ch', 'ch', 'ch',
+                                                 'ch', 'ch', 'ch', 'ch']),
                '/variations/pos': numpy.array([1, 2, 3, 4, 5, 6, 7, 25, 34, 44,
-                                              80, 200, 300, 302])}
-        dens_var = calc_snp_density(var, 10)
-        expected = numpy.array([7, 7, 7, 7, 7, 7, 7, 2, 2, 2, 1, 1, 2, 2])
-        assert numpy.all(dens_var == expected)
+                                               80, 200, 300, 302])}
+        dens_var = list(calc_snp_density(var, 11))
+        expected = [6, 7, 7, 7, 7, 7, 6, 1, 1, 1, 1, 1, 2, 2]
+        assert dens_var == expected
+
+        var = {'/variations/chrom': numpy.array(['ch', 'ch', 'ch', 'c2', 'c2',
+                                                 'c2', 'c2', 'c2', 'c2', 'c2',
+                                                 'c2', 'c2', 'c2', 'c3']),
+               '/variations/pos': numpy.array([1, 2, 3, 4, 5, 6, 7, 25, 34, 44,
+                                               80, 200, 300, 302])}
+        dens_var = list(calc_snp_density(var, 11))
+        expected = [3, 3, 3, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1]
+        assert dens_var == expected
+
+        var = {'/variations/chrom': numpy.array(['c1', 'c4', 'c5', 'c2', 'c2',
+                                                 'c2', 'c2', 'c2', 'c2', 'c2',
+                                                 'c2', 'c2', 'c2', 'c3']),
+               '/variations/pos': numpy.array([1, 2, 3, 4, 5, 6, 7, 25, 34, 44,
+                                               80, 200, 300, 302])}
+        dens_var = list(calc_snp_density(var, 11))
+        expected = [1, 1, 1, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1]
+        assert dens_var == expected
+
+        var = {'/variations/chrom': numpy.array([]),
+               '/variations/pos': numpy.array([])}
+        dens_var = list(calc_snp_density(var, 11))
+        assert dens_var == []
+
+        var = {'/variations/chrom': numpy.array([1]),
+               '/variations/pos': numpy.array([1])}
+        dens_var = list(calc_snp_density(var, 11))
+        assert dens_var == [1]
+
 
     def test_calc_allele_freq(self):
         gts = numpy.array([])
@@ -568,7 +597,6 @@ class StatsTest(unittest.TestCase):
                               equal_nan=True)
         assert numpy.all(chrom == b'chr1')
 
-
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_maf']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_snp_density']
     unittest.main()

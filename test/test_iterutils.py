@@ -1,4 +1,5 @@
 import unittest
+
 from variation.iterutils import PeekableIterator
 
 

@@ -1,4 +1,4 @@
-from itertools import zip_longest
+from itertools import zip_longest, islice
 
 
 def first(iterable):

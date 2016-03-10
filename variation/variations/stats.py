@@ -3,6 +3,7 @@ from functools import reduce
 from itertools import combinations_with_replacement, permutations
 import operator
 import math
+from functools import lru_cache
 
 import numpy
 from scipy.stats.stats import chisquare
@@ -432,24 +433,71 @@ def calc_gt_type_stats(variations, chunk_size=None):
     return gt_type_stats
 
 
-def calc_snp_density(variations, window, chunk_size=SNPS_PER_CHUNK):
-    dens = []
-    dic_index = PosIndex(variations)
-    n_snps = variations[CHROM_FIELD].shape[0]
-    chromosomes = variations[CHROM_FIELD]
-    positions = variations[POS_FIELD]
-    for i in range(0, n_snps, chunk_size):
-        chunk_chrom = chromosomes[i: i + chunk_size]
-        chunk_pos = positions[i: i + chunk_size]
-        for chunk_idx in range(chunk_chrom.shape[0]):
-            chrom = chunk_chrom[chunk_idx]
-            pos = chunk_pos[chunk_idx]
-            pos_right = window + pos
-            pos_left = pos - window
-            index_right = dic_index.index_pos(chrom, pos_right)
-            index_left = dic_index.index_pos(chrom, pos_left)
-            dens.append(index_right - index_left)
-    return numpy.array(dens)
+def _snps_close(chrom1, pos1, chrom2, pos2, dist):
+    # print(chrom1, pos1, chrom2, pos2)
+    if chrom1 != chrom2:
+        return None
+    if pos1 == pos2:
+        return True
+    elif abs(pos1 - pos2) <= dist:
+        return True
+    else:
+        return False
+
+
+class _ArrayWrapper():
+    def __init__(self, array, cache_len=400):
+        self.array = array
+        self._h5_cache = None
+        self._cache_len = cache_len
+        self._cache_offset = None
+
+    @lru_cache(maxsize=128)
+    def __getitem__(self, idx):
+        if self._h5_cache is None:
+            self._fill_cache(idx)
+        return self.read_from_cache(idx)
+
+    def read_from_cache(self, idx):
+        # is cache consumed?
+        if idx - self._cache_offset >= len(self._h5_cache):
+            self._fill_cache(idx)
+        return self._h5_cache[idx - self._cache_offset]
+
+    def _fill_cache(self, idx):
+        self._h5_cache = self.array[idx: idx + self._cache_len]
+        self._cache_offset = idx
+
+
+def calc_snp_density(variations, window):
+    half_win = (window - 1) / 2
+    chroms = _ArrayWrapper(variations[CHROM_FIELD])
+    poss = _ArrayWrapper(variations[POS_FIELD])
+
+    last_idx = len(chroms.array) - 1
+    left_win_idx = 0
+    right_win_idx = 0
+    for idx in range(chroms.array.shape[0]):
+        chrom = chroms[idx]
+        pos = poss[idx]
+        # update left index
+        while True:
+            if not _snps_close(chrom, pos, chroms[left_win_idx],
+                               poss[left_win_idx], half_win):
+                left_win_idx += 1
+            else:
+                break
+        # update right index
+        while True:
+            if right_win_idx + 1 > last_idx:
+                break
+            elif _snps_close(chrom, pos, chroms[right_win_idx + 1],
+                             poss[right_win_idx + 1], half_win):
+                right_win_idx += 1
+            else:
+                break
+        snps_in_win = right_win_idx - left_win_idx + 1
+        yield snps_in_win
 
 
 def _calc_allele_counts(gts):

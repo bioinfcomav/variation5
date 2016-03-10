@@ -1,6 +1,6 @@
 import unittest
 
-from variation.iterutils import PeekableIterator
+from variation.iterutils import PeekableIterator, group_in_packets
 
 
 class PeekTest(unittest.TestCase):
@@ -43,6 +43,17 @@ class PeekTest(unittest.TestCase):
         assert 'a' == iterator.peek()
         assert 'a' == next(iterator)
         assert 'b' == iterator.peek()
+
+    def test_group_in_packets(self):
+        'It groups an iterator in packets of items'
+        packets = list(group_in_packets(range(4), 2))
+        assert packets == [(0, 1), (2, 3)]
+
+        packets = [packet for packet in group_in_packets(range(5), 2)]
+        assert packets == [(0, 1), (2, 3), (4,)]
+
+        packets = list(group_in_packets([], 2))
+        assert packets == []
 
 if __name__ == '__main__':
     unittest.main()

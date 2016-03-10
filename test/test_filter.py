@@ -25,7 +25,8 @@ from variation.variations.filters import (filter_mafs, filter_macs,
                                           filter_monomorphic_snps,
                                           keep_biallelic_and_monomorphic,
                                           filter_samples, filter_unlinked_vars,
-    filter_samples_by_missing)
+                                          filter_samples_by_missing,
+                                          filter_high_density_snps)
 from variation.iterutils import first
 from variation.variations.stats import (GT_FIELD, CHROM_FIELD, POS_FIELD,
                                         GQ_FIELD)
@@ -384,6 +385,21 @@ class FilterTest(unittest.TestCase):
         vars1 = filter_unlinked_vars(hdf5, 1000, by_chunk=True)
         vars2 = filter_unlinked_vars(hdf5, 1000, by_chunk=False)
         assert numpy.all(vars1[GT_FIELD] == vars2[GT_FIELD])
+
+    def test_filter_high_density(self):
+        varis = VariationsArrays()
+        flt_varis = filter_high_density_snps(varis, max_density=1, window=1)
+        assert not flt_varis.keys()
+
+        varis = VariationsArrays()
+        varis[CHROM_FIELD] = numpy.array([b'chr1'] * 6)
+        varis[POS_FIELD] = numpy.array([1, 2, 3, 4, 10, 11])
+        flt_varis = filter_high_density_snps(varis, max_density=2, window=3)
+        assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
+
+        flt_varis = filter_high_density_snps(varis, max_density=2, window=3,
+                                             chunk_size=1)
+        assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
 
 
 class FilterSamplesTest(unittest.TestCase):

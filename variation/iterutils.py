@@ -50,3 +50,13 @@ class PeekableIterator(object):
             self._peek_buffer_idx = None
         else:
             self._peek_buffer_idx = 0
+
+
+def group_in_packets(iterable, packet_size):
+    'ABCDE -> (A, B), (C, D), (E,)'
+    iterable = iter(iterable)
+    while True:
+        chunk = tuple(islice(iterable, packet_size))
+        if not chunk:
+            break
+        yield chunk

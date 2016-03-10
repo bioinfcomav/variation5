@@ -10,12 +10,12 @@ from allel.opt.stats import gn_locate_unlinked_int8
 from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_called_gt, GQ_FIELD, DP_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                                        calc_mac)
+                                        calc_mac, calc_snp_density)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import MISSING_INT, SNPS_PER_CHUNK
 from variation.matrix.methods import (append_matrix, is_dataset,
                                       iterate_matrix_chunks)
-from variation.iterutils import first
+from variation.iterutils import first, group_in_packets
 
 
 def _filter_dsets_chunks(selector_function, dsets_chunks):
@@ -288,6 +288,22 @@ def filter_monomorphic_snps(variations, filtered_vars=None, min_maf=None,
         return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
                                   min_maf=min_maf,
                                   min_num_genotypes=min_num_genotypes)
+
+
+def filter_high_density_snps(variations, max_density, window,
+                             filtered_vars=None, chunk_size=SNPS_PER_CHUNK):
+    densities = calc_snp_density(variations, window)
+    densities = group_in_packets(densities, chunk_size)
+    for chunk_idx0, chunk_densities in zip(range(0, variations.num_variations,
+                                                 chunk_size),
+                                           densities):
+        chunk_idx1 = chunk_idx0 + chunk_size
+        chunk = variations.get_chunk(slice(chunk_idx0, chunk_idx1))
+        selected_rows = [dens <= max_density for dens in chunk_densities]
+        filtered_vars = _filter_chunk2(chunk, filtered_vars, selected_rows)
+    if filtered_vars is None:
+        filtered_vars = VariationsArrays()
+    return filtered_vars
 
 
 def _biallelic_filter(chunk, filtered_vars, keep_monomorphic):

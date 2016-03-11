@@ -403,7 +403,7 @@ def filter_samples_by_index(variations, sample_cols, filtered_vars=None,
         chunks = (_filter_samples_by_index(chunk, sample_cols, reverse=reverse)
                   for chunk in variations.iterate_chunks())
         chunk = first(chunks)
-        chunks = chain([chunk], chunks)
+        filtered_vars.put_chunks([chunk])
         filtered_vars.put_chunks(chunks)
         filtered_vars.metadata = chunk.metadata
         filtered_vars.samples = chunk.samples

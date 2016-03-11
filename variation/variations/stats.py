@@ -770,6 +770,7 @@ def hist2d_gq_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
 
 def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
                             allele_freq_range=None, het_range=None,
+                            min_call_dp_for_het=None,
                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     if variations[GT_FIELD].shape[0] == 0:
         return numpy.array([]), numpy.array([]), numpy.array([])
@@ -777,7 +778,8 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
     allele_freq = calc_allele_freq(variations,
                                    min_num_genotypes=min_num_genotypes)
     max_freq = numpy.amax(allele_freq, axis=1)
-    het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
+    het = calc_obs_het(variations, min_call_dp=min_call_dp_for_het,
+                       min_num_genotypes=min_num_genotypes)
 
     # I remove nan taking into account only het.
     # All nans in het should be also nan in max_freq, but het might
@@ -798,6 +800,7 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
 
 def _hist2d_het_allele_freq_by_chunk(variations, n_bins=DEF_NUM_BINS,
                                      allele_freq_range=None, het_range=None,
+                                     min_call_dp_for_het=None,
                                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
                                      chunk_size=None):
     fields = [GT_FIELD, ALT_FIELD]
@@ -821,6 +824,7 @@ def _hist2d_het_allele_freq_by_chunk(variations, n_bins=DEF_NUM_BINS,
         res = _hist2d_het_allele_freq(var_chunk, n_bins=n_bins,
                                       allele_freq_range=allele_freq_range,
                                       het_range=het_range,
+                                      min_call_dp_for_het=min_call_dp_for_het,
                                       min_num_genotypes=min_num_genotypes)
         this_hist, xbins, y_bins = res
         if hist is None:
@@ -832,6 +836,7 @@ def _hist2d_het_allele_freq_by_chunk(variations, n_bins=DEF_NUM_BINS,
 
 def hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
                            allele_freq_range=None, het_range=None,
+                           min_call_dp_for_het=None,
                            min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
                            chunk_size=SNPS_PER_CHUNK):
 
@@ -839,12 +844,14 @@ def hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
         res = _hist2d_het_allele_freq_by_chunk(variations, n_bins=n_bins,
                                                allele_freq_range=allele_freq_range,
                                                het_range=het_range,
+                                               min_call_dp_for_het=min_call_dp_for_het,
                                                min_num_genotypes=min_num_genotypes,
                                                chunk_size=chunk_size)
     else:
         res = _hist2d_het_allele_freq(variations, n_bins=n_bins,
                                       allele_freq_range=allele_freq_range,
                                       het_range=het_range,
+                                      min_call_dp_for_het=min_call_dp_for_het,
                                       min_num_genotypes=min_num_genotypes)
     hist, xedges, yedges = res
     return hist, xedges, yedges

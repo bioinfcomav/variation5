@@ -31,6 +31,7 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         calc_cum_distrib, _calc_r2,
                                         calc_r2_windows, GT_FIELD,
                                         hist2d_het_allele_freq)
+from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
 
@@ -370,6 +371,30 @@ class StatsTest(unittest.TestCase):
         assert numpy.allclose(res1[2], res2[2])
 
         # tODO min coverage
+        gts = numpy.array([[[0, 0], [0, 0], [0, -1], [-1, -1]],
+                           [[0, 0], [0, 0], [0, -1], [-1, -1]],
+                           [[0, 0], [-1, -1], [-1, -1], [-1, -1]],
+                           [[0, 0], [1, 1], [0, 0], [1, 1]],
+                           [[0, 0], [1, 1], [0, 0], [1, 1]],
+                           [[0, 1], [-1, -1], [-1, -1], [-1, -1]]
+                           ])
+        dps = numpy.array([[1, 5, 5, 5],
+                           [5, 5, 5, 5],
+                           [5, 5, 5, 5],
+                           [5, 5, 5, 5],
+                           [5, 5, 5, 5],
+                           [5, 5, 5, 5]
+                           ])
+        varis = {'/calls/GT': gts, '/variations/alt': numpy.zeros((3, 2)),
+                 DP_FIELD: dps}
+        res = hist2d_het_allele_freq(varis, min_num_genotypes=2, n_bins=2,
+                                     allele_freq_range=(0.5, 1),
+                                     min_call_dp_for_het=3,
+                                     het_range=(0, 1), chunk_size=None)
+        hist, xedges, yedges = res
+        assert numpy.allclose(hist, numpy.array([[2., 0], [1., 0.]]))
+        assert numpy.allclose(xedges, numpy.array([0.5, 0.75, 1.]))
+        assert numpy.allclose(yedges, numpy.array([0, 0.5, 1.]))
 
     def test_calc_inbreeding_coeficient(self):
         variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],

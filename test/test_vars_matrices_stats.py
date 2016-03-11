@@ -29,7 +29,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         calc_maf_depth_distribs_per_sample,
                                         PositionalStatsCalculator, call_is_hom,
                                         calc_cum_distrib, _calc_r2,
-                                        calc_r2_windows, GT_FIELD)
+                                        calc_r2_windows, GT_FIELD,
+                                        hist2d_het_allele_freq)
 from test.test_utils import TEST_DATA_DIR
 
 
@@ -310,7 +311,6 @@ class StatsTest(unittest.TestCase):
         dens_var = list(calc_snp_density(var, 11))
         assert dens_var == [1]
 
-
     def test_calc_allele_freq(self):
         gts = numpy.array([])
         varis = {'/calls/GT': gts, '/variations/alt': numpy.array([])}
@@ -331,6 +331,45 @@ class StatsTest(unittest.TestCase):
         expected = numpy.array([[0.6, 0.4, 0, 0], [1, 0, 0, 0],
                                 [4 / 6, 1 / 6, 1 / 6, 0]])
         assert numpy.allclose(allele_freq, expected)
+
+    def test_2d_allele_freq_het(self):
+        gts = numpy.array([[[0, 0], [0, 0], [0, -1], [-1, -1]],
+                           [[0, 0], [0, 0], [0, -1], [-1, -1]],
+                           [[0, 0], [-1, -1], [-1, -1], [-1, -1]],
+                           [[0, 0], [1, 1], [0, 0], [1, 1]],
+                           [[0, 0], [1, 1], [0, 0], [1, 1]],
+                           [[0, 1], [-1, -1], [-1, -1], [-1, -1]]
+                           ])
+        varis = {'/calls/GT': gts, '/variations/alt': numpy.zeros((3, 2))}
+        res = hist2d_het_allele_freq(varis, min_num_genotypes=0, n_bins=2,
+                                     allele_freq_range=(0.5, 1),
+                                     het_range=(0, 1), chunk_size=None)
+        hist, xedges, yedges = res
+        assert numpy.allclose(hist, numpy.array([[2., 1.], [3., 0.]]))
+        assert numpy.allclose(xedges, numpy.array([0.5, 0.75, 1.]))
+        assert numpy.allclose(yedges, numpy.array([0, 0.5, 1.]))
+
+        res = hist2d_het_allele_freq(varis, min_num_genotypes=2, n_bins=2,
+                                     allele_freq_range=(0.5, 1),
+                                     het_range=(0, 1), chunk_size=None)
+
+        hist, xedges, yedges = res
+        assert numpy.allclose(hist, numpy.array([[2., 0], [2., 0.]]))
+
+        gts = numpy.array([])
+        varis = {'/calls/GT': gts, '/variations/alt': numpy.array([])}
+        res = hist2d_het_allele_freq(varis, chunk_size=None)
+        assert res[0].shape[0] == 0
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        res1 = hist2d_het_allele_freq(hdf5, min_num_genotypes=2,
+                                      chunk_size=None)
+        res2 = hist2d_het_allele_freq(hdf5, min_num_genotypes=2)
+        assert numpy.allclose(res1[0], res2[0])
+        assert numpy.allclose(res1[1], res2[1])
+        assert numpy.allclose(res1[2], res2[2])
+
+        # tODO min coverage
 
     def test_calc_inbreeding_coeficient(self):
         variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],
@@ -484,13 +523,15 @@ class StatsTest(unittest.TestCase):
                                                      chunk_size=50)
         assert numpy.all(distrib3 == distrib2)
 
-        distrib_het, _ = calc_field_distribs_per_sample(snps, field='/calls/DP',
+        distrib_het, _ = calc_field_distribs_per_sample(snps,
+                                                        field='/calls/DP',
                                                         n_bins=560,
                                                         chunk_size=50,
                                                         mask_field='/calls/GT',
                                                         mask_func=call_is_het)
         assert numpy.all(distrib3 == distrib2)
-        distrib_hom, _ = calc_field_distribs_per_sample(snps, field='/calls/DP',
+        distrib_hom, _ = calc_field_distribs_per_sample(snps,
+                                                        field='/calls/DP',
                                                         n_bins=560,
                                                         chunk_size=50,
                                                         mask_field='/calls/GT',
@@ -598,5 +639,5 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(chrom == b'chr1')
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_snp_density']
+    # import sys;sys.argv = ['', 'StatsTest.test_2d_allele_freq_het']
     unittest.main()

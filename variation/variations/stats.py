@@ -768,6 +768,88 @@ def hist2d_gq_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
     return hist, xbins, ybins
 
 
+def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
+                            allele_freq_range=None, het_range=None,
+                            min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    if variations[GT_FIELD].shape[0] == 0:
+        return numpy.array([]), numpy.array([]), numpy.array([])
+
+    allele_freq = calc_allele_freq(variations,
+                                   min_num_genotypes=min_num_genotypes)
+    max_freq = numpy.amax(allele_freq, axis=1)
+    het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
+
+    # I remove nan taking into account only het.
+    # All nans in het should be also nan in max_freq, but het might
+    # have some extra nans due to coverage.
+    non_nan = numpy.logical_not(numpy.isnan(het))
+    max_freq = max_freq[non_nan]
+    het = het[non_nan]
+
+    if allele_freq_range is None:
+        range_ = None
+    else:
+        range_ = (allele_freq_range, het_range)
+
+    hist, xedges, yedges = numpy.histogram2d(max_freq, het, bins=n_bins,
+                                             range=range_)
+    return hist, xedges, yedges
+
+
+def _hist2d_het_allele_freq_by_chunk(variations, n_bins=DEF_NUM_BINS,
+                                     allele_freq_range=None, het_range=None,
+                                     min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                                     chunk_size=None):
+    fields = [GT_FIELD, ALT_FIELD]
+    if allele_freq_range is None or het_range is None:
+        for var_chunk in variations.iterate_chunks(kept_fields=fields,
+                                                   chunk_size=chunk_size):
+            allele_freq = calc_allele_freq(variations,
+                                           min_num_genotypes=min_num_genotypes)
+            max_freq = numpy.amax(allele_freq, axis=1)
+            het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
+
+            this_het_range = calc_min_max(het)
+            het_range = _update_range(het_range, this_het_range)
+            this_freq_range = calc_min_max(max_freq)
+            allele_freq_range = _update_range(allele_freq_range,
+                                              this_freq_range)
+
+    hist = None
+    for var_chunk in variations.iterate_chunks(kept_fields=fields,
+                                               chunk_size=chunk_size):
+        res = _hist2d_het_allele_freq(var_chunk, n_bins=n_bins,
+                                      allele_freq_range=allele_freq_range,
+                                      het_range=het_range,
+                                      min_num_genotypes=min_num_genotypes)
+        this_hist, xbins, y_bins = res
+        if hist is None:
+            hist = this_hist
+        else:
+            hist = numpy.add(hist, this_hist)
+    return hist, xbins, y_bins
+
+
+def hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
+                           allele_freq_range=None, het_range=None,
+                           min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                           chunk_size=SNPS_PER_CHUNK):
+
+    if chunk_size:
+        res = _hist2d_het_allele_freq_by_chunk(variations, n_bins=n_bins,
+                                               allele_freq_range=allele_freq_range,
+                                               het_range=het_range,
+                                               min_num_genotypes=min_num_genotypes,
+                                               chunk_size=chunk_size)
+    else:
+        res = _hist2d_het_allele_freq(variations, n_bins=n_bins,
+                                      allele_freq_range=allele_freq_range,
+                                      het_range=het_range,
+                                      min_num_genotypes=min_num_genotypes)
+    hist, xedges, yedges = res
+    return hist, xedges, yedges
+
+
 def calc_field_distribs_per_sample(variations, field, range_=None,
                                    n_bins=DEF_NUM_BINS,
                                    chunk_size=SNPS_PER_CHUNK,

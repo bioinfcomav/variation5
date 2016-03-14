@@ -144,15 +144,15 @@ def calc_min_max(matrix):
         max_ = None
         min_ = None
         for chunk in iterate_matrix_chunks(matrix):
-            chunk_max = numpy.max(chunk)
-            chunk_min = numpy.min(chunk)
+            chunk_max = numpy.nanmax(chunk)
+            chunk_min = numpy.nanmin(chunk)
             if max_ is None or max_ < chunk_max:
                 max_ = chunk_max
             if min_ is None or min_ > chunk_min:
                 min_ = chunk_min
     else:
-        max_ = numpy.max(matrix)
-        min_ = numpy.min(matrix)
+        max_ = numpy.nanmax(matrix)
+        min_ = numpy.nanmin(matrix)
     return min_, max_
 
 

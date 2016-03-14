@@ -361,8 +361,8 @@ class StatsTest(unittest.TestCase):
         varis = {'/calls/GT': gts, '/variations/alt': numpy.array([])}
         res = hist2d_het_allele_freq(varis, chunk_size=None)
         assert res[0].shape[0] == 0
-
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'),
+                            mode='r')
         res1 = hist2d_het_allele_freq(hdf5, min_num_genotypes=2,
                                       chunk_size=None)
         res2 = hist2d_het_allele_freq(hdf5, min_num_genotypes=2)
@@ -370,7 +370,6 @@ class StatsTest(unittest.TestCase):
         assert numpy.allclose(res1[1], res2[1])
         assert numpy.allclose(res1[2], res2[2])
 
-        # tODO min coverage
         gts = numpy.array([[[0, 0], [0, 0], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]],
                            [[0, 0], [-1, -1], [-1, -1], [-1, -1]],

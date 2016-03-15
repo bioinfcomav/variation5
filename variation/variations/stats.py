@@ -13,10 +13,12 @@ from allel.model.ndarray import GenotypeArray
 from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH,
                        MISSING_INT, GT_FIELD, ALT_FIELD, DP_FIELD,
                        GQ_FIELD, CHROM_FIELD, POS_FIELD, RO_FIELD, AO_FIELD)
-from variation.matrix.stats import counts_by_row, counts_and_allels_by_row
+from variation.matrix.stats import (counts_by_row, counts_and_allels_by_row,
+                                    row_value_counter_fact)
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.utils.misc import remove_nans
+from collections import OrderedDict
 
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -506,8 +508,10 @@ def _calc_allele_counts(gts):
 def calc_allele_freq(variations,
                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gts = variations[GT_FIELD]
+
     if gts.shape[0] == 0:
         return numpy.array([])
+
     max_num_allele = variations[ALT_FIELD].shape[1] + 1
     allele_counts = _calc_allele_counts(gts)
     total_counts = numpy.sum(allele_counts, axis=1)
@@ -768,32 +772,149 @@ def hist2d_gq_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
     return hist, xbins, ybins
 
 
+def _packed_gt_to_tuple(gt):
+    gt = '%02d' % gt
+    return tuple(sorted([int(gt[idx]) for idx in range(len(gt))]))
+
+
+def _calc_geno_counts(variations, allow_redundant_gts=False):
+    gts = variations[GT_FIELD]
+
+    # get rid of genotypes with missing alleles
+    missing_alleles = gts == MISSING_INT
+    miss_gts = numpy.any(missing_alleles, axis=2)
+
+    # We pack the genotype of a sample that is in third axes as two
+    # integers as one integer: 1, 1 -> 11 0, 1 -> 01, 0, 0-> 0
+    gts_per_haplo = [gts[:, :, idx] * 10 ** idx for idx in range(gts.shape[2])]
+    packed_gts = None
+    for gts_ in gts_per_haplo:
+        if packed_gts is None:
+            packed_gts = gts_
+        else:
+            packed_gts += gts_
+    packed_gts[miss_gts] = -1
+
+    gt_counts, different_gts = counts_and_allels_by_row(packed_gts,
+                                                        missing_value=MISSING_INT)
+    different_gts = [_packed_gt_to_tuple(gt) for gt in different_gts]
+
+    if allow_redundant_gts:
+        return gt_counts, different_gts
+
+    same_gts = {}
+    for idx, gt_ in enumerate(different_gts):
+        if gt_ in same_gts:
+            same_gts[gt_].append(idx)
+        else:
+            same_gts[gt_] = [idx]
+
+    # We have to sum the columns with the one gts
+    if not all([len(val) < 2 for val in same_gts.values()]):
+        collapsed_gt_counts = []
+        collapsed_gts = []
+        for gt_, idxs in same_gts.items():
+            if len(idxs) > 1:
+                gt_count = numpy.sum(gt_counts[:, idxs], axis=1)
+            else:
+                gt_count = gt_counts[:, idxs][:, 0]
+            collapsed_gt_counts.append(gt_count)
+            collapsed_gts.append(gt_)
+        gt_counts = numpy.array(collapsed_gt_counts)
+        different_gts = collapsed_gts
+    return gt_counts, different_gts
+
+
+def _gt_is_homo(gt):
+    return all(allele == gt[0] for allele in gt)
+
+
 def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
                             allele_freq_range=None, het_range=None,
                             min_call_dp_for_het=None,
                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+
     if variations[GT_FIELD].shape[0] == 0:
         return numpy.array([]), numpy.array([]), numpy.array([])
 
-    allele_freq = calc_allele_freq(variations,
-                                   min_num_genotypes=min_num_genotypes)
-    max_freq = numpy.amax(allele_freq, axis=1)
-    het = calc_obs_het(variations, min_call_dp=min_call_dp_for_het,
-                       min_num_genotypes=min_num_genotypes)
+    gts = variations[GT_FIELD]
+    if is_dataset(gts):
+        gts = gts[...]
 
-    # I remove nan taking into account only het.
-    # All nans in het should be also nan in max_freq, but het might
-    # have some extra nans due to coverage.
-    non_nan = numpy.logical_not(numpy.isnan(het))
-    max_freq = max_freq[non_nan]
-    het = het[non_nan]
+    # get rid of genotypes with missing alleles
+    missing_alleles = gts == MISSING_INT
+    miss_gts = numpy.any(missing_alleles, axis=2)
 
-    if allele_freq_range is None:
+    if min_call_dp_for_het:
+        dps = variations[DP_FIELD]
+        if is_dataset(dps):
+            dps = dps[...]
+        low_dp = dps < min_call_dp_for_het
+        miss_gts = numpy.logical_or(miss_gts, low_dp)
+
+    # We pack the genotype of a sample that is in third axes as two
+    # integers as one integer: 1, 1 -> 11 0, 1 -> 01, 0, 0-> 0
+    gts_per_haplo = [gts[:, :, idx] * 10 ** idx for idx in range(gts.shape[2])]
+    packed_gts = None
+    for gts_ in gts_per_haplo:
+        if packed_gts is None:
+            packed_gts = gts_
+        else:
+            packed_gts += gts_
+    packed_gts[miss_gts] = MISSING_INT
+
+    different_gts = numpy.unique(packed_gts)
+
+    # Count genotypes, homo, het and alleles
+    allele_counts_by_snp = {}
+    het_counts_by_snp = None
+    homo_counts_by_snp = None
+    miss_gt_counts_by_snp = None
+
+    for gt in different_gts:
+
+        count_gt_by_row = row_value_counter_fact(gt)
+        gt_counts = count_gt_by_row(packed_gts)
+
+        if gt == MISSING_INT:
+            miss_gt_counts_by_snp = gt_counts
+            continue
+
+        unpacked_gt = _packed_gt_to_tuple(gt)
+        if _gt_is_homo(unpacked_gt):
+            if homo_counts_by_snp is None:
+                homo_counts_by_snp = gt_counts
+            else:
+                homo_counts_by_snp += gt_counts
+        else:
+            if het_counts_by_snp is None:
+                het_counts_by_snp = gt_counts
+            else:
+                het_counts_by_snp += gt_counts
+
+        for allele in unpacked_gt:
+            if allele not in allele_counts_by_snp:
+                allele_counts_by_snp[allele] = numpy.copy(gt_counts)
+            else:
+                allele_counts_by_snp[allele] += gt_counts
+
+    het = het_counts_by_snp / (homo_counts_by_snp + het_counts_by_snp)
+
+    allele_counts = numpy.array(list(allele_counts_by_snp.values()))
+    max_allele = numpy.amax(allele_counts, axis=0)
+    max_allele_freq = max_allele / numpy.sum(allele_counts, axis=0)
+
+    if min_num_genotypes > 0 and miss_gt_counts_by_snp is not None:
+        enoug_calls = min_num_genotypes >= miss_gt_counts_by_snp
+        het = het[enoug_calls]
+        max_allele_freq = max_allele_freq[enoug_calls]
+
+    if allele_freq_range is None or het_range is None:
         range_ = None
     else:
         range_ = (allele_freq_range, het_range)
 
-    hist, xedges, yedges = numpy.histogram2d(max_freq, het, bins=n_bins,
+    hist, xedges, yedges = numpy.histogram2d(max_allele_freq, het, bins=n_bins,
                                              range=range_)
     return hist, xedges, yedges
 
@@ -807,10 +928,10 @@ def _hist2d_het_allele_freq_by_chunk(variations, n_bins=DEF_NUM_BINS,
     if allele_freq_range is None or het_range is None:
         for var_chunk in variations.iterate_chunks(kept_fields=fields,
                                                    chunk_size=chunk_size):
-            allele_freq = calc_allele_freq(variations,
+            allele_freq = calc_allele_freq(var_chunk,
                                            min_num_genotypes=min_num_genotypes)
             max_freq = numpy.amax(allele_freq, axis=1)
-            het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
+            het = calc_obs_het(var_chunk, min_num_genotypes=min_num_genotypes)
 
             this_het_range = calc_min_max(het)
             het_range = _update_range(het_range, this_het_range)

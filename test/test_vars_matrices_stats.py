@@ -334,6 +334,7 @@ class StatsTest(unittest.TestCase):
         assert numpy.allclose(allele_freq, expected)
 
     def test_2d_allele_freq_het(self):
+
         gts = numpy.array([[[0, 0], [0, 0], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]],
                            [[0, 0], [-1, -1], [-1, -1], [-1, -1]],
@@ -353,9 +354,8 @@ class StatsTest(unittest.TestCase):
         res = hist2d_het_allele_freq(varis, min_num_genotypes=2, n_bins=2,
                                      allele_freq_range=(0.5, 1),
                                      het_range=(0, 1), chunk_size=None)
-
         hist, xedges, yedges = res
-        assert numpy.allclose(hist, numpy.array([[2., 0], [2., 0.]]))
+        assert numpy.allclose(hist, numpy.array([[2., 0.], [2., 0.]]))
 
         gts = numpy.array([])
         varis = {'/calls/GT': gts, '/variations/alt': numpy.array([])}
@@ -391,7 +391,7 @@ class StatsTest(unittest.TestCase):
                                      min_call_dp_for_het=3,
                                      het_range=(0, 1), chunk_size=None)
         hist, xedges, yedges = res
-        assert numpy.allclose(hist, numpy.array([[2., 0], [1., 0.]]))
+        assert numpy.allclose(hist, numpy.array([[2., 0.], [1., 0.]]))
         assert numpy.allclose(xedges, numpy.array([0.5, 0.75, 1.]))
         assert numpy.allclose(yedges, numpy.array([0, 0.5, 1.]))
 

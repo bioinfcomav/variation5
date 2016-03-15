@@ -7,7 +7,7 @@ import operator
 import numpy
 import matplotlib.pyplot as plt
 
-from variation.matrix.methods import iterate_matrix_chunks
+from variation.matrix.methods import iterate_matrix_chunks, is_dataset
 
 
 def _row_value_counter_array(array, value, axes):
@@ -37,7 +37,7 @@ def _concat_arrays(arrays):
     return concat
 
 
-def _row_value_counter(mat, value, ratio=False):
+def _row_value_counter(mat, value, ratio=False, by_chunk=False):
     ndims = len(mat.shape)
     if ndims == 1:
         raise ValueError('The matrix has to have at least 2 dimensions')
@@ -46,14 +46,19 @@ def _row_value_counter(mat, value, ratio=False):
     else:
         axes = tuple([i + 1 for i in range(ndims - 1)])
 
-    chunks = iterate_matrix_chunks(mat)
-    result = numpy.zeros(mat.shape[0])
-    start = 0
-    for chunk in chunks:
-        chunk_result = _row_value_counter_array(chunk, value, axes)
-        end = start + chunk_result.shape[0]
-        result[start:end] = chunk_result
-        start = end
+    if by_chunk:
+        chunks = iterate_matrix_chunks(mat)
+        result = numpy.zeros(mat.shape[0])
+        start = 0
+        for chunk in chunks:
+            chunk_result = _row_value_counter_array(chunk, value, axes)
+            end = start + chunk_result.shape[0]
+            result[start:end] = chunk_result
+            start = end
+    else:
+        if is_dataset(mat):
+            mat = mat[...]
+        result = _row_value_counter_array(mat, value, axes)
 
     if ratio:
         num_items_per_row = reduce(operator.mul, mat.shape[1:], 1)
@@ -76,10 +81,12 @@ def counts_and_allels_by_row(mat, missing_value=None):
     # This algorithm is suboptimal, it would be better to go row per row
     # the problem is a for snp in gts is very slow because the for in
     # python is slow
+    good_alleles = []
     for allele in alleles:
         if allele == missing_value:
             continue
         allele_counter = row_value_counter_fact(allele)
+        good_alleles.append(allele)
         counts = allele_counter(mat)
         if allele_counts is None:
             allele_counts = counts
@@ -96,7 +103,7 @@ def counts_and_allels_by_row(mat, missing_value=None):
         allele_counts = numpy.copy(allele_counts.reshape(new_shape))
         allele_counts = allele_counts.astype(dtype)
 
-    return allele_counts, alleles
+    return allele_counts, good_alleles
 
 
 def plot_hist(hist, bins, print_plot=False):

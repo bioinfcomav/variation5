@@ -7,6 +7,7 @@ import numpy
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from pandas.core.frame import DataFrame
@@ -221,28 +222,51 @@ class _AxesMod():
     def __init__(self, axes):
         self.axes = axes
 
-    def hist2d(self, matrix, xbins, ybins):
-        pc = self.axes.pcolorfast(xbins, ybins, matrix)
+    def hist2d(self, matrix, xbins, ybins, log_normed=False):
+        if log_normed:
+            norm = mcolors.LogNorm()
+        else:
+            norm = mcolors.Normalize()
+        pc = self.axes.pcolormesh(xbins, ybins, matrix,
+                                  norm=norm, label='hola')
         self.axes.set_xlim(xbins[0], xbins[-1])
         self.axes.set_ylim(ybins[0], ybins[-1])
         return matrix, xbins, ybins, pc
 
 
-def plot_hist2d(matrix, xbins, ybins, fhand=None, axes=None, fig=None,
-                no_interactive_win=False, figsize=None,
+def _get_mpl_args(params):
+    if 'keys' in dir(params):
+        args = params.get('args', [])
+        kwargs = params.get('kwargs', {})
+    elif isinstance(params, (list, tuple)):
+        args = params
+        kwargs = {}
+    else:
+        args = [params]
+        kwargs = {}
+    return args, kwargs
+
+
+def plot_hist2d(hist, xbins, ybins, fhand=None, axes=None, fig=None,
+                no_interactive_win=False, figsize=None, log_normed=False,
                 mpl_params={}, colorbar_label='', **kwargs):
     print_figure = False
+
     if axes is None:
         print_figure = True
         fig = Figure(figsize=figsize)
         canvas = FigureCanvas(fig)
         axes = fig.add_subplot(111)
     axesmod = _AxesMod(axes)
-    result = axesmod.hist2d(matrix, xbins, ybins)
+
+    result = axesmod.hist2d(hist, xbins, ybins, log_normed=log_normed)
     fig.colorbar(result[3], ax=axes, label=colorbar_label)
+
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
-        function(*params['args'], **params['kwargs'])
+        args, kwargs = _get_mpl_args(params)
+        function(*args, **kwargs)
+
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return result

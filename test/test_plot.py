@@ -105,6 +105,11 @@ class PlotTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_hist2d(distrib, xbins, ybins, fhand=fhand,
                         colorbar_label='Counts')
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_hist2d(distrib, xbins, ybins, fhand=fhand,
+                        log_normed=True,
+                        mpl_params={'set_xlabel': 'x',
+                                    'set_ylabel': 'y'})
 
     def test_curlywhirly(self):
         coords = numpy.random.normal(size=(3, 4))
@@ -124,5 +129,5 @@ class PlotTest(unittest.TestCase):
             pairwise_ld(hdf5, fhand=fhand)
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PlotTest.test_manhattan_plot']
+    # import sys;sys.argv = ['', 'PlotTest.test_plot_hist2d']
     unittest.main()

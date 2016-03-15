@@ -844,7 +844,6 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
     # get rid of genotypes with missing alleles
     missing_alleles = gts == MISSING_INT
     miss_gts = numpy.any(missing_alleles, axis=2)
-
     if min_call_dp_for_het:
         dps = variations[DP_FIELD]
         if is_dataset(dps):
@@ -925,6 +924,9 @@ def _hist2d_het_allele_freq_by_chunk(variations, n_bins=DEF_NUM_BINS,
                                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
                                      chunk_size=None):
     fields = [GT_FIELD, ALT_FIELD]
+    if min_call_dp_for_het is not None:
+        fields.append(DP_FIELD)
+
     if allele_freq_range is None or het_range is None:
         for var_chunk in variations.iterate_chunks(kept_fields=fields,
                                                    chunk_size=chunk_size):

@@ -18,7 +18,7 @@ from variation.matrix.stats import (counts_by_row, counts_and_allels_by_row,
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.utils.misc import remove_nans
-from collections import OrderedDict
+from variation.iterutils import group_in_packets
 
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -772,11 +772,6 @@ def hist2d_gq_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
     return hist, xbins, ybins
 
 
-def _packed_gt_to_tuple(gt):
-    gt = '%02d' % gt
-    return tuple(sorted([int(gt[idx]) for idx in range(len(gt))]))
-
-
 def _calc_geno_counts(variations, allow_redundant_gts=False):
     gts = variations[GT_FIELD]
 
@@ -825,6 +820,14 @@ def _calc_geno_counts(variations, allow_redundant_gts=False):
     return gt_counts, different_gts
 
 
+def _packed_gt_to_tuple(gt, ploidy):
+    gt_len = ploidy * 2
+    gt_fmt = '%0' + str(gt_len) + 'd'
+    gt = gt_fmt % gt
+    gt = tuple(sorted([int(gt[idx: idx + 2]) for idx in range(0, len(gt), 2)]))
+    return gt
+
+
 def _gt_is_homo(gt):
     return all(allele == gt[0] for allele in gt)
 
@@ -853,7 +856,7 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
 
     # We pack the genotype of a sample that is in third axes as two
     # integers as one integer: 1, 1 -> 11 0, 1 -> 01, 0, 0-> 0
-    gts_per_haplo = [gts[:, :, idx] * 10 ** idx for idx in range(gts.shape[2])]
+    gts_per_haplo = [gts[:, :, idx] * 100 ** idx for idx in range(gts.shape[2])]
     packed_gts = None
     for gts_ in gts_per_haplo:
         if packed_gts is None:
@@ -863,13 +866,12 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
     packed_gts[miss_gts] = MISSING_INT
 
     different_gts = numpy.unique(packed_gts)
-
     # Count genotypes, homo, het and alleles
+    ploidy = gts.shape[2]
     allele_counts_by_snp = {}
     het_counts_by_snp = None
     homo_counts_by_snp = None
     miss_gt_counts_by_snp = None
-
     for gt in different_gts:
 
         count_gt_by_row = row_value_counter_fact(gt)
@@ -879,7 +881,7 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
             miss_gt_counts_by_snp = gt_counts
             continue
 
-        unpacked_gt = _packed_gt_to_tuple(gt)
+        unpacked_gt = _packed_gt_to_tuple(gt, ploidy)
         if _gt_is_homo(unpacked_gt):
             if homo_counts_by_snp is None:
                 homo_counts_by_snp = gt_counts
@@ -930,14 +932,13 @@ def _hist2d_het_allele_freq_by_chunk(variations, n_bins=DEF_NUM_BINS,
     if allele_freq_range is None or het_range is None:
         for var_chunk in variations.iterate_chunks(kept_fields=fields,
                                                    chunk_size=chunk_size):
-            allele_freq = calc_allele_freq(var_chunk,
-                                           min_num_genotypes=min_num_genotypes)
-            max_freq = numpy.amax(allele_freq, axis=1)
-            het = calc_obs_het(var_chunk, min_num_genotypes=min_num_genotypes)
-
-            this_het_range = calc_min_max(het)
+            res = _hist2d_het_allele_freq(var_chunk, n_bins=n_bins,
+                                          min_call_dp_for_het=min_call_dp_for_het,
+                                          min_num_genotypes=min_num_genotypes)
+            _, xbins, ybins = res
+            this_het_range = calc_min_max(ybins)
+            this_freq_range = calc_min_max(xbins)
             het_range = _update_range(het_range, this_het_range)
-            this_freq_range = calc_min_max(max_freq)
             allele_freq_range = _update_range(allele_freq_range,
                                               this_freq_range)
 

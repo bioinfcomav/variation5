@@ -335,6 +335,16 @@ class StatsTest(unittest.TestCase):
 
     def test_2d_allele_freq_het(self):
 
+        gts = numpy.array([[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]],
+                           [[0, 0], [0, 0], [0, -1], [-1, -1], [-1, -1]],
+                           ])
+        varis = {'/calls/GT': gts}
+        res = hist2d_het_allele_freq(varis, min_num_genotypes=0, n_bins=2,
+                                     allele_freq_range=(0.5, 1),
+                                     het_range=(0, 1), chunk_size=None)
+        hist, _, _ = res
+        assert numpy.allclose(hist, numpy.array([[0., 0.], [1., 0.]]))
+
         gts = numpy.array([[[0, 0], [0, 0], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]],
                            [[0, 0], [-1, -1], [-1, -1], [-1, -1]],

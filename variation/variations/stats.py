@@ -374,6 +374,10 @@ def calc_obs_het(variations,
                  min_call_dp=0):
     het, called_gts = _calc_obs_het_counts(variations, axis=1,
                                            min_call_dp=min_call_dp)
+    print('het counts')
+    print(het)
+    print('called_gts')
+    print(called_gts)
     # To avoid problems with NaNs
     with numpy.errstate(invalid='ignore'):
         het = het / called_gts
@@ -856,7 +860,7 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
 
     # We pack the genotype of a sample that is in third axes as two
     # integers as one integer: 1, 1 -> 11 0, 1 -> 01, 0, 0-> 0
-    gts_per_haplo = [gts[:, :, idx] * 100 ** idx for idx in range(gts.shape[2])]
+    gts_per_haplo = [(gts[:, :, idx].astype(numpy.int16)) * (100 ** idx) for idx in range(gts.shape[2])]
     packed_gts = None
     for gts_ in gts_per_haplo:
         if packed_gts is None:
@@ -898,13 +902,13 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
                 allele_counts_by_snp[allele] = numpy.copy(gt_counts)
             else:
                 allele_counts_by_snp[allele] += gt_counts
-
+    if het_counts_by_snp is None:
+        het_counts_by_snp = numpy.zeros(shape=homo_counts_by_snp.shape)
     het = het_counts_by_snp / (homo_counts_by_snp + het_counts_by_snp)
 
     allele_counts = numpy.array(list(allele_counts_by_snp.values()))
     max_allele = numpy.amax(allele_counts, axis=0)
     max_allele_freq = max_allele / numpy.sum(allele_counts, axis=0)
-
     if min_num_genotypes > 0 and miss_gt_counts_by_snp is not None:
         num_samples = gts.shape[1]
         num_calls = -miss_gt_counts_by_snp + num_samples

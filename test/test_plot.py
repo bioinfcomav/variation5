@@ -99,9 +99,12 @@ class PlotTest(unittest.TestCase):
                            split_by_chrom=True)
 
     def test_plot_hist2d(self):
-        x = numpy.random.rand(1000)
-        y = numpy.random.rand(1000)
+        x = numpy.random.normal(loc=1, size=1000)
+        y = numpy.random.normal(size=1000)
         distrib, xbins, ybins = numpy.histogram2d(x, y)
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_hist2d(distrib, xbins, ybins, fhand=fhand,
+                        colorbar_label='Counts', hist1d=False)
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_hist2d(distrib, xbins, ybins, fhand=fhand,
                         colorbar_label='Counts')
@@ -129,5 +132,5 @@ class PlotTest(unittest.TestCase):
             pairwise_ld(hdf5, fhand=fhand)
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PlotTest.test_plot_hist2d']
+    import sys;sys.argv = ['', 'PlotTest.test_plot_hist2d']
     unittest.main()

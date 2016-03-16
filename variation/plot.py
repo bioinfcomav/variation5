@@ -10,7 +10,10 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+import matplotlib.gridspec as gridspec
+
 from pandas.core.frame import DataFrame
+
 from scipy.stats.morestats import probplot
 
 
@@ -247,23 +250,63 @@ def _get_mpl_args(params):
     return args, kwargs
 
 
-def plot_hist2d(hist, xbins, ybins, fhand=None, axes=None, fig=None,
-                no_interactive_win=False, figsize=None, log_normed=False,
-                mpl_params={}, colorbar_label='', **kwargs):
-    print_figure = False
+def _plot_bars(bar_values, bin_edges, axes, orientation, log_normed):
+    width = bin_edges[1] - bin_edges[0]
+    if orientation == 'vertical':
+        axes.bar(bin_edges[1:], bar_values, width=width)
+        axes.tick_params(axis='x', which='both', bottom='off',
+                         top='off', labelbottom='off')
+        if log_normed:
+            axes.set_yscale('log')
+    else:
+        axes.barh(bin_edges[:-1], bar_values, height=width)
+        axes.tick_params(axis='y', which='both',
+                         left='off', right='off', labelleft='off')
+        for label in axes.get_xticklabels():
+            label.set_rotation(-90)
 
-    if axes is None:
-        print_figure = True
-        fig = Figure(figsize=figsize)
-        canvas = FigureCanvas(fig)
-        axes = fig.add_subplot(111)
-    axesmod = _AxesMod(axes)
+        if log_normed:
+            axes.set_xscale('log')
+
+
+def plot_hist2d(hist, xbins, ybins, fhand=None,
+                no_interactive_win=False, figsize=None, log_normed=False,
+                hist1d=True, mpl_params={}, colorbar_label='', **kwargs):
+    print_figure = True
+
+    ratio = 4
+    grids = plt.GridSpec(ratio + 1, ratio + 1)
+
+    fig = Figure(figsize=figsize)
+    canvas = FigureCanvas(fig)
+    if hist1d:
+        hist2d_axes = fig.add_subplot(grids[1:, :-1])
+    else:
+        hist2d_axes = fig.add_subplot(111)
+
+    axesmod = _AxesMod(hist2d_axes)
 
     result = axesmod.hist2d(hist, xbins, ybins, log_normed=log_normed)
-    fig.colorbar(result[3], ax=axes, label=colorbar_label)
+    # fig.colorbar(result[3], ax=hist2d_axes, label=colorbar_label)
+
+    hist2d_axes.tick_params(axis='x', which='both', top='off')
+    hist2d_axes.tick_params(axis='y', which='both', right='off')
+
+    if hist1d:
+        ax_marg_x = fig.add_subplot(grids[0, :-1], sharex=hist2d_axes)
+        ax_marg_y = fig.add_subplot(grids[1:, -1], sharey=hist2d_axes)
+        marg_x_hist = numpy.sum(hist, axis=0)
+        marg_y_hist = numpy.sum(hist, axis=1)
+        print(marg_y_hist.shape, marg_y_hist)
+        print(ybins.shape, ybins)
+        _plot_bars(marg_x_hist, xbins, axes=ax_marg_x,
+                   orientation='vertical', log_normed=log_normed)
+        _plot_bars(marg_y_hist, ybins, axes=ax_marg_y,
+                   orientation='horizontal', log_normed=log_normed)
+
 
     for function_name, params in mpl_params.items():
-        function = getattr(axes, function_name)
+        function = getattr(hist2d_axes, function_name)
         args, kwargs = _get_mpl_args(params)
         function(*args, **kwargs)
 

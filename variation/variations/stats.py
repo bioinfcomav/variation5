@@ -917,6 +917,7 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
 
     hist, xedges, yedges = numpy.histogram2d(max_allele_freq, het, bins=n_bins,
                                              range=range_)
+    hist = numpy.fliplr(hist)
     return hist, xedges, yedges
 
 

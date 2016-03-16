@@ -259,7 +259,7 @@ def _plot_bars(bar_values, bin_edges, axes, orientation, log_normed):
         if log_normed:
             axes.set_yscale('log')
     else:
-        axes.barh(bin_edges[:-1], bar_values, height=width)
+        axes.barh(bin_edges[:-1], bar_values[::-1], height=width)
         axes.tick_params(axis='y', which='both',
                          left='off', right='off', labelleft='off')
         for label in axes.get_xticklabels():
@@ -286,7 +286,7 @@ def plot_hist2d(hist, xbins, ybins, fhand=None,
 
     axesmod = _AxesMod(hist2d_axes)
 
-    result = axesmod.hist2d(hist, xbins, ybins, log_normed=log_normed)
+    result = axesmod.hist2d(numpy.flipud(hist), xbins, ybins, log_normed=log_normed)
     # fig.colorbar(result[3], ax=hist2d_axes, label=colorbar_label)
 
     hist2d_axes.tick_params(axis='x', which='both', top='off')

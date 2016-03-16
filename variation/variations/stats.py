@@ -906,7 +906,9 @@ def _hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
     max_allele_freq = max_allele / numpy.sum(allele_counts, axis=0)
 
     if min_num_genotypes > 0 and miss_gt_counts_by_snp is not None:
-        enoug_calls = min_num_genotypes >= miss_gt_counts_by_snp
+        num_samples = gts.shape[1]
+        num_calls = -miss_gt_counts_by_snp + num_samples
+        enoug_calls = num_calls >= min_num_genotypes
         het = het[enoug_calls]
         max_allele_freq = max_allele_freq[enoug_calls]
 

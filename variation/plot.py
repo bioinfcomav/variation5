@@ -253,7 +253,7 @@ def _get_mpl_args(params):
 def _plot_bars(bar_values, bin_edges, axes, orientation, log_normed):
     width = bin_edges[1] - bin_edges[0]
     if orientation == 'vertical':
-        axes.bar(bin_edges[1:], bar_values, width=width)
+        axes.bar(bin_edges[:-1], bar_values, width=width)
         axes.tick_params(axis='x', which='both', bottom='off',
                          top='off', labelbottom='off')
         if log_normed:
@@ -297,13 +297,10 @@ def plot_hist2d(hist, xbins, ybins, fhand=None,
         ax_marg_y = fig.add_subplot(grids[1:, -1], sharey=hist2d_axes)
         marg_x_hist = numpy.sum(hist, axis=0)
         marg_y_hist = numpy.sum(hist, axis=1)
-        print(marg_y_hist.shape, marg_y_hist)
-        print(ybins.shape, ybins)
         _plot_bars(marg_x_hist, xbins, axes=ax_marg_x,
                    orientation='vertical', log_normed=log_normed)
         _plot_bars(marg_y_hist, ybins, axes=ax_marg_y,
                    orientation='horizontal', log_normed=log_normed)
-
 
     for function_name, params in mpl_params.items():
         function = getattr(hist2d_axes, function_name)

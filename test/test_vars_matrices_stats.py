@@ -343,7 +343,7 @@ class StatsTest(unittest.TestCase):
                                      allele_freq_range=(0.5, 1),
                                      het_range=(0, 1), chunk_size=None)
         hist, _, _ = res
-        assert numpy.allclose(hist, numpy.array([[0., 0.], [1., 0.]]))
+        assert numpy.allclose(hist, numpy.array([[0., 0.], [0, 1.]]))
 
         gts = numpy.array([[[0, 0], [0, 0], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]],
@@ -357,7 +357,7 @@ class StatsTest(unittest.TestCase):
                                      allele_freq_range=(0.5, 1),
                                      het_range=(0, 1), chunk_size=None)
         hist, xedges, yedges = res
-        assert numpy.allclose(hist, numpy.array([[2., 1.], [3., 0.]]))
+        assert numpy.allclose(hist, numpy.array([[1., 2.], [0., 3.]]))
         assert numpy.allclose(xedges, numpy.array([0.5, 0.75, 1.]))
         assert numpy.allclose(yedges, numpy.array([0, 0.5, 1.]))
 
@@ -365,7 +365,7 @@ class StatsTest(unittest.TestCase):
                                      allele_freq_range=(0.5, 1),
                                      het_range=(0, 1), chunk_size=None)
         hist, xedges, yedges = res
-        assert numpy.allclose(hist, numpy.array([[2., 0.], [2., 0.]]))
+        assert numpy.allclose(hist, numpy.array([[0., 2.], [0., 2.]]))
 
         gts = numpy.array([])
         varis = {'/calls/GT': gts, '/variations/alt': numpy.array([])}
@@ -401,7 +401,7 @@ class StatsTest(unittest.TestCase):
                                      min_call_dp_for_het=3,
                                      het_range=(0, 1), chunk_size=None)
         hist, xedges, yedges = res
-        assert numpy.allclose(hist, numpy.array([[2., 0.], [1., 0.]]))
+        assert numpy.allclose(hist, numpy.array([[0., 2.], [0., 1.]]))
         assert numpy.allclose(xedges, numpy.array([0.5, 0.75, 1.]))
         assert numpy.allclose(yedges, numpy.array([0, 0.5, 1.]))
 

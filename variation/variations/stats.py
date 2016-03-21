@@ -374,10 +374,6 @@ def calc_obs_het(variations,
                  min_call_dp=0):
     het, called_gts = _calc_obs_het_counts(variations, axis=1,
                                            min_call_dp=min_call_dp)
-    print('het counts')
-    print(het)
-    print('called_gts')
-    print(called_gts)
     # To avoid problems with NaNs
     with numpy.errstate(invalid='ignore'):
         het = het / called_gts

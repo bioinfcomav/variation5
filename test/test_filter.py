@@ -430,6 +430,9 @@ class FilterTest(unittest.TestCase):
         vars3 = res[0]
         assert numpy.allclose(vars2[DP_FIELD], vars3[DP_FIELD])
 
+        flt_hist_standarized_by_sample_depth(snps, max_std_dp=1.5,
+                                             samples=snps.samples[1:20])
+
 
 class FilterSamplesTest(unittest.TestCase):
     def test_filter_samples(self):

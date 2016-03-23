@@ -273,8 +273,12 @@ def filter_snps_by_qual(variations, filtered_vars=None, min_qual=None,
 
 
 def _filter_standarized_by_sample_depth(variations, filtered_vars=None,
-                                        max_std_dp=None):
-    stat = _calc_standarized_by_sample_depth(variations)
+                                        max_std_dp=None, samples=None):
+    if samples is None:
+        vars_for_stat = variations
+    else:
+        vars_for_stat = filter_samples(variations, samples, by_chunk=False)
+    stat = _calc_standarized_by_sample_depth(vars_for_stat)
     if max_std_dp:
         selected_rows = stat <= max_std_dp
     else:
@@ -283,31 +287,35 @@ def _filter_standarized_by_sample_depth(variations, filtered_vars=None,
 
 
 def _filter_standarized_by_sample_depth2(variations, filtered_vars=None,
-                                         max_std_dp=None):
+                                         max_std_dp=None, samples=None):
     return _filter_standarized_by_sample_depth(variations,
                                                filtered_vars=filtered_vars,
-                                               max_std_dp=max_std_dp)[0]
+                                               max_std_dp=max_std_dp,
+                                               samples=samples)[0]
 
 
 def filter_standarized_by_sample_depth(variations, filtered_vars=None,
                                        max_std_dp=None,
-                                       chunk_size=SNPS_PER_CHUNK):
+                                       chunk_size=SNPS_PER_CHUNK,
+                                       samples=None):
     no_chunk_flt_funct = _filter_standarized_by_sample_depth2
 
     if chunk_size is None:
         return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
-                                  max_std_dp=max_std_dp)
+                                  max_std_dp=max_std_dp, samples=samples)
     else:
-        filter_funct = partial(no_chunk_flt_funct, max_std_dp=max_std_dp)
+        filter_funct = partial(no_chunk_flt_funct, max_std_dp=max_std_dp,
+                               samples=samples)
         return _filter_by_chunk(variations, filtered_vars, filter_funct)
 
 
 def flt_hist_standarized_by_sample_depth(variations, filtered_vars=None,
                                          max_std_dp=None, n_bins=DEF_NUM_BINS,
-                                         range_=None):
+                                         range_=None, samples=None):
     res = _filter_standarized_by_sample_depth(variations,
                                               filtered_vars=filtered_vars,
-                                              max_std_dp=max_std_dp)
+                                              max_std_dp=max_std_dp,
+                                              samples=samples)
     variations, stat = res
     counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
     return variations, counts, edges

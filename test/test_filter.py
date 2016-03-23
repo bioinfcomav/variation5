@@ -26,10 +26,11 @@ from variation.variations.filters import (filter_mafs, filter_macs,
                                           keep_biallelic_and_monomorphic,
                                           filter_samples, filter_unlinked_vars,
                                           filter_samples_by_missing,
-                                          filter_high_density_snps)
+                                          filter_high_density_snps,
+                                          filter_standarized_by_sample_depth,
+                                          flt_hist_standarized_by_sample_depth)
 from variation.iterutils import first
-from variation.variations.stats import (GT_FIELD, CHROM_FIELD, POS_FIELD,
-                                        GQ_FIELD)
+from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
 
 class FilterTest(unittest.TestCase):
@@ -401,6 +402,34 @@ class FilterTest(unittest.TestCase):
                                              chunk_size=1)
         assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
 
+    def test_filter_snp_by_std_depth(self):
+        vars_ = VariationsArrays()
+        dps = numpy.array([[4, 2, 2, 0, 0], [2, 1, 1, 0, 1]])
+        vars_['/calls/DP'] = dps
+        vars2 = filter_standarized_by_sample_depth(vars_, max_std_dp=None)
+        numpy.allclose(vars2['/calls/DP'], dps)
+        vars2 = filter_standarized_by_sample_depth(vars_, max_std_dp=1.5)
+        numpy.allclose(vars2['/calls/DP'], dps[0, :])
+
+        vars2, counts, edges = flt_hist_standarized_by_sample_depth(vars_,
+                                                                    n_bins=2)
+        numpy.allclose(vars2['/calls/DP'], dps)
+        numpy.allclose(counts, [1, 1])
+        numpy.allclose(edges, [1, 1.5, 2])
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks())
+        vars2 = filter_standarized_by_sample_depth(hdf5, max_std_dp=1.5)
+        vars3 = filter_standarized_by_sample_depth(snps, max_std_dp=1.5)
+        assert numpy.allclose(vars2[DP_FIELD], vars3[DP_FIELD])
+        vars3 = filter_standarized_by_sample_depth(snps, max_std_dp=1.5,
+                                                   chunk_size=0)
+        assert numpy.allclose(vars2[DP_FIELD], vars3[DP_FIELD])
+        res = flt_hist_standarized_by_sample_depth(snps, max_std_dp=1.5)
+        vars3 = res[0]
+        assert numpy.allclose(vars2[DP_FIELD], vars3[DP_FIELD])
+
 
 class FilterSamplesTest(unittest.TestCase):
     def test_filter_samples(self):
@@ -434,7 +463,6 @@ class FilterSamplesTest(unittest.TestCase):
         new_var = filter_samples_by_missing(chunk, 0.1)
         assert len(new_var.samples) == len(chunk.samples)
 
-
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'FilterSamplesTest']
+    import sys;sys.argv = ['', 'FilterTest']
     unittest.main()

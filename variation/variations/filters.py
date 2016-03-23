@@ -1,5 +1,4 @@
 from functools import partial
-from itertools import chain
 
 import numpy
 
@@ -10,7 +9,9 @@ from allel.opt.stats import gn_locate_unlinked_int8
 from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_called_gt, GQ_FIELD, DP_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                                        calc_mac, calc_snp_density)
+                                        calc_mac, calc_snp_density,
+                                        _calc_standarized_by_sample_depth,
+                                        histogram, DEF_NUM_BINS)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import MISSING_INT, SNPS_PER_CHUNK
 from variation.matrix.methods import (append_matrix, is_dataset,
@@ -86,9 +87,10 @@ def _filter_mafs(variations, filtered_vars=None, min_=None, max_=None,
     return _filter_chunk2(variations, filtered_vars, selected_rows)
 
 
-def _filter_by_chunk(variations, filtered_vars, filter_funct):
+def _filter_by_chunk(variations, filtered_vars, filter_funct,
+                     chunk_size=SNPS_PER_CHUNK):
 
-    for chunk in variations.iterate_chunks():
+    for chunk in variations.iterate_chunks(chunk_size=chunk_size):
         filtered_vars = filter_funct(chunk, filtered_vars)
     return filtered_vars
 
@@ -268,6 +270,47 @@ def filter_snps_by_qual(variations, filtered_vars=None, min_qual=None,
     else:
         return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
                                   min_=min_qual, max_=max_qual)
+
+
+def _filter_standarized_by_sample_depth(variations, filtered_vars=None,
+                                        max_std_dp=None):
+    stat = _calc_standarized_by_sample_depth(variations)
+    if max_std_dp:
+        selected_rows = stat <= max_std_dp
+    else:
+        selected_rows = numpy.full_like(stat, True, dtype=numpy.bool_)
+    return _filter_chunk2(variations, filtered_vars, selected_rows), stat
+
+
+def _filter_standarized_by_sample_depth2(variations, filtered_vars=None,
+                                         max_std_dp=None):
+    return _filter_standarized_by_sample_depth(variations,
+                                               filtered_vars=filtered_vars,
+                                               max_std_dp=max_std_dp)[0]
+
+
+def filter_standarized_by_sample_depth(variations, filtered_vars=None,
+                                       max_std_dp=None,
+                                       chunk_size=SNPS_PER_CHUNK):
+    no_chunk_flt_funct = _filter_standarized_by_sample_depth2
+
+    if chunk_size is None:
+        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
+                                  max_std_dp=max_std_dp)
+    else:
+        filter_funct = partial(no_chunk_flt_funct, max_std_dp=max_std_dp)
+        return _filter_by_chunk(variations, filtered_vars, filter_funct)
+
+
+def flt_hist_standarized_by_sample_depth(variations, filtered_vars=None,
+                                         max_std_dp=None, n_bins=DEF_NUM_BINS,
+                                         range_=None):
+    res = _filter_standarized_by_sample_depth(variations,
+                                              filtered_vars=filtered_vars,
+                                              max_std_dp=max_std_dp)
+    variations, stat = res
+    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
+    return variations, counts, edges
 
 
 def _filter_monomorphic_snps(variations, filtered_vars=None, min_maf=None,

@@ -6,7 +6,8 @@ import math
 from functools import lru_cache
 
 import numpy
-from scipy.stats.stats import chisquare
+from scipy.stats.stats import chisquare, mode
+
 from allel.stats.ld import rogers_huff_r
 from allel.model.ndarray import GenotypeArray
 
@@ -18,7 +19,6 @@ from variation.matrix.stats import (counts_by_row, counts_and_allels_by_row,
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.utils.misc import remove_nans
-from variation.iterutils import group_in_packets
 
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -191,6 +191,61 @@ def calc_depth(variations):
     if is_dataset(mat):
         mat = mat[:]
     return mat.reshape(shape[0] * shape[1])
+
+
+def _calc_std_by_smpl_dp_for_mat(mat, sample_mode=None):
+
+    if sample_mode is None:
+        sample_mode = mode(mat, axis=0)[0][0]
+
+    # dp / smpl_mode by column
+    with numpy.errstate(invalid='ignore'):
+        std_dp = numpy.nan_to_num(mat / sample_mode[None, :])
+
+    num_called_by_snp = (std_dp != 0).sum(axis=1)
+
+    std_dp_by_snp = std_dp.sum(axis=1) / num_called_by_snp
+    return std_dp_by_snp
+
+
+def _calc_standarized_by_sample_depth(variations, sample_mode=None):
+    mat = variations[DP_FIELD]
+    if is_dataset(mat):
+        mat = mat[:]
+
+    mat = mat.astype(numpy.float)
+    mat[mat == 0] = numpy.nan
+
+    return _calc_std_by_smpl_dp_for_mat(mat, sample_mode=sample_mode)
+
+
+def _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=SNPS_PER_CHUNK):
+    # This is not done by chunk
+    mat = variations[DP_FIELD]
+    if is_dataset(mat):
+        mat = mat[:]
+    mat = mat.astype(numpy.float)
+    mat[mat == 0] = numpy.nan
+
+    smpl_mode = mode(mat, axis=0)[0][0]
+
+    stat = None
+    for chunk in iterate_matrix_chunks(mat, chunk_size=chunk_size):
+        chunk_stat = _calc_std_by_smpl_dp_for_mat(chunk, smpl_mode)
+        if stat is None:
+            stat = chunk_stat
+        else:
+            stat = numpy.append(stat, chunk_stat)
+    if stat is None:
+        return numpy.array([])
+    return stat
+
+
+def calc_standarized_by_sample_depth(variations, chunk_size=SNPS_PER_CHUNK):
+    if chunk_size is None:
+        return _calc_standarized_by_sample_depth(variations)
+    else:
+        return _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=chunk_size)
 
 
 def calc_genotype_qual(variations):

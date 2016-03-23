@@ -30,7 +30,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         PositionalStatsCalculator, call_is_hom,
                                         calc_cum_distrib, _calc_r2,
                                         calc_r2_windows, GT_FIELD,
-                                        hist2d_het_allele_freq)
+                                        hist2d_het_allele_freq,
+                                        calc_standarized_by_sample_depth)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -537,6 +538,26 @@ class StatsTest(unittest.TestCase):
                     [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
         assert numpy.all(dist == expected)
 
+    def test_calc_std_depth_distribution(self):
+        vars_ = VariationsArrays()
+        vars_['/calls/DP'] = numpy.array([[4, 2, 2, 0, 0],
+                                          [2, 1, 1, 0, 1]])
+        depth = calc_standarized_by_sample_depth(vars_, chunk_size=None)
+        assert numpy.allclose(depth, [2, 1])
+        depth = calc_standarized_by_sample_depth(vars_)
+        assert numpy.allclose(depth, [2, 1])
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks())
+
+        depth_h5 = calc_standarized_by_sample_depth(hdf5)
+        depth_np = calc_standarized_by_sample_depth(snps)
+        assert numpy.allclose(depth_h5, depth_np)
+
+        depth_chunk = calc_standarized_by_sample_depth(hdf5, chunk_size=None)
+        assert numpy.allclose(depth_h5, depth_chunk)
+
     def test_calc_depth_distribution(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
@@ -673,5 +694,5 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(chrom == b'chr1')
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_2d_allele_freq_het']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_std_depth_distribution']
     unittest.main()

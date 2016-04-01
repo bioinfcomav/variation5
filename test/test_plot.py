@@ -132,5 +132,5 @@ class PlotTest(unittest.TestCase):
             pairwise_ld(hdf5, fhand=fhand)
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'PlotTest.test_plot_hist2d']
+    # import sys;sys.argv = ['', 'PlotTest.test_plot_hist2d']
     unittest.main()

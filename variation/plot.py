@@ -275,7 +275,7 @@ def plot_hist2d(hist, xbins, ybins, fhand=None,
     print_figure = True
 
     ratio = 4
-    grids = plt.GridSpec(ratio + 1, ratio + 1)
+    grids = gridspec.GridSpec(ratio + 1, ratio + 1)
 
     fig = Figure(figsize=figsize)
     canvas = FigureCanvas(fig)

@@ -113,7 +113,6 @@ class PlotTest(unittest.TestCase):
                         log_normed=True,
                         mpl_params={'set_xlabel': 'x',
                                     'set_ylabel': 'y'})
-            input()
 
     def test_curlywhirly(self):
         coords = numpy.random.normal(size=(3, 4))

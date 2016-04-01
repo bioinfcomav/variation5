@@ -1,4 +1,5 @@
 from functools import partial
+import array
 
 import numpy
 
@@ -339,6 +340,27 @@ def filter_monomorphic_snps(variations, filtered_vars=None, min_maf=None,
         return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
                                   min_maf=min_maf,
                                   min_num_genotypes=min_num_genotypes)
+
+
+def flt_hist_high_density_snps(variations, max_density, window,
+                               filtered_vars=None, n_bins=DEF_NUM_BINS,
+                               range_=None):
+    res = _filter_high_density_snps(variations, max_density, window,
+                                    filtered_vars=filtered_vars)
+    variations, stat = res
+    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
+    return variations, counts, edges
+
+
+def _filter_high_density_snps(variations, max_density, window,
+                              filtered_vars=None):
+    densities = calc_snp_density(variations, window)
+    densities = numpy.array(array.array('I', densities))
+    selected_rows = [dens <= max_density for dens in densities]
+    filtered_vars = _filter_chunk2(variations, filtered_vars, selected_rows)
+    if filtered_vars is None:
+        filtered_vars = VariationsArrays()
+    return filtered_vars, densities
 
 
 def filter_high_density_snps(variations, max_density, window,

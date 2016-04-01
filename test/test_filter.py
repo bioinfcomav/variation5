@@ -28,7 +28,8 @@ from variation.variations.filters import (filter_mafs, filter_macs,
                                           filter_samples_by_missing,
                                           filter_high_density_snps,
                                           filter_standarized_by_sample_depth,
-                                          flt_hist_standarized_by_sample_depth)
+                                          flt_hist_standarized_by_sample_depth,
+                                          flt_hist_high_density_snps)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -401,6 +402,13 @@ class FilterTest(unittest.TestCase):
         flt_varis = filter_high_density_snps(varis, max_density=2, window=3,
                                              chunk_size=1)
         assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
+
+        res = flt_hist_high_density_snps(varis, max_density=2, window=3,
+                                         n_bins=2)
+        flt_varis, counts, edges = res
+        assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
+        assert list(counts) == [4, 2]
+        assert list(edges) == [2., 2.5, 3.]
 
     def test_filter_snp_by_std_depth(self):
         vars_ = VariationsArrays()

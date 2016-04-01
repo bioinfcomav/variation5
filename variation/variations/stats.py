@@ -36,7 +36,12 @@ REQUIRED_FIELDS_FOR_STAT = {'calc_maf': [GT_FIELD],
 
 
 def _calc_histogram(vector, n_bins, range_):
-    missing_value = MISSING_VALUES[vector.dtype]
+    try:
+        dtype = vector.dtype
+    except AttributeError:
+        dtype = type(vector[0])
+    missing_value = MISSING_VALUES[dtype]
+
     if math.isnan(missing_value):
         vector = remove_nans(vector)
     else:

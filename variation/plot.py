@@ -286,8 +286,8 @@ def plot_hist2d(hist, xbins, ybins, fhand=None,
 
     axesmod = _AxesMod(hist2d_axes)
 
-    result = axesmod.hist2d(numpy.flipud(hist), xbins, ybins, log_normed=log_normed)
-    # fig.colorbar(result[3], ax=hist2d_axes, label=colorbar_label)
+    result = axesmod.hist2d(numpy.flipud(hist), xbins, ybins,
+                            og_normed=log_normed)
 
     hist2d_axes.tick_params(axis='x', which='both', top='off')
     hist2d_axes.tick_params(axis='y', which='both', right='off')

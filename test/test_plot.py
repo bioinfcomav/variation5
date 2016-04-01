@@ -63,6 +63,9 @@ class PlotTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_distrib(distrib, bins, fhand=fhand)
 
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_distrib(distrib, bins, fhand=fhand, vlines=[3, 7])
+
     def test_plot_barplot(self):
         matrix = numpy.array([[1, 2, 3, 4],
                               [2, 1, 4, 3],

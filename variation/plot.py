@@ -182,7 +182,7 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
     return result
 
 
-def plot_distrib(distrib, bins, fhand=None, axes=None,
+def plot_distrib(distrib, bins, fhand=None, axes=None, vlines=None,
                  no_interactive_win=False, figsize=None,
                  mpl_params={}, n_ticks=10, **kwargs):
     '''Plots the histogram of an already calculated distribution'''
@@ -191,6 +191,7 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
     if axes is None:
         print_figure = True
     axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+
     width = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
     result = axes.bar(bins[:-1], distrib, width=width, **kwargs)
 
@@ -198,6 +199,10 @@ def plot_distrib(distrib, bins, fhand=None, axes=None,
     axes.set_xticks(bins[ticks])
     xticklabels = [str(x)[:len(str(x).split('.')[0]) + 4] for x in bins[ticks]]
     axes.set_xticklabels(xticklabels)
+
+    if vlines is not None:
+        ymin, ymax = axes.get_ylim()
+        axes.vlines(vlines, ymin=ymin, ymax=ymax)
 
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)

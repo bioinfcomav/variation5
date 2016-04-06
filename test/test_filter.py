@@ -16,7 +16,7 @@ import numpy
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (filter_mafs, filter_macs,
-                                          filter_obs_het,
+                                          filter_obs_het, flt_hist_obs_het,
                                           filter_min_called_gts,
                                           set_low_qual_gts_to_missing,
                                           filter_snps_by_qual,
@@ -243,6 +243,15 @@ class FilterTest(unittest.TestCase):
                                        min_call_dp=5, by_chunk=False)
         res = filtered_h5_1[GT_FIELD] == filtered_h5_2[GT_FIELD]
         assert numpy.all(res)
+
+        filtered_h5_3, cnts, edges = flt_hist_obs_het(hdf5, min_het=0.6,
+                                                      max_het=0.9,
+                                                      min_call_dp=5,
+                                                      n_bins=3, range_=(0, 1))
+        res = filtered_h5_1[GT_FIELD] == filtered_h5_3[GT_FIELD]
+        assert numpy.all(res)
+        assert numpy.all(cnts == [391, 14, 10])
+        assert numpy.all(edges == [0, 1 / 3, 2 / 3, 1])
 
     def test_filter_quality_genotype(self):
         variations = VariationsArrays()

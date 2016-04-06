@@ -142,9 +142,9 @@ def filter_macs(variations, filtered_vars=None, min_mac=None, max_mac=None,
                             min_num_genotypes=min_num_genotypes)
 
 
-def _filter_obs_het(variations, filtered_vars, min_=None, max_=None,
-                    min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                    min_call_dp=0):
+def _filter_obs_het2(variations, filtered_vars, min_=None, max_=None,
+                     min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                     min_call_dp=0):
     obs_het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes,
                            min_call_dp=min_call_dp)
     with numpy.errstate(invalid='ignore'):
@@ -159,7 +159,18 @@ def _filter_obs_het(variations, filtered_vars, min_=None, max_=None,
         selected_rows = selector_min & selector_max
     else:
         selected_rows = _filter_no_row(variations)
-    return _filter_chunk2(variations, filtered_vars, selected_rows)
+    flt_vars = _filter_chunk2(variations, filtered_vars, selected_rows)
+    return flt_vars, obs_het
+
+
+def _filter_obs_het(variations, filtered_vars, min_=None, max_=None,
+                    min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                    min_call_dp=0):
+    res = _filter_obs_het2(variations, filtered_vars=filtered_vars,
+                           min_=min_, max_=max_,
+                           min_num_genotypes=min_num_genotypes,
+                           min_call_dp=min_call_dp)
+    return res[0]
 
 
 def filter_obs_het(variations, filtered_vars=None, min_het=None, max_het=None,
@@ -175,6 +186,19 @@ def filter_obs_het(variations, filtered_vars=None, min_het=None, max_het=None,
                                min_=min_het, max_=max_het,
                                min_num_genotypes=min_num_genotypes,
                                min_call_dp=min_call_dp)
+
+
+def flt_hist_obs_het(variations, filtered_vars=None,
+                     min_het=None, max_het=None,
+                     min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                     min_call_dp=0, n_bins=DEF_NUM_BINS, range_=None):
+    res = _filter_obs_het2(variations, filtered_vars=filtered_vars,
+                           min_=min_het, max_=max_het,
+                           min_num_genotypes=min_num_genotypes,
+                           min_call_dp=min_call_dp)
+    variations, stat = res
+    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
+    return variations, counts, edges
 
 
 def _filter_min_called_gts(variations, filtered_vars=None, min_=None,

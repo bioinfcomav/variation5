@@ -253,6 +253,12 @@ class FilterTest(unittest.TestCase):
         assert numpy.all(cnts == [391, 14, 10])
         assert numpy.all(edges == [0, 1 / 3, 2 / 3, 1])
 
+        samples = hdf5.samples[:50]
+        _, cnts, _ = flt_hist_obs_het(hdf5, samples=samples, min_het=0.6,
+                                      max_het=0.9, min_call_dp=5, n_bins=3,
+                                      range_=(0, 1))
+        assert numpy.all(cnts == [340, 14, 5])
+
     def test_filter_quality_genotype(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],

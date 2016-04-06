@@ -144,9 +144,15 @@ def filter_macs(variations, filtered_vars=None, min_mac=None, max_mac=None,
 
 def _filter_obs_het2(variations, filtered_vars, min_=None, max_=None,
                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                     min_call_dp=0):
-    obs_het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes,
+                     min_call_dp=0, samples=None):
+    if samples is None:
+        vars_for_stat = variations
+    else:
+        vars_for_stat = filter_samples(variations, samples, by_chunk=False)
+
+    obs_het = calc_obs_het(vars_for_stat, min_num_genotypes=min_num_genotypes,
                            min_call_dp=min_call_dp)
+
     with numpy.errstate(invalid='ignore'):
         selector_max = None if max_ is None else obs_het <= max_
         selector_min = None if min_ is None else obs_het >= min_
@@ -191,11 +197,12 @@ def filter_obs_het(variations, filtered_vars=None, min_het=None, max_het=None,
 def flt_hist_obs_het(variations, filtered_vars=None,
                      min_het=None, max_het=None,
                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                     min_call_dp=0, n_bins=DEF_NUM_BINS, range_=None):
+                     min_call_dp=0, samples=None, n_bins=DEF_NUM_BINS,
+                     range_=None):
     res = _filter_obs_het2(variations, filtered_vars=filtered_vars,
                            min_=min_het, max_=max_het,
                            min_num_genotypes=min_num_genotypes,
-                           min_call_dp=min_call_dp)
+                           min_call_dp=min_call_dp, samples=samples)
     variations, stat = res
     counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
     return variations, counts, edges
@@ -303,11 +310,14 @@ def _filter_standarized_by_sample_depth(variations, filtered_vars=None,
         vars_for_stat = variations
     else:
         vars_for_stat = filter_samples(variations, samples, by_chunk=False)
+
     stat = _calc_standarized_by_sample_depth(vars_for_stat)
+
     if max_std_dp:
         selected_rows = stat <= max_std_dp
     else:
         selected_rows = numpy.full_like(stat, True, dtype=numpy.bool_)
+
     return _filter_chunk2(variations, filtered_vars, selected_rows), stat
 
 

@@ -6,12 +6,10 @@
 # pylint: disable=C0111
 
 import unittest
-from tempfile import NamedTemporaryFile
 from os.path import join
 
 
-from variation.variations.vars_matrices import (VariationsArrays,
-                                                VariationsH5)
+from variation.variations.vars_matrices import VariationsArrays
 from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR
 
@@ -55,11 +53,6 @@ class VcfTest(unittest.TestCase):
         assert filters == [None, None, None, None, None]
         vcf_fhand.close()
 
-
-
-
-
-
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VcfTest.test_parser_vcf_filters']
+    # import sys; sys.argv = ['', 'VcfTest.test_parser_vcf_filters']
     unittest.main()

@@ -25,7 +25,8 @@ def def_gt_allele_splitter(gt):
             not_missing = True
         alleles.append(allele)
     if not not_missing:
-        alleles = []
+        alleles = None
+        return alleles
     return tuple(alleles)
 
 

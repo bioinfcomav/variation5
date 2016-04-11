@@ -291,6 +291,30 @@ class VarMerger():
             samples.append(sample)
         return [sample.encode('utf-8') for sample in samples]
 
+    @staticmethod
+    def _build_error_msg(snp1, snp2, error):
+        try:
+            chrom1 = snp1['chrom']
+        except Exception:
+            chrom1 = ''
+        try:
+            chrom2 = snp2['chrom']
+        except Exception:
+            chrom2 = ''
+        try:
+            pos1 = snp1['pos']
+        except Exception:
+            pos1 = ''
+        try:
+            pos2 = snp2['pos']
+        except Exception:
+            pos2 = ''
+        msg = 'chrom1: ' + str(chrom1) + ' pos1: ' + str(pos1)
+        msg += ' chrom2: ' + str(chrom2) + ' pos2: ' + str(pos2)
+        template = "\nAn exception of type {0} occured. Arguments:\n{1!r}"
+        msg += template.format(type(error).__name__, error.args)
+        return msg
+
     @property
     def variations(self):
         for snps1, snps2 in _group_overlaping_vars(self.variations1,
@@ -299,7 +323,11 @@ class VarMerger():
             if self._snps_are_mergeable(snps1, snps2):
                 snp1 = snps1[0] if snps1 else None
                 snp2 = snps2[0] if snps2 else None
-                var = self._merge_vars(snp1, snp2)
+                try:
+                    var = self._merge_vars(snp1, snp2)
+                except Exception as error:
+                    msg = self._build_error_msg(snp1, snp2, error)
+                    raise error(msg)
                 variation = (var['chrom'], var['pos'], None, var['ref'],
                              var['alt'], var['qual'], [], {},
                              [(b'GT', var['gts'])])

@@ -207,7 +207,6 @@ def _group_overlaping_vars(variations_1, variations_2,
 
 
 def _transform_alleles(base_allele, alleles, position, max_allele_length=35):
-    # Type pass to str because join expected str not int(binary)
     new_alleles = []
     for allele in alleles:
         assert len(allele) == 1
@@ -415,8 +414,20 @@ class VarMerger():
 
         short_alleles = self._get_alleles(short_snp)
         position = short_snp['pos'] - long_snp['pos']
-        new_short_alleles = _transform_alleles(long_snp['ref'], short_alleles,
-                                               position)
+        try:
+            new_short_alleles = _transform_alleles(long_snp['ref'],
+                                                   short_alleles,
+                                                   position)
+        except Exception as error:
+            msg = 'short_snp["pos"]: ' + str(short_snp['pos'])
+            msg += '\nlong_snp["pos"]: ' + str(long_snp['pos'])
+            msg += '\nlong_snp["ref"]: ' + str(long_snp['ref'])
+            msg += '\nshort_alleles: ' + str(short_alleles)
+            msg += '\nposition: ' + str(position)
+            template = "\nAn exception of type {0} occured. Arguments:\n{1!r}"
+            msg += template.format(type(error).__name__, error.args)
+            error.args = (msg,)
+            raise
         new_short_ref = new_short_alleles[0]
 
         if new_short_ref != long_snp['ref'] and self._check_ref_matches:

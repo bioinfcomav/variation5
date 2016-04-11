@@ -13,7 +13,8 @@ import numpy
 from variation.variations.merge import (_group_overlaping_vars,
                                         VarMerger, _sort_iterators,
                                         _get_overlapping_region,
-                                        _pos_lt_tuples)
+                                        _pos_lt_tuples,
+                                        MalformedVariationError)
 from variation.iterutils import PeekableIterator
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 
@@ -27,17 +28,20 @@ class MockList(list):
 
 
 class MockMerger(dict):
-    def __init__(self, gt_shape):
+    def __init__(self, gt_shape, ignore_malformed_vars=False):
         self._gt_shape = gt_shape
         self._gt_dtype = numpy.int32
         self.max_field_lens = {'alt': 3}
         self._n_samples1 = 2
         self._n_samples2 = 2
         self.log = Counter()
+        self._ignore_malformed_vars = ignore_malformed_vars
 
 MockMerger._get_alleles = VarMerger._get_alleles
 MockMerger._get_qual = VarMerger._get_qual
 MockMerger._snps_are_mergeable = VarMerger._snps_are_mergeable
+MockMerger._snp_info_msg = VarMerger._snp_info_msg
+MockMerger._merge_vars = VarMerger._merge_vars
 
 
 class MergeTest(unittest.TestCase):
@@ -182,13 +186,11 @@ class MergeTest(unittest.TestCase):
         vars1.samples = ['a', 'b']
         vars2.samples = ['c', 'd']
         merger = MockMerger(gt_shape=(4, 2))
-        variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
-
-        exp = {'gts': [[0, 0], [1, 1], [0, 0], [2, 2]], 'pos': 1,
-               'ref': b'ATT', 'chrom': '1', 'alt': [b'T', b'AAT'],
-               'qual': None}
-        self.var_is_equal(exp, variation)
-
+        try:
+            variation = merger._merge_vars(vars1[0], vars2[0])
+            self.fail('MalformedVariationError expected')
+        except MalformedVariationError:
+            pass
 
     def test_snps_are_mergeable(self):
         vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'ATT',
@@ -253,5 +255,5 @@ class MergeTest(unittest.TestCase):
                 assert numpy.all(expected_h5[field][:] == result)
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'MergeTest.test_merge_variations']
+    # import sys;sys.argv = ['', 'MergeTest.test_merge_complex_var']
     unittest.main()

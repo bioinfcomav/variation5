@@ -218,7 +218,7 @@ def _transform_alleles(base_allele, alleles, position, max_allele_length=35):
             msg += '\nallele: ' + str(allele)
             msg += '\nposition: ' + str(position)
             err.args = (msg,)
-            raise
+            raise MalformedVariationError(msg)
         new_alleles.append(bytes(new_allele))
     return new_alleles
 
@@ -239,9 +239,14 @@ def _transform_gts_to_merge(long_alleles, new_short_alleles, gts):
     return alleles_merged, new_gts
 
 
+class MalformedVariationError(Exception):
+    pass
+
+
 class VarMerger():
     def __init__(self, variations1, variations2, suffix_for_sample2=None,
-                 ignore_complex_overlaps=False, check_ref_matches=True,
+                 ignore_complex_overlaps=False, ignore_malformed_vars=False,
+                 check_ref_matches=True,
                  max_field_lens=None):
         '''It merges two variation matrices.
 
@@ -253,6 +258,7 @@ class VarMerger():
         self.log = Counter()
         self.samples = self._get_samples(suffix_for_sample2)
         self._ignore_complex_overlaps = ignore_complex_overlaps
+        self._ignore_malformed_vars = ignore_malformed_vars
         self._check_ref_matches = check_ref_matches
         self._gt_shape = None
         self._gt_dtype = None
@@ -331,6 +337,9 @@ class VarMerger():
                 snp2 = snps2[0] if snps2 else None
                 try:
                     var = self._merge_vars(snp1, snp2)
+                except MalformedVariationError:
+                    if self._ignore_malformed_vars:
+                        continue
                 except Exception as error:
                     msg = self._build_error_msg(snp1, snp2, error)
                     error.args = (msg,)
@@ -381,6 +390,16 @@ class VarMerger():
         else:
             return min([snp1['qual'], snp2['qual']])
 
+    def _snp_info_msg(self, short_snp, long_snp, position):
+        msg = 'short_snp["pos"]: ' + str(short_snp['pos'])
+        msg += '\nshort_snp["ref"]: ' + str(short_snp['ref'])
+        msg += '\nshort_alleles: ' + str(self._get_alleles(short_snp))
+        msg += '\nlong_snp["pos"]: ' + str(long_snp['pos'])
+        msg += '\nlong_snp["ref"]: ' + str(long_snp['ref'])
+        msg += '\nlong_alleles: ' + str(self._get_alleles(long_snp))
+        msg += '\nposition: ' + str(position)
+        return msg
+
     def _merge_vars(self, snp1, snp2):
         "it assumes that the given snps are overlaping or None"
         if self._gt_shape is None:
@@ -415,18 +434,16 @@ class VarMerger():
 
         short_alleles = self._get_alleles(short_snp)
         position = short_snp['pos'] - long_snp['pos']
+        if position < 0:
+            msg = 'The SNP looks malformed: \n'
+            msg += self._snp_info_msg(short_snp, long_snp, position)
+            raise MalformedVariationError(msg)
         try:
             new_short_alleles = _transform_alleles(long_snp['ref'],
                                                    short_alleles,
                                                    position)
         except Exception as error:
-            msg = 'short_snp["pos"]: ' + str(short_snp['pos'])
-            msg += '\nshort_snp["ref"]: ' + str(short_snp['ref'])
-            msg += '\nshort_alleles: ' + str(short_alleles)
-            msg += '\nlong_snp["pos"]: ' + str(long_snp['pos'])
-            msg += '\nlong_snp["ref"]: ' + str(long_snp['ref'])
-            msg += '\nlong_alleles: ' + str(self._get_alleles(long_snp))
-            msg += '\nposition: ' + str(position)
+            msg = self._snp_info_msg(short_snp, long_snp, position)
             template = "\nAn exception of type {0} occured. Arguments:\n{1!r}"
             msg += template.format(type(error).__name__, error.args)
             error.args = (msg,)

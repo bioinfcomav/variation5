@@ -307,7 +307,6 @@ class _ChunkGenerator:
                                     msg += '\n'
                                     msg += str(item)
                                     raise RuntimeError(msg)
-                            # mat[idx, :, 0:len(item[0])] = item
                             try:
                                 mat[idx, :, 0:len(item[0])] = item
                             except ValueError:

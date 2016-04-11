@@ -327,7 +327,8 @@ class VarMerger():
                     var = self._merge_vars(snp1, snp2)
                 except Exception as error:
                     msg = self._build_error_msg(snp1, snp2, error)
-                    raise error(msg)
+                    error.args = (msg,)
+                    raise
                 variation = (var['chrom'], var['pos'], None, var['ref'],
                              var['alt'], var['qual'], [], {},
                              [(b'GT', var['gts'])])

@@ -133,9 +133,6 @@ class MergeTest(unittest.TestCase):
         merger = MockMerger(gt_shape=(4, 2))
 
         variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
-#         merger = VarMerger(vars1, vars2)
-#         variations = merger.variations
-#         variation = next(variations)
         exp = {'gts': [[0, 0], [1, 1], [0, 0], [1, 1]], 'pos': 1,
                'ref': b'A', 'chrom': '1', 'alt': [b'T'], 'qual': 34}
         self.var_is_equal(exp, variation)
@@ -174,7 +171,26 @@ class MergeTest(unittest.TestCase):
                'qual': None}
         self.var_is_equal(exp, variation)
 
-    def test_snos_are_mergeable(self):
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'C',
+                           'alt': [b'CGGT'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': 21}])
+        vars2 = MockList([{'chrom': '1', 'pos': 2, 'ref': b'C',
+                           'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': None}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+        merger = MockMerger(gt_shape=(4, 2))
+        variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
+
+        exp = {'gts': [[0, 0], [1, 1], [0, 0], [2, 2]], 'pos': 1,
+               'ref': b'ATT', 'chrom': '1', 'alt': [b'T', b'AAT'],
+               'qual': None}
+        self.var_is_equal(exp, variation)
+
+
+    def test_snps_are_mergeable(self):
         vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'ATT',
                            'alt': [b'T'],
                            'gts': numpy.array([[0, 0], [1, 1]])}])

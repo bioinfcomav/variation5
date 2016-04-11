@@ -420,9 +420,11 @@ class VarMerger():
                                                    position)
         except Exception as error:
             msg = 'short_snp["pos"]: ' + str(short_snp['pos'])
+            msg += '\nshort_snp["ref"]: ' + str(short_snp['ref'])
+            msg += '\nshort_alleles: ' + str(short_alleles)
             msg += '\nlong_snp["pos"]: ' + str(long_snp['pos'])
             msg += '\nlong_snp["ref"]: ' + str(long_snp['ref'])
-            msg += '\nshort_alleles: ' + str(short_alleles)
+            msg += '\nlong_alleles: ' + str(self._get_alleles(long_snp))
             msg += '\nposition: ' + str(position)
             template = "\nAn exception of type {0} occured. Arguments:\n{1!r}"
             msg += template.format(type(error).__name__, error.args)

@@ -159,6 +159,23 @@ class MergeTest(unittest.TestCase):
         self.var_is_equal(exp, variation)
 
     def test_merge_complex_var(self):
+        # Deletion
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'C',
+                           'alt': [b'CAAG', b'CAAA'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': 21}])
+        vars2 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'C', 'alt': [b'A'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': None}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+        merger = MockMerger(gt_shape=(4, 2))
+        variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
+        exp = {'gts': [[0, 0], [1, 1], [0, 0], [3, 3]], 'pos': 1,
+               'ref': b'C', 'chrom': '1', 'alt': [b'CAAG', b'CAAA', b'A'],
+               'qual': None}
+        self.var_is_equal(exp, variation)
+
         vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'ATT',
                            'alt': [b'T'], 'gts': numpy.array([[0, 0], [1, 1]]),
                            'qual': 21}])
@@ -169,7 +186,6 @@ class MergeTest(unittest.TestCase):
         vars2.samples = ['c', 'd']
         merger = MockMerger(gt_shape=(4, 2))
         variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
-
         exp = {'gts': [[0, 0], [1, 1], [0, 0], [2, 2]], 'pos': 1,
                'ref': b'ATT', 'chrom': '1', 'alt': [b'T', b'AAT'],
                'qual': None}

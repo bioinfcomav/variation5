@@ -206,19 +206,27 @@ def _group_overlaping_vars(variations_1, variations_2,
         yield (snps1_in_region, snps2_in_region)
 
 
+class MalformedVariationError(Exception):
+    pass
+
+
 def _transform_alleles(base_allele, alleles, position, max_allele_length=35):
     new_alleles = []
     for allele in alleles:
-        assert len(allele) == 1
         new_allele = bytearray(base_allele)
-        try:
-            new_allele[position] = allele[0]
-        except IndexError as err:
-            msg = 'alleles: ' + str(alleles)
-            msg += '\nallele: ' + str(allele)
-            msg += '\nposition: ' + str(position)
-            err.args = (msg,)
-            raise MalformedVariationError(msg)
+        if len(allele) == 1:
+            try:
+                new_allele[position] = allele[0]
+            except IndexError as err:
+                msg = 'alleles: ' + str(alleles)
+                msg += '\nallele: ' + str(allele)
+                msg += '\nposition: ' + str(position)
+                err.args = (msg,)
+                raise MalformedVariationError(msg)
+        else:
+            # TODO. This will create a non std VCF variation if we're
+            # merging with a SNP (not indel)
+            new_allele[position: position + 1] = bytearray(allele)
         new_alleles.append(bytes(new_allele))
     return new_alleles
 
@@ -239,14 +247,10 @@ def _transform_gts_to_merge(long_alleles, new_short_alleles, gts):
     return alleles_merged, new_gts
 
 
-class MalformedVariationError(Exception):
-    pass
-
-
 class VarMerger():
     def __init__(self, variations1, variations2, suffix_for_sample2=None,
                  ignore_complex_overlaps=False, ignore_malformed_vars=False,
-                 check_ref_matches=True,
+                 allow_non_std_var_creation=False, check_ref_matches=True,
                  max_field_lens=None):
         '''It merges two variation matrices.
 
@@ -259,6 +263,7 @@ class VarMerger():
         self.samples = self._get_samples(suffix_for_sample2)
         self._ignore_complex_overlaps = ignore_complex_overlaps
         self._ignore_malformed_vars = ignore_malformed_vars
+        self._allow_non_std_var_creation = allow_non_std_var_creation
         self._check_ref_matches = check_ref_matches
         self._gt_shape = None
         self._gt_dtype = None
@@ -423,6 +428,8 @@ class VarMerger():
                 self.max_field_lens['alt'] = num_alt
             return new_snp
 
+        # long snp means it is the longest reference, so it has to be
+        # the base to build the new snps
         if len(snp1['ref']) >= len(snp2['ref']):
             long_snp = snp1
             short_snp = snp2
@@ -454,9 +461,10 @@ class VarMerger():
             raise ValueError('Reference alleles do not match')
         long_alleles = self._get_alleles(long_snp)
 
-        alleles_merged, new_short_gts = _transform_gts_to_merge(long_alleles,
-                                                                new_short_alleles,
-                                                                short_snp['gts'])
+        res = _transform_gts_to_merge(long_alleles,
+                                      new_short_alleles,
+                                      short_snp['gts'])
+        alleles_merged, new_short_gts = res
         num_alt = len(alleles_merged) - 1
         if num_alt > self.max_field_lens['alt']:
             self.max_field_lens['alt'] = num_alt

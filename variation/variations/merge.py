@@ -212,7 +212,13 @@ def _transform_alleles(base_allele, alleles, position, max_allele_length=35):
     for allele in alleles:
         assert len(allele) == 1
         new_allele = bytearray(base_allele)
-        new_allele[position] = allele[0]
+        try:
+            new_allele[position] = allele[0]
+        except IndexError:
+            msg = 'alleles: ' + str(alleles)
+            msg += '\nallele: ' + str(allele)
+            msg += '\nposition: ' + str(position)
+            raise IndexError(msg)
         new_alleles.append(bytes(new_allele))
     return new_alleles
 

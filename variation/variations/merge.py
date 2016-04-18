@@ -12,7 +12,7 @@ import numpy
 from variation import MISSING_VALUES, MISSING_BYTE, DEF_METADATA
 from variation.iterutils import PeekableIterator
 from variation import (CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD,
-                       QUAL_FIELD, GT_FIELD)
+                       QUAL_FIELD, GT_FIELD, DP_FIELD)
 from variation.matrix.methods import is_dataset
 
 
@@ -30,6 +30,10 @@ def _iterate_vars(variations):
             vars_qual = chunk[QUAL_FIELD]
         else:
             vars_qual = None
+        if DP_FIELD in chunk.keys():
+            vars_dp = chunk[DP_FIELD]
+        else:
+            vars_dp = None
         vars_gts = chunk[GT_FIELD]
         if is_dataset(vars_chrom):
             vars_chrom = vars_chrom[:]
@@ -38,6 +42,8 @@ def _iterate_vars(variations):
             vars_alt = vars_alt[:]
             if vars_qual is not None:
                 vars_qual = vars_qual[:]
+            if vars_dp is not None:
+                vars_dp = vars_qual[:]
             vars_gts = vars_gts[:]
 
         for var_idx in range(chunk.num_variations):
@@ -52,9 +58,13 @@ def _iterate_vars(variations):
                 qual = None
             else:
                 qual = vars_qual[var_idx]
+            if vars_dp is None:
+                depth = None
+            else:
+                depth = vars_dp[var_idx]
             gts = vars_gts[var_idx]
             yield {'chrom': chrom, 'pos': pos, 'ref': ref, 'alt': alts,
-                   'qual': qual, 'gts': gts}
+                   'qual': qual, 'gts': gts, 'dp': depth}
 
 
 def _are_overlapping(var1, var2):
@@ -349,9 +359,12 @@ class VarMerger():
                     msg = self._build_error_msg(snp1, snp2, error)
                     error.args = (msg,)
                     raise
+                calls = [(b'GT', var['gts'])]
+                depth = var.get('dp', None)
+                if depth is not None:
+                    calls.append(b'DP', depth)
                 variation = (var['chrom'], var['pos'], None, var['ref'],
-                             var['alt'], var['qual'], [], {},
-                             [(b'GT', var['gts'])])
+                             var['alt'], var['qual'], [], {}, calls)
                 yield variation
             else:
 
@@ -390,10 +403,20 @@ class VarMerger():
         return alleles
 
     def _get_qual(self, snp1, snp2):
-        if snp1['qual'] is None or snp2['qual'] is None:
+        qual1 = snp1.get('qual', None)
+        qual2 = snp2.get('qual', None)
+        if qual1 is None or qual2 is None:
             return None
         else:
-            return min([snp1['qual'], snp2['qual']])
+            return min([qual1, qual2])
+
+    def _merge_depth(self, snp1, snp2):
+        dp1 = snp1.get('dp', None)
+        dp2 = snp2.get('dp', None)
+        if dp1 is None or dp2 is None:
+            return None
+        else:
+            return numpy.append(dp1, dp2, axis=0)
 
     def _snp_info_msg(self, short_snp, long_snp, position):
         msg = 'short_snp["pos"]: ' + str(short_snp['pos'])
@@ -471,8 +494,10 @@ class VarMerger():
 
         if vars1_first:
             merged_gts = numpy.append(snp1['gts'], new_short_gts, axis=0)
+            merged_dp = self._merge_depth(snp1, snp2)
         else:
             merged_gts = numpy.append(new_short_gts, snp2['gts'], axis=0)
+            merged_dp = self._merge_depth(snp2, snp1)
 
         qual = self._get_qual(snp1, snp2)
         alt = alleles_merged[1:]
@@ -480,4 +505,4 @@ class VarMerger():
             alt = None
         return {'chrom': long_snp['chrom'], 'pos': long_snp['pos'],
                 'ref': alleles_merged[0], 'alt': alt, 'gts': merged_gts,
-                'qual': qual}
+                'qual': qual, 'dp': merged_dp}

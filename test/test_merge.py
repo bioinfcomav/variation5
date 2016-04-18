@@ -42,6 +42,7 @@ MockMerger._get_qual = VarMerger._get_qual
 MockMerger._snps_are_mergeable = VarMerger._snps_are_mergeable
 MockMerger._snp_info_msg = VarMerger._snp_info_msg
 MockMerger._merge_vars = VarMerger._merge_vars
+MockMerger._merge_depth = VarMerger._merge_depth
 
 
 class MergeTest(unittest.TestCase):
@@ -123,8 +124,13 @@ class MergeTest(unittest.TestCase):
         assert var1['pos'] == var2['pos']
         assert var1['ref'] == var2['ref']
         assert numpy.all(var1['alt'] == var2['alt'])
-        assert var1['qual'] == var2['qual']
+        assert var1.get('qual', None) == var2.get('qual', None)
         assert numpy.all(var1['gts'] == var2['gts'])
+        dp1 = var1.get('dp', None)
+        dp2 = var2.get('dp', None)
+
+        assert ((dp1 is None and dp2 is None) or
+                numpy.all(dp1 == dp2))
 
     def test_merge_simple_var(self):
 
@@ -156,6 +162,23 @@ class MergeTest(unittest.TestCase):
         variation = VarMerger._merge_vars(merger, None, vars2[0])
         exp = {'gts': [[-1, -1], [-1, -1], [0, 0], [1, 1]], 'pos': 2,
                'ref': b'A', 'chrom': '1', 'alt': [b'T'], 'qual': 21}
+        self.var_is_equal(exp, variation)
+
+    def test_merge_with_depth(self):
+
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'A', 'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'dp': numpy.array([1, 1])}])
+        vars2 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'A', 'alt': [b'T'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'dp': numpy.array([20, 20])}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+        merger = MockMerger(gt_shape=(4, 2))
+
+        variation = VarMerger._merge_vars(merger, vars1[0], vars2[0])
+        exp = {'gts': [[0, 0], [1, 1], [0, 0], [1, 1]], 'pos': 1,
+               'ref': b'A', 'chrom': '1', 'alt': [b'T'], 'dp': [1, 1, 20, 20]}
         self.var_is_equal(exp, variation)
 
     def test_merge_complex_var(self):

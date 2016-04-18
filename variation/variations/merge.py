@@ -261,7 +261,7 @@ class VarMerger():
     def __init__(self, variations1, variations2, suffix_for_sample2=None,
                  ignore_complex_overlaps=False, ignore_malformed_vars=False,
                  allow_non_std_var_creation=False, check_ref_matches=True,
-                 max_field_lens=None):
+                 max_field_lens=None, ignore_non_matching=False):
         '''It merges two variation matrices.
 
         suffix for sample2 is only added to samples in variations2 also
@@ -273,6 +273,7 @@ class VarMerger():
         self.samples = self._get_samples(suffix_for_sample2)
         self._ignore_complex_overlaps = ignore_complex_overlaps
         self._ignore_malformed_vars = ignore_malformed_vars
+        self._ignore_non_matching = ignore_non_matching
         self._allow_non_std_var_creation = allow_non_std_var_creation
         self._check_ref_matches = check_ref_matches
         self._gt_shape = None
@@ -344,12 +345,15 @@ class VarMerger():
 
     @property
     def variations(self):
+        ignore_non_matching = self._ignore_non_matching
         for snps1, snps2 in _group_overlaping_vars(self.variations1,
                                                    self.variations2):
 
             if self._snps_are_mergeable(snps1, snps2):
                 snp1 = snps1[0] if snps1 else None
                 snp2 = snps2[0] if snps2 else None
+                if ignore_non_matching and (snp1 is None or snp2 is None):
+                    continue
                 try:
                     var = self._merge_vars(snp1, snp2)
                 except MalformedVariationError:

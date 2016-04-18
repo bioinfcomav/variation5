@@ -33,7 +33,7 @@ class CSVParserTest(unittest.TestCase):
         del variation['ref']
         if 'alt' in variation:
             allele_coding.update({idx + 1: allele for idx, allele in
-                                                enumerate(variation['alt'])})
+                                  enumerate(variation['alt'])})
             del variation['alt']
         alleles = set(allele_coding.values())
         variation['alleles'] = alleles
@@ -63,8 +63,8 @@ class CSVParserTest(unittest.TestCase):
                      None, None, [(b'GT', [(0, 0), (0, 0), (0, 0), (0, 0),
                                            (-1, -1)])]),
                     (b'chrom1', 347, b'solcap_snp_sl_60604', b'C', [b'T'],
-                     None, None, None, [(b'GT', [(0, 0), (-1, -1), (1, 0), (0, 0),
-                                                 (0, 0)])])]
+                     None, None, None, [(b'GT', [(0, 0), (-1, -1), (1, 0),
+                                                 (0, 0), (0, 0)])])]
 
         assert list(parser.variations) == expected
 
@@ -115,8 +115,8 @@ class CSVParserTest(unittest.TestCase):
                      None, None, [(b'GT', [(0, 0), (0, 0), (0, 0), (0, 0),
                                            (-1, -1)])]),
                     (b'chrom1', 347, b'solcap_snp_sl_60604', b'C', [b'T'],
-                     None, None, None, [(b'GT', [(0, 0), (-1, -1), (1, 0), (0, 0),
-                                                 (0, 0)])])]
+                     None, None, None, [(b'GT', [(0, 0), (-1, -1), (1, 0),
+                                                 (0, 0), (0, 0)])])]
         for var, expect in zip(parser.variations, expected):
             assert var == expect
 
@@ -175,7 +175,7 @@ class CSVParserTest(unittest.TestCase):
         parser = CSVParser(fhand_ex, var_info, first_sample_column=3,
                            first_gt_column=3, sep=b'\t',
                            max_field_lens={'alt': 1},
-                           max_field_str_lens={'alt': 1, 'chrom':20,
+                           max_field_str_lens={'alt': 1, 'chrom': 20,
                                                'ref': 1})
 
         h5 = VariationsArrays(ignore_overflows=True,

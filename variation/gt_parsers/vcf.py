@@ -343,7 +343,7 @@ class VCFLineParser:
             max_field_lens['FILTER'] = flt_len
         info = _parse_info(info, ignored_fields, metadata, max_field_lens,
                            max_field_str_lens)
-        calls = _parse_calls(fmt, calls, ignored_fields, kept_fields, max_field_lens,
-                             metadata, empty_gt)
+        calls = _parse_calls(fmt, calls, ignored_fields, kept_fields,
+                             max_field_lens, metadata, empty_gt)
 
         return chrom, pos, id_, ref, alt, qual, flt, info, calls

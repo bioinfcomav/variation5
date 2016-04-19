@@ -540,8 +540,18 @@ def filter_samples(variations, samples, filtered_vars=None,
                                    by_chunk=by_chunk)
 
 
-def filter_samples_by_missing(variations, min_called_rate, filtered_vars=None,
-                              by_chunk=True):
+def flt_hist_samples_by_missing(variations, min_called_rate,
+                                n_bins=DEF_NUM_BINS, range_=None):
+    missing_rates = calc_called_gt(variations, rates=True, axis=0)
+    counts, edges = histogram(missing_rates, n_bins=n_bins, range_=range_)
+    idx_to_keep = missing_rates > min_called_rate
+
+    variations = filter_samples_by_index(variations, idx_to_keep,
+                                         by_chunk=False)
+    return variations, counts, edges
+
+
+def filter_samples_by_missing(variations, min_called_rate, by_chunk=True):
     missing_rates = calc_called_gt(variations, rates=True, axis=0)
     idx_to_keep = missing_rates > min_called_rate
 

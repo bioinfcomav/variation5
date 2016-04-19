@@ -371,7 +371,6 @@ class VarMerger():
                              var['alt'], var['qual'], [], {}, calls)
                 yield variation
             else:
-
                 if not self._ignore_complex_overlaps:
                     poss1 = [(snp['chrom'], str(snp['pos'])) for snp in snps1]
                     poss2 = [(snp['chrom'], str(snp['pos'])) for snp in snps2]

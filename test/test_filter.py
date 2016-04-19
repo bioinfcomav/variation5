@@ -29,7 +29,8 @@ from variation.variations.filters import (filter_mafs, filter_macs,
                                           filter_high_density_snps,
                                           filter_standarized_by_sample_depth,
                                           flt_hist_standarized_by_sample_depth,
-                                          flt_hist_high_density_snps)
+                                          flt_hist_high_density_snps,
+                                          flt_hist_samples_by_missing)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -489,6 +490,9 @@ class FilterSamplesTest(unittest.TestCase):
         new_var = filter_samples_by_missing(chunk, 0.1)
         assert len(new_var.samples) == len(chunk.samples)
 
+        new_var2 = flt_hist_samples_by_missing(chunk, 0.1)[0]
+        assert len(new_var.samples) == len(new_var2.samples)
+
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'FilterTest']
+    # import sys;sys.argv = ['', 'FilterTest']
     unittest.main()

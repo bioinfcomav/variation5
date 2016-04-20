@@ -17,12 +17,10 @@ from variation.matrix.methods import is_dataset
 
 
 def _iterate_vars(variations):
-    kept_fields = [CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD, GT_FIELD]
+    kept_fields = [CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD, GT_FIELD,
+                   DP_FIELD]
     if QUAL_FIELD in variations.keys():
         kept_fields.append(QUAL_FIELD)
-
-    if DP_FIELD in variations.keys():
-        kept_fields.append(DP_FIELD)
 
     for chunk in variations.iterate_chunks(kept_fields=kept_fields):
         vars_chrom = chunk[CHROM_FIELD]
@@ -292,7 +290,9 @@ class VarMerger():
         if variations1.ploidy != variations2.ploidy:
             raise ValueError('Ploidies should match')
         self.ploidy = variations1.ploidy
-        self.metadata = copy.deepcopy(DEF_METADATA)
+        metadata = copy.deepcopy(DEF_METADATA)
+        metadata['CALLS'][b'DP'] = {'Description': 'Depth', 'dtype': 'int'}
+        self.metadata = metadata
         self.ignored_fields = []
         self.kept_fields = []
 

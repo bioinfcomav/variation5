@@ -208,14 +208,29 @@ def flt_hist_obs_het(variations, filtered_vars=None,
     return variations, counts, edges
 
 
-def _filter_min_called_gts(variations, filtered_vars=None, min_=None,
-                           rates=True):
+def _filter_min_called_gts2(variations, filtered_vars=None, min_=None,
+                            rates=True):
     called_gts = calc_called_gt(variations, rates=rates)
     if min_ is not None:
         selected_rows = None if min_ is None else called_gts > min_
     else:
         selected_rows = _filter_no_row(variations)
-    return _filter_chunk2(variations, filtered_vars, selected_rows)
+    return _filter_chunk2(variations, filtered_vars, selected_rows), called_gts
+
+
+def _filter_min_called_gts(variations, filtered_vars=None, min_=None,
+                           rates=True):
+    return _filter_min_called_gts2(variations, filtered_vars=filtered_vars,
+                                   min_=min_, rates=rates)[0]
+
+
+def flt_hist_min_called_gts(variations, filtered_vars=None, min_=None,
+                            rates=True, n_bins=DEF_NUM_BINS, range_=None):
+    res = _filter_min_called_gts2(variations, filtered_vars=filtered_vars,
+                                  min_=min_, rates=rates)
+    variations, stat = res
+    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
+    return variations, counts, edges
 
 
 def filter_min_called_gts(variations, filtered_vars=None, min_called=None,

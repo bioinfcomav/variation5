@@ -109,8 +109,8 @@ def filter_mafs(variations, filtered_vars=None, min_maf=None, max_maf=None,
                             min_num_genotypes=min_num_genotypes)
 
 
-def _filter_macs(variations, filtered_vars=None, min_=None, max_=None,
-                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+def _filter_macs2(variations, filtered_vars=None, min_=None, max_=None,
+                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     mafs = calc_mac(variations, min_num_genotypes=min_num_genotypes)
 
     with numpy.errstate(invalid='ignore'):
@@ -126,7 +126,23 @@ def _filter_macs(variations, filtered_vars=None, min_=None, max_=None,
     else:
         selected_rows = _filter_no_row(variations)
 
-    return _filter_chunk2(variations, filtered_vars, selected_rows)
+    return _filter_chunk2(variations, filtered_vars, selected_rows), mafs
+
+
+def _filter_macs(variations, filtered_vars=None, min_=None, max_=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    return _filter_macs2(variations, filtered_vars=filtered_vars, min_=min_,
+                         max_=max_, min_num_genotypes=min_num_genotypes)[0]
+
+
+def flt_hist_mac(variations, filtered_vars=None, min_=None, max_=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                 n_bins=DEF_NUM_BINS, range_=None):
+    res = _filter_macs2(variations, filtered_vars=filtered_vars, min_=min_,
+                        max_=max_, min_num_genotypes=min_num_genotypes)
+    variations, stat = res
+    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
+    return variations, counts, edges
 
 
 def filter_macs(variations, filtered_vars=None, min_mac=None, max_mac=None,

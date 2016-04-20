@@ -17,7 +17,8 @@ from variation.matrix.methods import is_dataset
 
 
 def _iterate_vars(variations):
-    kept_fields = [CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD, GT_FIELD]
+    kept_fields = [CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD, GT_FIELD,
+                   DP_FIELD]
     if QUAL_FIELD in variations.keys():
         kept_fields.append(QUAL_FIELD)
 
@@ -266,7 +267,6 @@ class VarMerger():
 
         suffix for sample2 is only added to samples in variations2 also
         found in variations1'''
-
         self.variations1 = variations1
         self.variations2 = variations2
         self.log = Counter()
@@ -366,7 +366,7 @@ class VarMerger():
                 calls = [(b'GT', var['gts'])]
                 depth = var.get('dp', None)
                 if depth is not None:
-                    calls.append(b'DP', depth)
+                    calls.append((b'DP', depth))
                 variation = (var['chrom'], var['pos'], None, var['ref'],
                              var['alt'], var['qual'], [], {}, calls)
                 yield variation
@@ -501,7 +501,6 @@ class VarMerger():
         else:
             merged_gts = numpy.append(new_short_gts, snp2['gts'], axis=0)
             merged_dp = self._merge_depth(snp2, snp1)
-
         qual = self._get_qual(snp1, snp2)
         alt = alleles_merged[1:]
         if not alt:

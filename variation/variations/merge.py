@@ -61,13 +61,13 @@ def _iterate_vars(variations):
                 qual = None
             else:
                 qual = vars_qual[var_idx]
-            if vars_dp is None:
-                depth = None
-            else:
-                depth = vars_dp[var_idx]
+
             gts = vars_gts[var_idx]
-            yield {'chrom': chrom, 'pos': pos, 'ref': ref, 'alt': alts,
-                   'qual': qual, 'gts': gts, 'dp': depth}
+            var_ = {'chrom': chrom, 'pos': pos, 'ref': ref, 'alt': alts,
+                    'qual': qual, 'gts': gts}
+            if vars_dp is not None:
+                var_['dp'] = vars_dp[var_idx]
+            yield var_
 
 
 def _are_overlapping(var1, var2):
@@ -293,7 +293,8 @@ class VarMerger():
             raise ValueError('Ploidies should match')
         self.ploidy = variations1.ploidy
         metadata = copy.deepcopy(DEF_METADATA)
-        metadata['CALLS'][b'DP'] = {'Description': 'Depth', 'dtype': 'int'}
+        if DP_FIELD in variations1.keys() and DP_FIELD in variations2.keys():
+            metadata['CALLS'][b'DP'] = {'Description': 'Depth', 'dtype': 'int'}
         self.metadata = metadata
         self.ignored_fields = []
         self.kept_fields = []
@@ -509,6 +510,9 @@ class VarMerger():
         alt = alleles_merged[1:]
         if not alt:
             alt = None
-        return {'chrom': long_snp['chrom'], 'pos': long_snp['pos'],
+        var_ = {'chrom': long_snp['chrom'], 'pos': long_snp['pos'],
                 'ref': alleles_merged[0], 'alt': alt, 'gts': merged_gts,
-                'qual': qual, 'dp': merged_dp}
+                'qual': qual}
+        if merged_dp is not None:
+            var_['dp'] = merged_dp
+        return var_

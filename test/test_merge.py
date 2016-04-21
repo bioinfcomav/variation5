@@ -211,7 +211,6 @@ class MergeTest(unittest.TestCase):
         assert '/calls/DP' in new_vars.keys()
         assert numpy.all(new_vars['/calls/DP'][0] == first_snv_merged_depth)
 
-
     def test_merge_complex_var(self):
         # Deletion
         vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'C',

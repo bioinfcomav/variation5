@@ -478,10 +478,10 @@ class _VariationMatrices():
 
         var_array = None
         for path, dset in dsets.items():
-            matrix = dset[index]
             if var_array is None:
+                matrix = dset[index, ...]
                 var_array = VariationsArrays(vars_in_chunk=matrix.shape[0])
-            var_array[path] = dset[index]
+            var_array[path] = dset[index, ...]
 
         var_array._set_metadata(self.metadata)
         var_array._set_samples(self.samples)
@@ -514,17 +514,12 @@ class _VariationMatrices():
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None,
                        chunk_size=None, random_sample_rate=1):
-        paths = self._filter_fields(kept_fields=kept_fields,
-                                    ignored_fields=ignored_fields)
-
-        dsets = {field: self[field] for field in paths}
-
         if chunk_size is None:
             chunk_size = self._vars_in_chunk
 
         nsnps = self.num_variations
         for start in range(0, nsnps, chunk_size):
-            var_array = VariationsArrays(vars_in_chunk=chunk_size)
+
             stop = start + chunk_size
             if stop > nsnps:
                 stop = nsnps
@@ -543,11 +538,8 @@ class _VariationMatrices():
                 if len(slice_) == 1:
                     slice_ = slice(slice_[0], slice_[0] + 1)
 
-            for path, dset in dsets.items():
-                var_array[path] = dset[slice_, ...]
-            var_array._set_metadata(self.metadata)
-            var_array._set_samples(self.samples)
-            yield var_array
+            yield self.get_chunk(slice_, kept_fields=kept_fields,
+                                 ignored_fields=ignored_fields)
 
     @property
     def pos_index(self):

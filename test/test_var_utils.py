@@ -17,9 +17,10 @@ from variation.variations.util import add_mock_depth
 
 class VarUtilTest(unittest.TestCase):
     def test_add_depth(self):
-        snps = VariationsH5(join(TEST_DATA_DIR, 'expected_merged.h5'), 'r')
+        snps = VariationsH5(join(TEST_DATA_DIR, 'expected_merged3.h5'), 'r')
         snps2 = snps.get_chunk(slice(None, None))
         add_mock_depth(snps2, 30)
+
         assert snps2[DP_FIELD].shape == (snps2.num_variations,
                                          len(snps2.samples))
         assert snps2[DP_FIELD][0, 0] == 30

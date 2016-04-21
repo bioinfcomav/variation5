@@ -193,6 +193,25 @@ class MergeTest(unittest.TestCase):
                'ref': b'A', 'chrom': '1', 'alt': [b'T'], 'dp': [1, 1, 20, 20]}
         self.var_is_equal(exp, variation)
 
+        # merge the same var with depth
+        h5_1 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
+        h5_2 = VariationsH5(join(TEST_DATA_DIR, 'format_def.h5'), "r")
+        merger = VarMerger(h5_1, h5_2, max_field_lens={'alt': 3},
+                           ignore_complex_overlaps=True,
+                           check_ref_matches=False, ignore_non_matching=True)
+        new_vars = VariationsArrays(ignore_overflows=True,
+                                    ignore_undefined_fields=True)
+
+        first_snv_merged_depth = numpy.array([1, 8, 5, 1, 8, 5],
+                                             dtype=numpy.int16)
+        depth = list(merger.variations)[0][8][1]
+        assert depth[0] == b'DP'
+        assert numpy.all(depth[1] == first_snv_merged_depth)
+        new_vars.put_vars(merger)
+        assert '/calls/DP' in new_vars.keys()
+        assert numpy.all(new_vars['/calls/DP'][0] == first_snv_merged_depth)
+
+
     def test_merge_complex_var(self):
         # Deletion
         vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'C',
@@ -270,6 +289,7 @@ class MergeTest(unittest.TestCase):
         new_vars = VariationsArrays(ignore_overflows=True,
                                     ignore_undefined_fields=True)
         new_vars.put_vars(merger)
+
         for field in new_vars.keys():
             if 'float' in str(new_vars[field][:].dtype):
                 assert numpy.all(remove_nans(expected_h5[field][:]) ==
@@ -297,6 +317,7 @@ class MergeTest(unittest.TestCase):
         new_vars = VariationsArrays(ignore_overflows=True,
                                     ignore_undefined_fields=True)
         new_vars.put_vars(merger)
+
         for field in new_vars.keys():
             if 'float' in str(new_vars[field][:].dtype):
                 assert numpy.all(remove_nans(expected_h5[field][:]) ==
@@ -305,6 +326,7 @@ class MergeTest(unittest.TestCase):
                 result = new_vars[field][:]
                 assert numpy.all(expected_h5[field][:] == result)
 
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'MergeTest.test_merge_complex_var']
+    # import sys;sys.argv = ['', 'MergeTest.test_merge_with_depth']
     unittest.main()

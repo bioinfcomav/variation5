@@ -389,7 +389,10 @@ class VarMerger():
         for snp in snps:
             alleles.append(snp['ref'])
             alleles.extend(snp['alt'])
-        return max(map(len, alleles))
+        if alleles:
+            return max(map(len, alleles))
+        else:
+            return 0
 
     def _snps_are_mergeable(self, snps1, snps2):
         "it looks only to the conditions we have programmed"
@@ -399,7 +402,6 @@ class VarMerger():
         result = None
         if len_snps1 > 1 or len_snps2 > 1:
             self.log['Too_many_overlaping_vars'] += 1
-            print('no', len_snps1, len_snps2)
             result = False
 
         elif len_snps1 == 1 or len_snps1 == 1:

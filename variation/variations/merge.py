@@ -388,7 +388,10 @@ class VarMerger():
         alleles = []
         for snp in snps:
             alleles.append(snp['ref'])
-            alleles.extend(snp['alt'])
+            try:
+                alleles.extend(snp['alt'])
+            except TypeError:
+                pass
         if alleles:
             return max(map(len, alleles))
         else:

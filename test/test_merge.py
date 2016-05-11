@@ -28,7 +28,7 @@ class MockList(list):
 
 
 class MockMerger(dict):
-    def __init__(self, gt_shape, ignore_malformed_vars=False):
+    def __init__(self, gt_shape, ignore_malformed_vars=False, merge_only_snps=False):
         self._gt_shape = gt_shape
         self._gt_dtype = numpy.int32
         self.max_field_lens = {'alt': 3}
@@ -36,6 +36,7 @@ class MockMerger(dict):
         self._n_samples2 = 2
         self.log = Counter()
         self._ignore_malformed_vars = ignore_malformed_vars
+        self._merge_only_snps = merge_only_snps
 
 MockMerger._get_alleles = VarMerger._get_alleles
 MockMerger._get_qual = VarMerger._get_qual
@@ -43,6 +44,7 @@ MockMerger._snps_are_mergeable = VarMerger._snps_are_mergeable
 MockMerger._snp_info_msg = VarMerger._snp_info_msg
 MockMerger._merge_vars = VarMerger._merge_vars
 MockMerger._merge_depth = VarMerger._merge_depth
+MockMerger._len_longer_allele = VarMerger._len_longer_allele
 
 
 class MergeTest(unittest.TestCase):
@@ -261,6 +263,23 @@ class MergeTest(unittest.TestCase):
         except MalformedVariationError:
             pass
 
+    def test_only_snps(self):
+        # Deletion
+        vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'C',
+                           'alt': [b'CAAG', b'CAAA'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': 21}])
+        vars2 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'C', 'alt': [b'A'],
+                           'gts': numpy.array([[0, 0], [1, 1]]),
+                           'qual': None}])
+        vars1.samples = ['a', 'b']
+        vars2.samples = ['c', 'd']
+        merger = MockMerger(gt_shape=(4, 2), merge_only_snps=True)
+        assert not merger._snps_are_mergeable(vars1, vars2)
+        
+        merger = MockMerger(gt_shape=(4, 2), merge_only_snps=False)
+        assert merger._snps_are_mergeable(vars1, vars2)
+
     def test_snps_are_mergeable(self):
         vars1 = MockList([{'chrom': '1', 'pos': 1, 'ref': b'ATT',
                            'alt': [b'T'],
@@ -327,5 +346,5 @@ class MergeTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'MergeTest.test_merge_with_depth']
+    # import sys;sys.argv = ['', 'MergeTest.test_only_snps']
     unittest.main()

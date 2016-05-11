@@ -264,7 +264,7 @@ class VarMerger():
     def __init__(self, variations1, variations2, suffix_for_sample2=None,
                  ignore_complex_overlaps=False, ignore_malformed_vars=False,
                  allow_non_std_var_creation=False, check_ref_matches=True,
-                 max_field_lens=None, ignore_non_matching=False):
+                 max_field_lens=None, ignore_non_matching=False, merge_only_snps=False):
         '''It merges two variation matrices.
 
         suffix for sample2 is only added to samples in variations2 also
@@ -277,6 +277,7 @@ class VarMerger():
         self._ignore_malformed_vars = ignore_malformed_vars
         self._ignore_non_matching = ignore_non_matching
         self._allow_non_std_var_creation = allow_non_std_var_creation
+        self._merge_only_snps = merge_only_snps
         self._check_ref_matches = check_ref_matches
         self._gt_shape = None
         self._gt_dtype = None
@@ -383,26 +384,44 @@ class VarMerger():
                     msg += '{}\n{}\n'
                     raise NotImplementedError(msg.format(poss1, poss2))
 
+    def _len_longer_allele(self, snps):
+        alleles = []
+        for snp in snps:
+            alleles.append(snp['ref'])
+            alleles.extend(snp['alt'])
+        return max(map(len, alleles))
+
     def _snps_are_mergeable(self, snps1, snps2):
         "it looks only to the conditions we have programmed"
         len_snps1 = len(snps1)
         len_snps2 = len(snps2)
 
+        result = None
         if len_snps1 > 1 or len_snps2 > 1:
             self.log['Too_many_overlaping_vars'] += 1
-            return False
+            print('no', len_snps1, len_snps2)
+            result = False
 
-        if len_snps1 == 1 or len_snps1 == 1:
+        elif len_snps1 == 1 or len_snps1 == 1:
             if _var_len(snps1[0]) > 1 and _var_len(snps2[0]) > 1:
                 self.log['overlaping_complex'] += 1
-                return False
+                result = False
             else:
-                return True
-
-        if ((len_snps1 == 1 and len_snps2 == 0) or
+                result = True
+        elif ((len_snps1 == 1 and len_snps2 == 0) or
                 (len_snps1 == 0 and len_snps2 == 1)):
-            return True
-        raise RuntimeError("We shouldn't be here")
+            result = True
+        if result is None:
+            raise RuntimeError("We shouldn't be here")
+        if not result:
+            return result
+
+        if self._merge_only_snps:
+            if self._len_longer_allele(snps1) > 1:
+                return False
+            if self._len_longer_allele(snps2) > 1:
+                return False
+        return result
 
     def _get_alleles(self, snp):
         alleles = [snp['ref']]

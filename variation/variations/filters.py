@@ -2,6 +2,7 @@ from functools import partial
 import array
 
 import numpy
+from scipy.stats import chi2_contingency
 
 from allel.chunked.util import get_blen_array
 from allel.model.ndarray import GenotypeArray
@@ -18,6 +19,7 @@ from variation import MISSING_INT, SNPS_PER_CHUNK
 from variation.matrix.methods import (append_matrix, is_dataset,
                                       iterate_matrix_chunks)
 from variation.iterutils import first, group_in_packets
+from variation.matrix.stats import row_value_counter_fact
 
 
 def _filter_dsets_chunks(selector_function, dsets_chunks):
@@ -493,6 +495,112 @@ def keep_biallelic_and_monomorphic(variations, filtered_vars=None,
                                    by_chunk=True):
     return _filter_non_biallelic(variations, filtered_vars=filtered_vars,
                                  keep_monomorphic=True, by_chunk=by_chunk)
+
+
+def _calc_fisher_for_gts(gt_counts1, gt_counts2):
+    genotypes = list(sorted(set(gt_counts1.keys()).union(gt_counts2.keys())))
+    counts1 = {}
+    counts2 = {}
+    for gt in genotypes:
+        wgs_counts_for_gt = gt_counts1.get(gt, None)
+        gbs_counts_for_gt = gt_counts2.get(gt, None)
+        if wgs_counts_for_gt is None:
+            wgs_counts_for_gt = numpy.zeros_like(gbs_counts_for_gt)
+        if gbs_counts_for_gt is None:
+            gbs_counts_for_gt = numpy.zeros_like(wgs_counts_for_gt)
+        counts1[gt] = wgs_counts_for_gt
+        counts2[gt] = gbs_counts_for_gt
+
+    chi2_vals = array.array('f')
+    p_vals = array.array('f')
+    counts = []
+    for snp_idx in range(counts1[genotypes[0]].shape[0]):
+        counts1_for_snp = [counts1[gt][snp_idx] for gt in genotypes]
+        counts2_for_snp = [counts2[gt][snp_idx] for gt in genotypes]
+
+        counts_for_snp = numpy.array([counts1_for_snp, counts2_for_snp])
+        counts_for_snp = counts_for_snp[:, numpy.sum(counts_for_snp, axis=0) > 0]
+        counts.append(counts_for_snp)
+        chi2, pvalue, _, _ = chi2_contingency(counts_for_snp)
+        chi2_vals.append(chi2)
+        p_vals.append(pvalue)
+    return numpy.array(chi2_vals), numpy.array(p_vals), counts
+
+
+def _packed_gt_to_tuple(gt, ploidy):
+    gt_len = ploidy * 2
+    gt_fmt = '%0' + str(gt_len) + 'd'
+    gt = gt_fmt % gt
+    gt = tuple(sorted([int(gt[idx: idx + 2]) for idx in range(0, len(gt), 2)]))
+    return gt
+
+
+def _count_gts(variations):
+
+    if variations[GT_FIELD].shape[0] == 0:
+        return numpy.array([]), numpy.array([]), numpy.array([])
+
+    gts = variations[GT_FIELD]
+    gts = gts[...]
+
+    # get rid of genotypes with missing alleles
+    missing_alleles = gts == MISSING_INT
+    miss_gts = numpy.any(missing_alleles, axis=2)
+
+    # We pack the genotype of a sample that is in third axes as two
+    # integers as one integer: 1, 1 -> 11 0, 1 -> 01, 0, 0-> 0
+    gts_per_haplo = [(gts[:, :, idx].astype(numpy.int16)) * (100 ** idx) for idx in range(gts.shape[2])]
+    packed_gts = None
+    for gts_ in gts_per_haplo:
+        if packed_gts is None:
+            packed_gts = gts_
+        else:
+            packed_gts += gts_
+    packed_gts[miss_gts] = MISSING_INT
+
+    different_gts = numpy.unique(packed_gts)
+    # Count genotypes, homo, het and alleles
+    ploidy = gts.shape[2]
+    counts = {}
+    for gt in different_gts:
+        count_gt_by_row = row_value_counter_fact(gt)
+        gt_counts = count_gt_by_row(packed_gts)
+        if gt == MISSING_INT:
+            continue
+        unpacked_gt = _packed_gt_to_tuple(gt, ploidy)
+        if unpacked_gt not in counts:
+            counts[unpacked_gt] = gt_counts
+        else:
+            counts[unpacked_gt] += gt_counts
+    return counts
+
+
+def _filter_chi2_gt_2_sample_sets(variations, samples1, samples2,
+                                filtered_vars=None, min_pval=None):
+    snps1 = filter_samples(variations, samples1, by_chunk=False)
+    snps2 = filter_samples(variations, samples2, by_chunk=False)
+    counts1 = _count_gts(snps1)
+    counts2 = _count_gts(snps2)
+    _, p_vals, _ = _calc_fisher_for_gts(counts1, counts2)
+    
+    if min_pval is not None:
+        selected_rows = p_vals >= min_pval
+    else:
+        selected_rows = numpy.full_like(p_vals, True, dtype=numpy.bool_)
+
+    return _filter_chunk2(variations, filtered_vars, selected_rows), p_vals
+
+
+
+def flt_hist_chi2_gt_2_sample_sets(variations, samples1, samples2,
+                                  filtered_vars=None, min_pval=None,
+                                  n_bins=DEF_NUM_BINS, range_=None):
+    res = _filter_chi2_gt_2_sample_sets(variations, samples1, samples2,
+                                       filtered_vars=filtered_vars,
+                                       min_pval=min_pval)
+    variations, stat = res
+    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
+    return variations, counts, edges
 
 
 def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,

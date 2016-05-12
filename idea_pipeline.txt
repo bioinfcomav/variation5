@@ -1,0 +1,5 @@
+
+pipepile = Pipeline(chunk_size=100)
+pipeline.append_hist_flt(hist_flt_func, args, kwargs)
+pipeline.append_hist_flt(hist_flt_func, args, kwargs)
+pipeline.run_h5(in_snps, out_snps)

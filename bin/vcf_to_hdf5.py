@@ -21,7 +21,7 @@ def _setup_argparse(**kwargs):
     parser.add_argument('-i', '--ignore_alt', action='store_true',
                         default=False, help=help_msg)
     parser.add_argument('-a', '--alt_gt_num', required=True, type=int,
-                        help='Max number of alternative genotypes per variant')
+                        help='Max number of alternative alleles per variant')
     parser.add_argument('-p', '--pre_read_max_size', default=PRE_READ_MAX_SIZE,
                         help='Max number of records to get alt_gt_num',
                         type=int)
@@ -60,7 +60,7 @@ def main():
     if in_fpath.split('.')[-1] == 'gz':
         fhand = read_gzip_file(in_fpath)
     else:
-        fhand = open(in_fpath, 'rb')
+        fhand = open(in_fpath, 'rb')    
     vcf_parser = VCFParser(fhand=fhand,
                            pre_read_max_size=args['pre_read_max_size'],
                            ignored_fields=args['ignored_fields'],

@@ -754,3 +754,41 @@ def filter_unlinked_vars(variations, window_size, step=20, filtered_vars=None,
         filtered_vars = _filter_chunk2(variations, filtered_vars,
                                        selected_rows=unlinked_mask)
     return filtered_vars
+
+
+COUNTS = 'counts'
+EDGES = 'edges'
+FLT_VARS = 'flt_vars'
+
+
+class MinCalledGTsFilter:
+    def __init__(self, min_=None, rates=True, n_bins=DEF_NUM_BINS,
+                 range_=None, do_filtering=True, do_histogram=True):
+        self.do_filtering = do_filtering
+        self.do_histogram = do_histogram
+        self.n_bins = n_bins
+        self.range = range_
+        self.rates = rates
+        self.min = min_
+
+    def _calc_stat(self, variations):
+        return calc_called_gt(variations, rates=self.rates)
+    
+    def _filter(self, variations, stat):
+        selected_rows = stat > self.min
+        return _filter_chunk2(variations, None, selected_rows)
+
+    def __call__(self, variations):
+        stats = self._calc_stat(variations)    
+        result = {}
+
+        if self.do_histogram:
+            counts, edges = histogram(stats, n_bins=self.n_bins,
+                                      range_=self.range)
+            result[COUNTS] = counts
+            result[EDGES] = edges
+        
+        if self.do_filtering: 
+            result['flt_vars'] = self._filter(variations, stats)
+
+        return result

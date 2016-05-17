@@ -16,12 +16,8 @@ import numpy
 
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
-from variation.variations.filters import (set_low_qual_gts_to_missing,
-                                          filter_snps_by_qual,
-                                          keep_biallelic,
-                                          filter_monomorphic_snps,
-                                          keep_biallelic_and_monomorphic,
-                                          filter_samples, filter_unlinked_vars,
+from variation.variations.filters import (filter_snps_by_qual,
+                                          filter_samples,
                                           filter_samples_by_missing,
                                           filter_high_density_snps,
                                           filter_standarized_by_sample_depth,
@@ -41,51 +37,6 @@ from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
 class FilterTest(unittest.TestCase):
 
-    def test_filter_monomorfic(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = [GT_FIELD]
-        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
-        chunk = first(snps)
-        flt_chunk = filter_monomorphic_snps(chunk, min_maf=0.9,
-                                            min_num_genotypes=0)
-        assert flt_chunk.num_variations == 59
-
-    def test_filter_biallelic(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = [GT_FIELD]
-        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
-        chunk = first(snps)
-        flt_chunk = keep_biallelic_and_monomorphic(chunk)
-        assert flt_chunk[GT_FIELD].shape == (200, 153, 2)
-        flt_chunk = keep_biallelic(chunk)
-        assert flt_chunk[GT_FIELD].shape == (174, 153, 2)
-
-    def test_filter_unlinked_vars(self):
-        varis = VariationsArrays()
-        varis[GT_FIELD] = numpy.array([[[0, 0], [0, 0], [0, 1]],
-                                      [[0, 0], [0, 0], [0, 1]],
-                                      [[1, 1], [0, 1], [0, 0]],
-                                      [[1, 1], [0, 1], [0, 0]]])
-        varis[CHROM_FIELD] = numpy.array([b'chr1'] * 4)
-        varis[POS_FIELD] = numpy.array([1, 10, 100, 110])
-        expected = [[[0, 0], [0, 0], [0, 1]]]
-        filtered_vars = filter_unlinked_vars(varis, window_size=50,
-                                             by_chunk=False)
-        assert numpy.all(filtered_vars[GT_FIELD] == expected)
-
-        filtered_vars = filter_unlinked_vars(varis, window_size=50,
-                                             by_chunk=False, r2_threshold=1)
-        assert numpy.all(filtered_vars[GT_FIELD] == varis[GT_FIELD])
-
-        expected = [[[0, 0], [0, 0], [0, 1]], [[1, 1], [0, 1], [0, 0]]]
-        filtered_vars = filter_unlinked_vars(varis, window_size=50,
-                                             by_chunk=False, r2_threshold=.9)
-        assert numpy.all(filtered_vars[GT_FIELD] == expected)
-
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        vars1 = filter_unlinked_vars(hdf5, 1000, by_chunk=True)
-        vars2 = filter_unlinked_vars(hdf5, 1000, by_chunk=False)
-        assert numpy.all(vars1[GT_FIELD] == vars2[GT_FIELD])
 
     def test_filter_high_density(self):
         varis = VariationsArrays()

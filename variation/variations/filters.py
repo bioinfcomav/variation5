@@ -762,14 +762,14 @@ FLT_VARS = 'flt_vars'
 
 
 class MinCalledGTsFilter:
-    def __init__(self, min_=None, rates=True, n_bins=DEF_NUM_BINS,
+    def __init__(self, min_called=None, rates=True, n_bins=DEF_NUM_BINS,
                  range_=None, do_filtering=True, do_histogram=True):
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
         self.n_bins = n_bins
         self.range = range_
         self.rates = rates
-        self.min = min_
+        self.min = min_called
 
     def _calc_stat(self, variations):
         return calc_called_gt(variations, rates=self.rates)

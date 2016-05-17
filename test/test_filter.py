@@ -31,7 +31,7 @@ from variation.variations.filters import (set_low_qual_gts_to_missing,
                                           flt_hist_chi2_gt_2_sample_sets,
                                           MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
-                                          ObsHetFilter,
+                                          ObsHetFilter, SNPQualFilter,
                                           LowDPGTsToMissingSetter,
                                           LowQualGTsToMissingSetter)
 from variation.iterutils import first
@@ -42,49 +42,6 @@ class FilterTest(unittest.TestCase):
 
 
 
-    def test_filter_quality_snps(self):
-        variations = VariationsArrays()
-        gts = numpy.array([[[0, 0], [1, 1]], [[0, 1], [1, 1]],
-                           [[0, 0], [0, 0]], [[0, 0], [0, 0]],
-                           [[0, 1], [0, 0]]])
-        snp_quals = numpy.array([5, 10, 15, 5, 20])
-        variations[GT_FIELD] = gts
-        variations['/variations/qual'] = snp_quals
-
-        filtered = filter_snps_by_qual(variations)
-        filtered_qual = filtered['/variations/qual']
-        filtered_gts = filtered[GT_FIELD]
-        assert numpy.all(variations['/variations/qual'] == filtered_qual)
-        assert numpy.all(variations[GT_FIELD] == filtered_gts)
-
-        expected_gts = numpy.array([[[0, 0], [0, 0]],
-                                    [[0, 1], [0, 0]]])
-        exp_snp_quals = numpy.array([15, 20])
-        filtered = filter_snps_by_qual(variations, min_qual=15)
-        assert numpy.all(filtered['/variations/qual'] == exp_snp_quals)
-        assert numpy.all(filtered[GT_FIELD] == expected_gts)
-
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = ['/variations/qual']
-        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
-        chunk = first(snps)
-        flt_chunk = filter_snps_by_qual(chunk, min_qual=530)
-        assert first(flt_chunk.values()).shape[0] == 126
-
-        flt_chunk = filter_snps_by_qual(chunk)
-        assert first(flt_chunk.values()).shape[0] == 200
-
-        flt_chunk = filter_snps_by_qual(chunk, max_qual=1000)
-        assert first(flt_chunk.values()).shape[0] == 92
-
-        flt_chunk = filter_snps_by_qual(chunk, min_qual=530, max_qual=1000)
-        assert first(flt_chunk.values()).shape[0] == 18
-
-        flt_chunk = filter_snps_by_qual(chunk, min_qual=586325202)
-        assert first(flt_chunk.values()).shape[0] == 13
-
-        flt_chunk = filter_snps_by_qual(chunk, max_qual=-1)
-        assert first(flt_chunk.values()).shape[0] == 0
 
 
     def test_filter_monomorfic(self):
@@ -455,7 +412,52 @@ class MafFilterTest(unittest.TestCase):
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert numpy.all(filtered[COUNTS] == [340, 14, 5])
 
-    def test_set_quality_dp(self):
+    def test_filter_quality_snps(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1]], [[0, 1], [1, 1]],
+                           [[0, 0], [0, 0]], [[0, 0], [0, 0]],
+                           [[0, 1], [0, 0]]])
+        snp_quals = numpy.array([5, 10, 15, 5, 20])
+        variations[GT_FIELD] = gts
+        variations['/variations/qual'] = snp_quals
+
+        filtered = SNPQualFilter()(variations)[FLT_VARS]
+        filtered_qual = filtered['/variations/qual']
+        filtered_gts = filtered[GT_FIELD]
+        assert numpy.all(variations['/variations/qual'] == filtered_qual)
+        assert numpy.all(variations[GT_FIELD] == filtered_gts)
+
+        expected_gts = numpy.array([[[0, 0], [0, 0]],
+                                    [[0, 1], [0, 0]]])
+        exp_snp_quals = numpy.array([15, 20])
+        filtered = SNPQualFilter(min_qual=15)(variations)[FLT_VARS]
+        assert numpy.all(filtered['/variations/qual'] == exp_snp_quals)
+        assert numpy.all(filtered[GT_FIELD] == expected_gts)
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/variations/qual']
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        flt_chunk = SNPQualFilter(min_qual=530)(chunk)[FLT_VARS]
+        assert first(flt_chunk.values()).shape[0] == 126
+
+        flt_chunk = filter_snps_by_qual(chunk)
+        flt_chunk = SNPQualFilter()(chunk)[FLT_VARS]
+        assert first(flt_chunk.values()).shape[0] == 200
+
+        flt_chunk = SNPQualFilter(max_qual=1000)(chunk)[FLT_VARS]
+        assert first(flt_chunk.values()).shape[0] == 92
+
+        flt_chunk = SNPQualFilter(min_qual=530, max_qual=1000)(chunk)[FLT_VARS]
+        assert first(flt_chunk.values()).shape[0] == 18
+
+        flt_chunk = SNPQualFilter(min_qual=586325202)(chunk)[FLT_VARS]
+        assert first(flt_chunk.values()).shape[0] == 13
+
+        flt_chunk = SNPQualFilter(max_qual=-1)(chunk)[FLT_VARS]
+        assert first(flt_chunk.values()).shape[0] == 0
+
+    def test_set_gt_to_missing_by_dp(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         kept_fields = ['/calls/DP', GT_FIELD]
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
@@ -467,7 +469,7 @@ class MafFilterTest(unittest.TestCase):
         set_low_dp_gts_to_missing(chunk)
         assert numpy.all(chunk[GT_FIELD].shape[0] == 200)
 
-    def test_filter_quality_genotype(self):
+    def test_set_gt_to_missing_by_qual(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
                            [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
@@ -507,6 +509,7 @@ class MafFilterTest(unittest.TestCase):
         assert numpy.all(h5_1[GT_FIELD][:] == h5_2[FLT_VARS][GT_FIELD])
 
 
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'FilterTest']
+    # import sys;sys.argv = ['', 'MafFilterTest.test_filter_quality_snps']
     unittest.main()

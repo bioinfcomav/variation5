@@ -46,7 +46,15 @@ def _calc_histogram(vector, n_bins, range_):
         vector = remove_nans(vector)
     else:
         vector = vector[vector != missing_value]
-    return numpy.histogram(vector, bins=n_bins, range=range_)
+    try:
+        result = numpy.histogram(vector, bins=n_bins, range=range_)
+    except ValueError as error:
+        if 'parameter must be finite' in str(error):
+            vector = vector[~numpy.isinf(vector)]
+            result = numpy.histogram(vector, bins=n_bins, range=range_)
+        else:
+            raise
+    return result
 
 
 def histogram(vector, n_bins=DEF_NUM_BINS, range_=None):

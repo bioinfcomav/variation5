@@ -869,6 +869,17 @@ class ObsHetFilter(_BaseFilter):
                             min_call_dp=self.min_call_dp)
 
 
+class SNPQualFilter(_BaseFilter):
+    def __init__(self, min_qual=None, max_qual=None, **kwargs):
+        self.min = min_qual
+        self.max = max_qual
+
+        super().__init__(**kwargs)
+
+    def _calc_stat(self, variations):
+        return variations['/variations/qual']
+
+
 class _GTsToMissingSetter:
     def __init__(self, min_, field_path):
         self.min = min_
@@ -898,7 +909,6 @@ class _GTsToMissingSetter:
         copied_vars[GT_FIELD] = gts
 
         return {FLT_VARS: copied_vars}
-
 
 
 class LowDPGTsToMissingSetter(_GTsToMissingSetter):

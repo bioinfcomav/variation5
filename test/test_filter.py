@@ -33,16 +33,13 @@ from variation.variations.filters import (set_low_qual_gts_to_missing,
                                           EDGES, MafFilter, MacFilter,
                                           ObsHetFilter, SNPQualFilter,
                                           LowDPGTsToMissingSetter,
-                                          LowQualGTsToMissingSetter)
+                                          LowQualGTsToMissingSetter,
+                                          NonBiallelicFilter)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
 
 class FilterTest(unittest.TestCase):
-
-
-
-
 
     def test_filter_monomorfic(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -153,9 +150,8 @@ class FilterTest(unittest.TestCase):
         variations.samples = [1, 2, 3, 4, 5, 6]
         samples1 = [1, 2, 3]
         samples2 = [4, 5, 6]
-        res = flt_hist_chi2_gt_2_sample_sets(variations, samples1,
-                                                  samples2, min_pval=0.05,
-                                                  n_bins=2)
+        res = flt_hist_chi2_gt_2_sample_sets(variations, samples1, samples2,
+                                             min_pval=0.05, n_bins=2)
         filtered, counts, _ = res
         assert list(counts) == [2, 2]
         assert numpy.all(filtered[GT_FIELD] == gts[:2, ...])
@@ -369,6 +365,9 @@ class MafFilterTest(unittest.TestCase):
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert counts == {-1: 64530, 0: 36977, 1: 18716, 2: 35}
 
+
+class ObsHetFiltterTest(unittest.TestCase):
+
     def test_filter_obs_het(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
@@ -411,6 +410,9 @@ class MafFilterTest(unittest.TestCase):
                                 n_bins=3, range_=(0, 1), samples=samples)(hdf5)
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert numpy.all(filtered[COUNTS] == [340, 14, 5])
+
+
+class SNPQualFilterTest(unittest.TestCase):
 
     def test_filter_quality_snps(self):
         variations = VariationsArrays()
@@ -456,6 +458,9 @@ class MafFilterTest(unittest.TestCase):
 
         flt_chunk = SNPQualFilter(max_qual=-1)(chunk)[FLT_VARS]
         assert first(flt_chunk.values()).shape[0] == 0
+
+
+class MissingGTSettersTest(unittest.TestCase):
 
     def test_set_gt_to_missing_by_dp(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -508,6 +513,17 @@ class MafFilterTest(unittest.TestCase):
         h5_2 = set_low_qual_gts_to_missing(h5_1)
         assert numpy.all(h5_1[GT_FIELD][:] == h5_2[FLT_VARS][GT_FIELD])
 
+
+class MonoBiallelicFilterTest(unittest.TestCase):
+
+    def test_filter_biallelic(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = [GT_FIELD]
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+
+        flt_chunk = NonBiallelicFilter()(chunk)[FLT_VARS]
+        assert flt_chunk[GT_FIELD].shape == (174, 153, 2)
 
 
 if __name__ == "__main__":

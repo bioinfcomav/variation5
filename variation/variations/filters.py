@@ -582,14 +582,13 @@ def _filter_chi2_gt_2_sample_sets(variations, samples1, samples2,
     counts1 = _count_gts(snps1)
     counts2 = _count_gts(snps2)
     _, p_vals, _ = _calc_fisher_for_gts(counts1, counts2)
-    
+
     if min_pval is not None:
         selected_rows = p_vals >= min_pval
     else:
         selected_rows = numpy.full_like(p_vals, True, dtype=numpy.bool_)
 
     return _filter_chunk2(variations, filtered_vars, selected_rows), p_vals
-
 
 
 def flt_hist_chi2_gt_2_sample_sets(variations, samples1, samples2,
@@ -783,7 +782,7 @@ class _BaseFilter:
         with numpy.errstate(invalid='ignore'):
             selector_max = None if max_ is None else stat <= max_
             selector_min = None if min_ is None else stat >= min_
-    
+
         if selector_max is None and selector_min is not None:
             selected_rows = selector_min
         elif selector_max is not None and selector_min is None:
@@ -794,13 +793,16 @@ class _BaseFilter:
             selected_rows = _filter_no_row(variations)
         return variations.get_chunk(selected_rows)
 
-    def _calc_stat_for_filtered_samples(self, variations):
+    def _filter_samples_for_stats(self, variations):
         if self.samples is None:
             vars_for_stat = variations
         else:
             vars_for_stat = filter_samples(variations, self.samples)
-        return self._calc_stat(vars_for_stat)
+        return vars_for_stat
 
+    def _calc_stat_for_filtered_samples(self, variations):
+        vars_for_stat = self._filter_samples_for_stats(variations)
+        return self._calc_stat(vars_for_stat)
 
     def __call__(self, variations):
         stats = self._calc_stat_for_filtered_samples(variations)
@@ -811,8 +813,8 @@ class _BaseFilter:
                                       range_=self.range)
             result[COUNTS] = counts
             result[EDGES] = edges
-        
-        if self.do_filtering: 
+
+        if self.do_filtering:
             result[FLT_VARS] = self._filter(variations, stats)
 
         return result
@@ -933,3 +935,58 @@ class LowQualGTsToMissingSetter(_GTsToMissingSetter):
     def __init__(self, min_qual):
         super().__init__(min_=min_qual, field_path=GQ_FIELD)
 
+
+class NonBiallelicFilter(_BaseFilter):
+
+    def __init__(self, samples=None):
+        self.keep_monomorphic = False
+        self.samples = samples
+
+    @property
+    def do_filtering(self):
+        return True
+
+    @property
+    def do_histogram(self):
+        return False
+
+    def _select_mono(self, chunk):
+        keep_monomorphic = self.keep_monomorphic
+
+        gts = chunk[GT_FIELD]
+        if is_dataset(gts):
+            gts = gts[:]
+
+        shape = gts.shape
+
+        # we count how many different alleles are per row
+        # we do it adding a complex part to each number. The complex part is
+        # related with the row. Then we use unique
+        weight = 1j * numpy.arange(0, shape[0])
+        weight = numpy.repeat(weight, shape[1] * shape[2]).reshape(shape)
+        b = gts + weight
+        _, ind = numpy.unique(b, return_index=True)
+        b = numpy.zeros_like(gts)
+        c = numpy.ones_like(gts)
+        numpy.put(b, ind, c.flat[ind])
+        c = numpy.sum(b, axis=(2, 1))
+
+        # we remove the missing values from the count
+        rows_with_missing = numpy.any(gts == -1, axis=(1, 2))
+        c -= rows_with_missing
+
+        if keep_monomorphic:
+            selected_rows = (c <= 2)
+        else:
+            selected_rows = (c == 2)
+        return selected_rows
+
+    def __call__(self, variations):
+        vars_for_stat = self._filter_samples_for_stats(variations)
+
+        selected_rows = self._select_mono(vars_for_stat)
+        result = {}
+        if self.do_filtering:
+            result[FLT_VARS] = variations.get_chunk(selected_rows)
+
+        return result

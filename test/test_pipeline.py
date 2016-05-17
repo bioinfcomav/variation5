@@ -15,7 +15,7 @@ from variation.variations.pipeline import Pipeline
 from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           MacFilter, ObsHetFilter, FLT_VARS,
                                           LowDPGTsToMissingSetter,
-                                          SNPQualFilter)
+                                          SNPQualFilter, NonBiallelicFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from test.test_utils import TEST_DATA_DIR
 
@@ -141,6 +141,21 @@ class PipelineTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
 
         flt = LowDPGTsToMissingSetter(min_dp=5)
+        pipeline.append(flt)
+
+        vars_out = VariationsArrays()
+        pipeline.run(hdf5, vars_out)
+
+        # check same result with no pipeline
+        result2 = flt(hdf5)
+        assert numpy.allclose(vars_out['/calls/GT'],
+                              result2[FLT_VARS]['/calls/GT'])
+
+    def test_biallelic(self):
+        pipeline = Pipeline()
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        flt = NonBiallelicFilter()
         pipeline.append(flt)
 
         vars_out = VariationsArrays()

@@ -34,7 +34,7 @@ from variation.variations.filters import (filter_mafs, filter_macs,
                                           flt_hist_samples_by_missing,
                                           flt_hist_chi2_gt_2_sample_sets,
                                           MinCalledGTsFilter, FLT_VARS,
-                                          MafFilter)
+                                          MafFilter, MacFilter)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -638,6 +638,55 @@ class MafFilterTest(unittest.TestCase):
         filtered = MafFilter(min_maf=0.6, max_maf=0.9)(hdf5)
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert counts == {0: 57805, -1: 55792, 1: 32504, 2: 162, 3: 5}
+
+    def test_filter_macs(self):
+        # with some missing values
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
+                           [[0, 0], [-1, -1], [0, 1], [0, 0], [1, 1]]])
+        variations[GT_FIELD] = gts
+        filtered = MacFilter(min_num_genotypes=5)(variations)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
+
+        filtered = MacFilter(min_mac=0, min_num_genotypes=5)(variations)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[0, 1, 2]])
+
+        # without missing values
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        variations[GT_FIELD] = gts
+
+        expected = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                               [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                               [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        filtered = MacFilter(max_mac=4, min_num_genotypes=0)(variations)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == expected)
+
+        expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                               [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        filtered = MacFilter(min_mac=3.5, max_mac=4,
+                             min_num_genotypes=0)(variations)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == expected)
+
+        expected = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]]])
+        filtered = MacFilter(max_mac=3, min_num_genotypes=0)(variations)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == expected)
+
+        filtered = MacFilter(min_mac=2, max_mac=5,
+                             min_num_genotypes=0)(variations)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == variations[GT_FIELD])
+
+        # With hdf5 files
+        variations = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        filtered = MacFilter(min_mac=130, max_mac=150)(variations)
+        counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
+        assert counts == {-1: 64530, 0: 36977, 1: 18716, 2: 35}
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'FilterTest']

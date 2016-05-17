@@ -479,10 +479,26 @@ class _VariationMatrices():
         var_array = None
         for path, dset in dsets.items():
             if var_array is None:
-                matrix = dset[index, ...]
+                try:
+                    matrix = dset[index, ...]
+                except UnboundLocalError:
+                    # This is a workaround for an error in h5py
+                    if (isinstance(index, numpy.ndarray) and
+                        numpy.all(index == False)):
+                        matrix = numpy.array([])
+                    else:
+                        raise
                 var_array = VariationsArrays(vars_in_chunk=matrix.shape[0])
-            var_array[path] = dset[index, ...]
-
+            try:
+                matrix = dset[index, ...]
+            except UnboundLocalError:
+                # This is a workaround for an error in h5py
+                if (isinstance(index, numpy.ndarray) and
+                    numpy.all(index == False)):
+                    matrix = numpy.array([])
+                else:
+                    raise
+            var_array[path] = matrix
         var_array._set_metadata(self.metadata)
         var_array._set_samples(self.samples)
         return var_array

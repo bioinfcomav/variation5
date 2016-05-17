@@ -852,3 +852,19 @@ class MafFilter(_BaseFilter):
 
     def _calc_stat(self, variations):
         return calc_maf(variations, min_num_genotypes=self.min_num_genotypes)
+
+
+class MacFilter(_BaseFilter):
+    def __init__(self, min_mac=None, max_mac=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                 n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
+                 do_histogram=True):
+        self.min = min_mac
+        self.max = max_mac
+        self.min_num_genotypes = min_num_genotypes
+
+        super().__init__(n_bins=n_bins, range_=range_,
+                         do_filtering=do_filtering, do_histogram=do_histogram)
+
+    def _calc_stat(self, variations):
+        return calc_mac(variations, min_num_genotypes=self.min_num_genotypes)

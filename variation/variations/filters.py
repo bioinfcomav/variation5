@@ -761,25 +761,57 @@ EDGES = 'edges'
 FLT_VARS = 'flt_vars'
 
 
-class MinCalledGTsFilter:
-    def __init__(self, min_called=None, rates=True, n_bins=DEF_NUM_BINS,
-                 range_=None, do_filtering=True, do_histogram=True):
+
+def _filter_chunk3(chunk, selected_rows):
+
+    filtered_chunk = VariationsArrays()
+
+    for path in chunk.keys():
+        matrix = chunk[path]
+        try:
+            array = matrix.data
+        except:
+            array = matrix
+        flt_data = numpy.compress(selected_rows, array, axis=0)
+        try:
+            out_mat = filtered_chunk[path]
+            append_matrix(out_mat, flt_data)
+        except KeyError:
+            filtered_chunk[path] = flt_data
+    filtered_chunk.metadata = chunk.metadata
+    filtered_chunk.samples = chunk.samples
+    return filtered_chunk
+
+
+class _BaseFilter:
+
+    def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
+                 do_histogram=True):
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
         self.n_bins = n_bins
         self.range = range_
-        self.rates = rates
-        self.min = min_called
 
-    def _calc_stat(self, variations):
-        return calc_called_gt(variations, rates=self.rates)
-    
     def _filter(self, variations, stat):
-        selected_rows = stat > self.min
-        return _filter_chunk2(variations, None, selected_rows)
+        min_ = getattr(self, 'min', None)
+        max_ = getattr(self, 'max', None)
+
+        with numpy.errstate(invalid='ignore'):
+            selector_max = None if max_ is None else stat <= max_
+            selector_min = None if min_ is None else stat >= min_
+    
+        if selector_max is None and selector_min is not None:
+            selected_rows = selector_min
+        elif selector_max is not None and selector_min is None:
+            selected_rows = selector_max
+        elif selector_max is not None and selector_min is not None:
+            selected_rows = selector_min & selector_max
+        else:
+            selected_rows = _filter_no_row(variations)
+        return variations.get_chunk(selected_rows)
 
     def __call__(self, variations):
-        stats = self._calc_stat(variations)    
+        stats = self._calc_stat(variations)
         result = {}
 
         if self.do_histogram:
@@ -789,6 +821,34 @@ class MinCalledGTsFilter:
             result[EDGES] = edges
         
         if self.do_filtering: 
-            result['flt_vars'] = self._filter(variations, stats)
+            result[FLT_VARS] = self._filter(variations, stats)
 
         return result
+
+
+class MinCalledGTsFilter(_BaseFilter):
+    def __init__(self, min_called=None, rates=True, n_bins=DEF_NUM_BINS,
+                 range_=None, do_filtering=True, do_histogram=True):
+        self.rates = rates
+        self.min = min_called
+        super().__init__(n_bins=n_bins, range_=range_,
+                         do_filtering=do_filtering, do_histogram=do_histogram)
+
+    def _calc_stat(self, variations):
+        return calc_called_gt(variations, rates=self.rates)
+
+
+class MafFilter(_BaseFilter):
+    def __init__(self, min_maf=None, max_maf=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                 n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
+                 do_histogram=True):
+        self.min = min_maf
+        self.max = max_maf
+        self.min_num_genotypes = min_num_genotypes
+
+        super().__init__(n_bins=n_bins, range_=range_,
+                         do_filtering=do_filtering, do_histogram=do_histogram)
+
+    def _calc_stat(self, variations):
+        return calc_maf(variations, min_num_genotypes=self.min_num_genotypes)

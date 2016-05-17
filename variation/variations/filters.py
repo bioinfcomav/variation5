@@ -786,11 +786,12 @@ def _filter_chunk3(chunk, selected_rows):
 class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=True):
+                 do_histogram=True, samples=None):
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
         self.n_bins = n_bins
         self.range = range_
+        self.samples = samples
 
     def _filter(self, variations, stat):
         min_ = getattr(self, 'min', None)
@@ -810,8 +811,16 @@ class _BaseFilter:
             selected_rows = _filter_no_row(variations)
         return variations.get_chunk(selected_rows)
 
+    def _calc_stat_for_filtered_samples(self, variations):
+        if self.samples is None:
+            vars_for_stat = variations
+        else:
+            vars_for_stat = filter_samples(variations, self.samples)
+        return self._calc_stat(vars_for_stat)
+
+
     def __call__(self, variations):
-        stats = self._calc_stat(variations)
+        stats = self._calc_stat_for_filtered_samples(variations)
         result = {}
 
         if self.do_histogram:
@@ -827,12 +836,12 @@ class _BaseFilter:
 
 
 class MinCalledGTsFilter(_BaseFilter):
-    def __init__(self, min_called=None, rates=True, n_bins=DEF_NUM_BINS,
-                 range_=None, do_filtering=True, do_histogram=True):
+    # def __init__(self, min_called=None, rates=True, n_bins=DEF_NUM_BINS,
+    #             range_=None, do_filtering=True, do_histogram=True):
+    def __init__(self, min_called=None, rates=True, **kwargs):
         self.rates = rates
         self.min = min_called
-        super().__init__(n_bins=n_bins, range_=range_,
-                         do_filtering=do_filtering, do_histogram=do_histogram)
+        super().__init__(**kwargs)
 
     def _calc_stat(self, variations):
         return calc_called_gt(variations, rates=self.rates)
@@ -841,14 +850,12 @@ class MinCalledGTsFilter(_BaseFilter):
 class MafFilter(_BaseFilter):
     def __init__(self, min_maf=None, max_maf=None,
                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                 n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=True):
+                 **kwargs):
         self.min = min_maf
         self.max = max_maf
         self.min_num_genotypes = min_num_genotypes
 
-        super().__init__(n_bins=n_bins, range_=range_,
-                         do_filtering=do_filtering, do_histogram=do_histogram)
+        super().__init__(**kwargs)
 
     def _calc_stat(self, variations):
         return calc_maf(variations, min_num_genotypes=self.min_num_genotypes)
@@ -856,15 +863,29 @@ class MafFilter(_BaseFilter):
 
 class MacFilter(_BaseFilter):
     def __init__(self, min_mac=None, max_mac=None,
-                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                 n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=True):
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT, **kwargs):
         self.min = min_mac
         self.max = max_mac
         self.min_num_genotypes = min_num_genotypes
 
-        super().__init__(n_bins=n_bins, range_=range_,
-                         do_filtering=do_filtering, do_histogram=do_histogram)
+        super().__init__(**kwargs)
 
     def _calc_stat(self, variations):
         return calc_mac(variations, min_num_genotypes=self.min_num_genotypes)
+
+
+class ObsHetFilter(_BaseFilter):
+    def __init__(self, min_het=None, max_het=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                 min_call_dp=0, **kwargs):
+        self.min = min_het
+        self.max = max_het
+        self.min_num_genotypes = min_num_genotypes
+        self.min_call_dp = min_call_dp
+
+        super().__init__(**kwargs)
+
+    def _calc_stat(self, variations):
+        return calc_obs_het(variations,
+                            min_num_genotypes=self.min_num_genotypes,
+                            min_call_dp=self.min_call_dp)

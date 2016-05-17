@@ -881,8 +881,16 @@ class SNPQualFilter(_BaseFilter):
 
         super().__init__(**kwargs)
 
+    def _calc_stat_for_filtered_samples(self, variations):
+        if self.samples is not None:
+            raise ValueError('SNPQualFilter does not support samples')
+        return self._calc_stat(variations)
+
     def _calc_stat(self, variations):
-        return variations['/variations/qual']
+        stat = variations['/variations/qual']
+        if is_dataset(stat):
+            stat = stat[:]
+        return stat
 
 
 class _GTsToMissingSetter:

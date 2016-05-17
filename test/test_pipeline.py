@@ -14,7 +14,8 @@ import numpy
 from variation.variations.pipeline import Pipeline
 from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           MacFilter, ObsHetFilter, FLT_VARS,
-                                          LowDPGTsToMissingSetter)
+                                          LowDPGTsToMissingSetter,
+                                          SNPQualFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from test.test_utils import TEST_DATA_DIR
 
@@ -106,6 +107,23 @@ class PipelineTest(unittest.TestCase):
         samples = hdf5.samples[:20]
         flt = ObsHetFilter(min_het=0.02, max_het=0.5, samples=samples,
                            do_histogram=True)
+        pipeline.append(flt)
+
+        vars_out = VariationsArrays()
+        result = pipeline.run(hdf5, vars_out)
+
+        # check same result with no pipeline
+        result2 = flt(hdf5)
+        assert numpy.allclose(result['0']['counts'], result2['counts'])
+        assert numpy.allclose(result['0']['edges'], result2['edges'])
+        assert numpy.allclose(vars_out['/calls/GT'],
+                              result2[FLT_VARS]['/calls/GT'])
+
+    def test_snp_qual(self):
+        pipeline = Pipeline()
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        flt = SNPQualFilter(min_qual=100, max_qual=50000, do_histogram=True)
         pipeline.append(flt)
 
         vars_out = VariationsArrays()

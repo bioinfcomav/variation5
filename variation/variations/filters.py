@@ -764,7 +764,12 @@ FLT_VARS = 'flt_vars'
 class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=True, samples=None):
+                 do_histogram=None, samples=None):
+        if do_histogram is None:
+            if range_ is not None or n_bins != DEF_NUM_BINS:
+                do_histogram = True
+            else:
+                do_histogram = False
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
         self.n_bins = n_bins

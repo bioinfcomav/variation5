@@ -16,10 +16,8 @@ import numpy
 
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
-from variation.variations.filters import (filter_obs_het, flt_hist_obs_het,
-                                          set_low_qual_gts_to_missing,
+from variation.variations.filters import (set_low_qual_gts_to_missing,
                                           filter_snps_by_qual,
-                                          set_low_dp_gts_to_missing,
                                           keep_biallelic,
                                           filter_monomorphic_snps,
                                           keep_biallelic_and_monomorphic,
@@ -33,7 +31,9 @@ from variation.variations.filters import (filter_obs_het, flt_hist_obs_het,
                                           flt_hist_chi2_gt_2_sample_sets,
                                           MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
-                                          ObsHetFilter)
+                                          ObsHetFilter,
+                                          LowDPGTsToMissingSetter,
+                                          LowQualGTsToMissingSetter)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -41,48 +41,6 @@ from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 class FilterTest(unittest.TestCase):
 
 
-    def test_filter_quality_genotype(self):
-        variations = VariationsArrays()
-        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
-                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
-        gqs = numpy.array([[10, 20, 5, 20, 25],
-                           [10, 2, 5, 15, 5]])
-        variations[GT_FIELD] = gts
-        variations[GQ_FIELD] = gqs
-
-        set_low_qual_gts_to_missing(variations)
-        filtered = variations[GT_FIELD]
-        assert numpy.all(filtered == gts)
-
-        expected = numpy.array([[[0, 0], [1, 1], [-1, -1], [1, 1], [0, 0]],
-                                [[0, 0], [-1, -1], [-1, -1], [0, 0],
-                                 [-1, -1]]])
-        set_low_qual_gts_to_missing(variations, min_qual=10, by_chunk=True)
-        assert numpy.all(variations[GT_FIELD] == expected)
-
-        variations = VariationsArrays()
-        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
-                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
-        gqs = numpy.array([[10, 20, 5, 20, 25],
-                           [10, 2, 5, 15, 5]])
-        variations[GT_FIELD] = gts
-        variations[GQ_FIELD] = gqs
-        set_low_qual_gts_to_missing(variations, min_qual=10, by_chunk=False)
-        assert numpy.all(variations[GT_FIELD] == expected)
-
-        set_low_qual_gts_to_missing(variations, min_qual=100)
-        assert numpy.all(variations[GT_FIELD] == -1)
-
-        h1_fhand = NamedTemporaryFile(suffix='.h5')
-        h2_fhand = NamedTemporaryFile(suffix='.h5')
-        shutil.copyfile(join(TEST_DATA_DIR, 'ril.hdf5'), h1_fhand.name)
-        shutil.copyfile(join(TEST_DATA_DIR, 'ril.hdf5'), h2_fhand.name)
-
-        h5_1 = VariationsH5(h1_fhand.name, mode='r+')
-        set_low_qual_gts_to_missing(h5_1, min_qual=0, by_chunk=True)
-        h5_2 = VariationsH5(h2_fhand.name, mode='r+')
-        set_low_qual_gts_to_missing(h5_2, min_qual=0, by_chunk=False)
-        assert numpy.all(h5_1[GT_FIELD][:] == h5_2[GT_FIELD][:])
 
     def test_filter_quality_snps(self):
         variations = VariationsArrays()
@@ -128,16 +86,6 @@ class FilterTest(unittest.TestCase):
         flt_chunk = filter_snps_by_qual(chunk, max_qual=-1)
         assert first(flt_chunk.values()).shape[0] == 0
 
-    def test_filter_quality_dp(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        kept_fields = ['/calls/DP', GT_FIELD]
-        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
-        chunk = first(snps)
-        set_low_dp_gts_to_missing(chunk, min_dp=300)
-        assert numpy.all(chunk[GT_FIELD][0][147] == [-1, -1])
-
-        set_low_dp_gts_to_missing(chunk)
-        assert numpy.all(chunk[GT_FIELD].shape[0] == 200)
 
     def test_filter_monomorfic(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -506,6 +454,57 @@ class MafFilterTest(unittest.TestCase):
                                 n_bins=3, range_=(0, 1), samples=samples)(hdf5)
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert numpy.all(filtered[COUNTS] == [340, 14, 5])
+
+    def test_set_quality_dp(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        kept_fields = ['/calls/DP', GT_FIELD]
+        snps = hdf5.iterate_chunks(kept_fields=kept_fields)
+        chunk = first(snps)
+        set_low_dp_gts_to_missing = LowDPGTsToMissingSetter(min_dp=300)
+        set_low_dp_gts_to_missing(chunk)
+        assert numpy.all(chunk[GT_FIELD][0][147] == [-1, -1])
+
+        set_low_dp_gts_to_missing(chunk)
+        assert numpy.all(chunk[GT_FIELD].shape[0] == 200)
+
+    def test_filter_quality_genotype(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        gqs = numpy.array([[10, 20, 5, 20, 25],
+                           [10, 2, 5, 15, 5]])
+        variations[GT_FIELD] = gts
+        variations[GQ_FIELD] = gqs
+        set_low_qual_gts_to_missing = LowQualGTsToMissingSetter(min_qual=0)
+        set_low_qual_gts_to_missing(variations)
+        filtered = variations[GT_FIELD]
+        assert numpy.all(filtered == gts)
+
+        expected = numpy.array([[[0, 0], [1, 1], [-1, -1], [1, 1], [0, 0]],
+                                [[0, 0], [-1, -1], [-1, -1], [0, 0],
+                                 [-1, -1]]])
+        set_low_qual_gts_to_missing = LowQualGTsToMissingSetter(min_qual=10)
+        set_low_qual_gts_to_missing(variations)
+        assert numpy.all(variations[GT_FIELD] == expected)
+
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        gqs = numpy.array([[10, 20, 5, 20, 25],
+                           [10, 2, 5, 15, 5]])
+        variations[GT_FIELD] = gts
+        variations[GQ_FIELD] = gqs
+        set_low_qual_gts_to_missing(variations)
+        assert numpy.all(variations[GT_FIELD] == expected)
+
+        set_low_qual_gts_to_missing = LowQualGTsToMissingSetter(min_qual=100)
+        set_low_qual_gts_to_missing(variations)
+        assert numpy.all(variations[GT_FIELD] == -1)
+
+        h5_1 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        set_low_qual_gts_to_missing = LowQualGTsToMissingSetter(min_qual=0)
+        h5_2 = set_low_qual_gts_to_missing(h5_1)
+        assert numpy.all(h5_1[GT_FIELD][:] == h5_2[FLT_VARS][GT_FIELD])
 
 
 if __name__ == "__main__":

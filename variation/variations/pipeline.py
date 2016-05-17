@@ -62,6 +62,7 @@ class Pipeline():
                             msg %= step['id'], step['name']
                             raise RuntimeError(msg)
                         result[step_id][COUNTS] += step_result[COUNTS]
+
         return result
 
     def _check_and_fix_histogram_ranges(self, vars_in, chunk_size, kept_fields,
@@ -102,11 +103,8 @@ class Pipeline():
             callable_instance.range = mins[idx], maxs[idx]
                 
 
-    def run(self, vars_in, vars_out=None, chunk_size=SNPS_PER_CHUNK,
+    def run(self, vars_in, vars_out, chunk_size=SNPS_PER_CHUNK,
             kept_fields=None, ignored_fields=None):
-
-        if vars_out is None:
-            vars_out = VariationsArrays()
 
         self._check_and_fix_histogram_ranges(vars_in, chunk_size,
                                              kept_fields=kept_fields,

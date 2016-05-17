@@ -761,28 +761,6 @@ EDGES = 'edges'
 FLT_VARS = 'flt_vars'
 
 
-
-def _filter_chunk3(chunk, selected_rows):
-
-    filtered_chunk = VariationsArrays()
-
-    for path in chunk.keys():
-        matrix = chunk[path]
-        try:
-            array = matrix.data
-        except:
-            array = matrix
-        flt_data = numpy.compress(selected_rows, array, axis=0)
-        try:
-            out_mat = filtered_chunk[path]
-            append_matrix(out_mat, flt_data)
-        except KeyError:
-            filtered_chunk[path] = flt_data
-    filtered_chunk.metadata = chunk.metadata
-    filtered_chunk.samples = chunk.samples
-    return filtered_chunk
-
-
 class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
@@ -889,3 +867,46 @@ class ObsHetFilter(_BaseFilter):
         return calc_obs_het(variations,
                             min_num_genotypes=self.min_num_genotypes,
                             min_call_dp=self.min_call_dp)
+
+
+class _GTsToMissingSetter:
+    def __init__(self, min_, field_path):
+        self.min = min_
+        self.field_path = field_path
+
+    @property
+    def do_filtering(self):
+        return True
+
+    @property
+    def do_histogram(self):
+        return False
+
+    def __call__(self, variations):
+
+        gts = variations[GT_FIELD][:]
+        mat_to_check = variations[self.field_path]
+
+        if is_dataset(variations[GT_FIELD]):
+            mat_to_check = mat_to_check[:]
+            gts[mat_to_check < self.min] = MISSING_INT
+        else:
+            gts[mat_to_check < self.min] = MISSING_INT
+
+        copied_vars = variations.get_chunk(slice(None, None),
+                                           ignored_fields=[GT_FIELD])
+        copied_vars[GT_FIELD] = gts
+
+        return {FLT_VARS: copied_vars}
+
+
+
+class LowDPGTsToMissingSetter(_GTsToMissingSetter):
+    def __init__(self, min_dp):
+        super().__init__(min_=min_dp, field_path=DP_FIELD)
+
+
+class LowQualGTsToMissingSetter(_GTsToMissingSetter):
+    def __init__(self, min_qual):
+        super().__init__(min_=min_qual, field_path=GQ_FIELD)
+

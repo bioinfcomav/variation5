@@ -16,7 +16,8 @@ from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           MacFilter, ObsHetFilter, FLT_VARS,
                                           LowDPGTsToMissingSetter,
                                           SNPQualFilter, NonBiallelicFilter,
-                                          StdDepthFilter)
+                                          StdDepthFilter,
+                                          Chi2GtFreqs2SampleSetsFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from test.test_utils import TEST_DATA_DIR
 
@@ -175,6 +176,26 @@ class PipelineTest(unittest.TestCase):
             self.fail('ValueError expected')
         except ValueError:
             pass
+
+    def test_filter_chi2_gt_sample_sets(self):
+        pipeline = Pipeline()
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        samples1 = hdf5.samples[:20]
+        samples2 = hdf5.samples[20:]
+        flt = Chi2GtFreqs2SampleSetsFilter(samples1, samples2, min_pval=0.05,
+                                           do_histogram=True)
+        pipeline.append(flt)
+
+        vars_out = VariationsArrays()
+        result = pipeline.run(hdf5, vars_out)
+
+        # check same result with no pipeline
+        result2 = flt(hdf5)
+        assert numpy.allclose(result['0']['counts'], result2['counts'])
+        assert numpy.allclose(result['0']['edges'], result2['edges'])
+        assert numpy.allclose(vars_out['/calls/GT'],
+                              result2[FLT_VARS]['/calls/GT'])
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PipelineTest.test_filter_snp_by_std_depth']

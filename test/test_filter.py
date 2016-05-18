@@ -22,13 +22,13 @@ from variation.variations.filters import (filter_snps_by_qual,
                                           filter_standarized_by_sample_depth,
                                           flt_hist_high_density_snps,
                                           flt_hist_samples_by_missing,
-                                          flt_hist_chi2_gt_2_sample_sets,
                                           MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
                                           ObsHetFilter, SNPQualFilter,
                                           LowDPGTsToMissingSetter,
                                           LowQualGTsToMissingSetter,
-                                          NonBiallelicFilter, StdDepthFilter)
+                                          NonBiallelicFilter, StdDepthFilter,
+                                          Chi2GtFreqs2SampleSetsFilter)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -56,22 +56,6 @@ class FilterTest(unittest.TestCase):
         assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
         assert list(counts) == [4, 2]
         assert list(edges) == [2., 2.5, 3.]
-
-    def test_filter_chi2_gt_sample_sets(self):
-        variations = VariationsArrays()
-        gts = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-                           [[0, 0], [0, 0], [0, 1], [1, 1], [1, 1], [1, 1]],
-                           [[0, 0], [0, 0], [0, 1], [1, 1], [1, 1], [1, 1]]])
-        variations[GT_FIELD] = gts
-        variations.samples = [1, 2, 3, 4, 5, 6]
-        samples1 = [1, 2, 3]
-        samples2 = [4, 5, 6]
-        res = flt_hist_chi2_gt_2_sample_sets(variations, samples1, samples2,
-                                             min_pval=0.05, n_bins=2)
-        filtered, counts, _ = res
-        assert list(counts) == [2, 2]
-        assert numpy.all(filtered[GT_FIELD] == gts[:2, ...])
 
 
 class FilterSamplesTest(unittest.TestCase):
@@ -441,6 +425,25 @@ class MonoBiallelicFilterTest(unittest.TestCase):
 
         flt_chunk = NonBiallelicFilter()(chunk)[FLT_VARS]
         assert flt_chunk[GT_FIELD].shape == (174, 153, 2)
+
+
+class Chi2GtFilterTest(unittest.TestCase):
+
+    def test_filter_chi2_gt_sample_sets(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[0, 0], [0, 0], [0, 1], [1, 1], [1, 1], [1, 1]],
+                           [[0, 0], [0, 0], [0, 1], [1, 1], [1, 1], [1, 1]]])
+        variations[GT_FIELD] = gts
+        variations.samples = [1, 2, 3, 4, 5, 6]
+        samples1 = [1, 2, 3]
+        samples2 = [4, 5, 6]
+        flt = Chi2GtFreqs2SampleSetsFilter(samples1, samples2, min_pval=0.05,
+                                           n_bins=2)
+        res = flt(variations)
+        assert list(res[COUNTS]) == [2, 2]
+        assert numpy.all(res[FLT_VARS][GT_FIELD] == gts[:2, ...])
 
 
 class DepthFilterTest(unittest.TestCase):

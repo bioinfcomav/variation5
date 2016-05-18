@@ -15,7 +15,8 @@ from variation.variations.pipeline import Pipeline
 from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           MacFilter, ObsHetFilter, FLT_VARS,
                                           LowDPGTsToMissingSetter,
-                                          SNPQualFilter, NonBiallelicFilter)
+                                          SNPQualFilter, NonBiallelicFilter,
+                                          StdDepthFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from test.test_utils import TEST_DATA_DIR
 
@@ -27,12 +28,12 @@ class PipelineTest(unittest.TestCase):
 
         flt = MinCalledGTsFilter(min_called=0.1, range_=(0, 1))
         pipeline.append(flt, id_='filter1')
-    
+
         vars_out = VariationsArrays()
         result = pipeline.run(hdf5, vars_out)
 
         # check same result with no pipeline
-        result2  = flt(hdf5)
+        result2 = flt(hdf5)
         assert numpy.allclose(result['filter1']['counts'], result2['counts'])
         assert numpy.allclose(result['filter1']['edges'], result2['edges'])
         assert numpy.allclose(vars_out['/calls/GT'],
@@ -42,7 +43,7 @@ class PipelineTest(unittest.TestCase):
         pipeline = Pipeline()
         flt = MinCalledGTsFilter(min_called=0.1, do_histogram=True)
         pipeline.append(flt, id_='filter1')
-    
+
         vars_out = VariationsArrays()
         result = pipeline.run(hdf5, vars_out)
 
@@ -56,11 +57,11 @@ class PipelineTest(unittest.TestCase):
         pipeline = Pipeline()
         flt = MinCalledGTsFilter(min_called=20, rates=False, do_histogram=True)
         pipeline.append(flt, id_='filter1')
-    
+
         vars_out = VariationsArrays()
         result = pipeline.run(hdf5, vars_out)
 
-        result2  = flt(hdf5)
+        result2 = flt(hdf5)
         assert numpy.allclose(result['filter1']['counts'], result2['counts'])
         assert numpy.allclose(result['filter1']['edges'], result2['edges'])
         assert numpy.allclose(vars_out['/calls/GT'],
@@ -166,7 +167,15 @@ class PipelineTest(unittest.TestCase):
         assert numpy.allclose(vars_out['/calls/GT'],
                               result2[FLT_VARS]['/calls/GT'])
 
+    def test_filter_snp_by_std_depth(self):
+        pipeline = Pipeline()
+        flt = StdDepthFilter(max_std_dp=1.5, do_histogram=True)
+        try:
+            pipeline.append(flt)
+            self.fail('ValueError expected')
+        except ValueError:
+            pass
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PipelineTest.test_min_mac']
+    # import sys;sys.argv = ['', 'PipelineTest.test_filter_snp_by_std_depth']
     unittest.main()

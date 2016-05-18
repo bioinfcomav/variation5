@@ -705,7 +705,7 @@ FLT_VARS = 'flt_vars'
 class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=None, samples=None):
+                 do_histogram=None, samples=None, can_be_in_pipeline=True):
         if do_histogram is None:
             if range_ is not None or n_bins != DEF_NUM_BINS:
                 do_histogram = True
@@ -713,6 +713,7 @@ class _BaseFilter:
                 do_histogram = False
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
+        self.can_be_in_pipeline = can_be_in_pipeline
         self.n_bins = n_bins
         self.range = range_
         self.samples = samples
@@ -841,6 +842,7 @@ class _GTsToMissingSetter:
     def __init__(self, min_, field_path):
         self.min = min_
         self.field_path = field_path
+        self.can_be_in_pipeline = True
 
     @property
     def do_filtering(self):
@@ -883,6 +885,7 @@ class NonBiallelicFilter(_BaseFilter):
     def __init__(self, samples=None):
         self.keep_monomorphic = False
         self.samples = samples
+        self.can_be_in_pipeline = True
 
     @property
     def do_filtering(self):
@@ -932,3 +935,13 @@ class NonBiallelicFilter(_BaseFilter):
             result[FLT_VARS] = variations.get_chunk(selected_rows)
 
         return result
+
+
+class StdDepthFilter(_BaseFilter):
+    def __init__(self, max_std_dp, **kwargs):
+        self.max = max_std_dp
+        kwargs['can_be_in_pipeline'] = False
+        super().__init__(**kwargs)
+
+    def _calc_stat(self, variations):
+        return _calc_standarized_by_sample_depth(variations)

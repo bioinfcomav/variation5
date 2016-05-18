@@ -5,7 +5,6 @@ import numpy
 
 from variation import SNPS_PER_CHUNK
 from variation.variations.filters import COUNTS, EDGES, FLT_VARS
-from variation.variations.vars_matrices import VariationsArrays
 
 
 class Pipeline():
@@ -13,10 +12,15 @@ class Pipeline():
         self._pipeline = []
 
     def append(self, callable_instance, id_=None):
+        if not callable_instance.can_be_in_pipeline:
+            name = callable_instance.__class__.__name__
+            msg = 'This function can not be in a pipeline: ' + name
+            raise ValueError(msg)
+
         if id_ is None:
             id_ = str(len(self._pipeline))
-        filter_name = callable_instance.__class__.__name__            
-        
+        filter_name = callable_instance.__class__.__name__
+
         step = {'callable': callable_instance, 'id': id_, 'name': filter_name}
         self._pipeline.append(step)
 
@@ -62,7 +66,6 @@ class Pipeline():
                             msg %= step['id'], step['name']
                             raise RuntimeError(msg)
                         result[step_id][COUNTS] += step_result[COUNTS]
-
         return result
 
     def _check_and_fix_histogram_ranges(self, vars_in, chunk_size, kept_fields,
@@ -71,14 +74,14 @@ class Pipeline():
         for step in self._pipeline:
             callable_instance = step['callable']
             if (callable_instance.do_histogram and
-                callable_instance.range is None):
+               callable_instance.range is None):
                 callables_to_check.append(callable_instance)
         if not callables_to_check:
-            return 
+            return
 
         original_do_filterings = []
         for callable_instance in callables_to_check:
-            original_do_filterings.append(callable_instance.do_filtering) 
+            original_do_filterings.append(callable_instance.do_filtering)
             callable_instance.do_filtering = False
 
         mins = []
@@ -86,7 +89,7 @@ class Pipeline():
         for callable_instance in callables_to_check:
             mins.append(None)
             maxs.append(None)
-        
+
         for slic3 in vars_in._create_iterate_chunk_slices(chunk_size):
             chunk = vars_in.get_chunk(slic3, kept_fields=kept_fields,
                                       ignored_fields=ignored_fields)
@@ -97,11 +100,10 @@ class Pipeline():
                     mins[idx] = min_
                 if maxs[idx] is None or maxs[idx] < max_:
                     maxs[idx] = max_
-                
+
         for idx, callable_instance in enumerate(callables_to_check):
             callable_instance.do_filtering = original_do_filterings[idx]
             callable_instance.range = mins[idx], maxs[idx]
-                
 
     def run(self, vars_in, vars_out, chunk_size=SNPS_PER_CHUNK,
             kept_fields=None, ignored_fields=None):
@@ -109,7 +111,7 @@ class Pipeline():
         self._check_and_fix_histogram_ranges(vars_in, chunk_size,
                                              kept_fields=kept_fields,
                                              ignored_fields=ignored_fields)
-        
+
         pipeline_funct = functools.partial(self._pipeline_funct,
                                            vars_in=vars_in,
                                            kept_fields=kept_fields,
@@ -120,5 +122,5 @@ class Pipeline():
         # process to be written
         slices = vars_in._create_iterate_chunk_slices(chunk_size)
         results_and_chunks = map(pipeline_funct, slices)
-        
+
         return self._reduce_results(results_and_chunks, vars_out)

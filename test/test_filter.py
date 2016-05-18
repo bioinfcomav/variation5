@@ -15,8 +15,7 @@ import numpy
 
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
-from variation.variations.filters import (filter_snps_by_qual,
-                                          filter_high_density_snps,
+from variation.variations.filters import (filter_high_density_snps,
                                           flt_hist_high_density_snps,
                                           MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
@@ -307,7 +306,6 @@ class SNPQualFilterTest(unittest.TestCase):
         flt_chunk = SNPQualFilter(min_qual=530)(chunk)[FLT_VARS]
         assert first(flt_chunk.values()).shape[0] == 126
 
-        flt_chunk = filter_snps_by_qual(chunk)
         flt_chunk = SNPQualFilter()(chunk)[FLT_VARS]
         assert first(flt_chunk.values()).shape[0] == 200
 

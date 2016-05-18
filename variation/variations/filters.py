@@ -800,7 +800,7 @@ class SamplesFilterByIndex:
 
     def __call__(self, variations):
         flt_vars = _filter_samples_by_index(variations, self.samples_col_idxs,
-                                           reverse=self.reverse)
+                                            reverse=self.reverse)
         return {FLT_VARS: flt_vars}
 
 

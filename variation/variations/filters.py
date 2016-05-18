@@ -626,6 +626,7 @@ class _BaseFilter:
             selected_rows = selector_min & selector_max
         else:
             selected_rows = _filter_no_row(variations)
+        print(selected_rows)
         return variations.get_chunk(selected_rows)
 
     def _filter_samples_for_stats(self, variations):

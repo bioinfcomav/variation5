@@ -198,5 +198,5 @@ class PipelineTest(unittest.TestCase):
                               result2[FLT_VARS]['/calls/GT'])
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PipelineTest.test_filter_snp_by_std_depth']
+    import sys;sys.argv = ['', 'PipelineTest.test_min_mac']
     unittest.main()

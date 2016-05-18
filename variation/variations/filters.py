@@ -840,3 +840,57 @@ class SampleFilter:
         filter_samples = SamplesFilterByIndex(idx_to_keep,
                                               reverse=self.reverse)
         return filter_samples(variations)
+
+
+class MissingRateSampleFilter(_BaseFilter):
+    def __init__(self, min_called_rate, all_variations=None,
+                 chunk_size=SNPS_PER_CHUNK, **kwargs):
+        self.min = min_called_rate
+        self.all_variations = all_variations
+        self.chunk_size = chunk_size
+
+        self.how_to_be_in_pipeline = 'Add all_variations to __init__'
+
+        can_be_in_pipeline = False if all_variations is None else True
+        kwargs['can_be_in_pipeline'] = can_be_in_pipeline
+
+        super().__init__(**kwargs)
+
+    def _calc_stat_for_filtered_samples(self, variations):
+        if self.samples is not None:
+            msg = self.__class__.__name__
+            msg += ' does not support samples'
+            raise ValueError(msg)
+        return super()._calc_stat_for_filtered_samples(variations)
+
+    def _calc_stats_one_chunk(self, chunk):
+        return calc_called_gt(chunk, rates=True, axis=0)
+
+    def _calc_stats_by_chunk(self):
+        variations = self.all_variations
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=self.chunk_size)
+
+        missing = None
+        for chunk in chunks:
+            chunk_missing = calc_called_gt(chunk, rates=False, axis=0)
+            if missing is None:
+                missing = chunk_missing
+            else:
+                missing += chunk_missing
+        rates = missing / variations.num_variations
+        if self.range is None:
+            self.range = min(rates), max(rates)
+        return rates
+
+    def _calc_stat(self, variations):
+        if self.all_variations is None:
+            missing_rates = self._calc_stats_one_chunk(variations)
+        else:
+            missing_rates = self._calc_stats_by_chunk()
+        return missing_rates
+
+    def _filter(self, variations, stat):
+        idx_to_keep = stat > self.min
+        filter_samples = SamplesFilterByIndex(idx_to_keep)
+        return filter_samples(variations)[FLT_VARS]

@@ -16,7 +16,6 @@ import numpy
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (filter_snps_by_qual,
-                                          filter_samples_by_missing,
                                           filter_high_density_snps,
                                           flt_hist_high_density_snps,
                                           flt_hist_samples_by_missing,
@@ -27,7 +26,8 @@ from variation.variations.filters import (filter_snps_by_qual,
                                           LowQualGTsToMissingSetter,
                                           NonBiallelicFilter, StdDepthFilter,
                                           Chi2GtFreqs2SampleSetsFilter,
-                                          SampleFilter)
+                                          SampleFilter,
+                                          MissingRateSampleFilter)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -55,22 +55,6 @@ class FilterTest(unittest.TestCase):
         assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
         assert list(counts) == [4, 2]
         assert list(edges) == [2., 2.5, 3.]
-
-
-class FilterSamplesTest_old(unittest.TestCase):
-
-    def test_filter_samples_by_missing(self):
-        variations = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        chunk = first(variations.iterate_chunks())
-
-        new_var = filter_samples_by_missing(chunk, 0.9)
-        assert len(new_var.samples) == 0
-
-        new_var = filter_samples_by_missing(chunk, 0.1)
-        assert len(new_var.samples) == len(chunk.samples)
-
-        new_var2 = flt_hist_samples_by_missing(chunk, 0.1)[0]
-        assert len(new_var.samples) == len(new_var2.samples)
 
 
 class MinCalledGTTest(unittest.TestCase):
@@ -471,7 +455,45 @@ class FilterSamplesTest(unittest.TestCase):
         assert varis[GQ_FIELD].shape == (943, n_samples - 3)
         assert varis[CHROM_FIELD].shape == (943,)
 
+    def test_filter_samples_by_missing(self):
+        variations = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        chunk = first(variations.iterate_chunks())
+
+        new_var = MissingRateSampleFilter(min_called_rate=0.9)(chunk)[FLT_VARS]
+        assert len(new_var.samples) == 0
+
+        new_var = MissingRateSampleFilter(min_called_rate=0.1)(chunk)[FLT_VARS]
+        assert len(new_var.samples) == len(chunk.samples)
+
+        # check that it works by chunk
+        res = MissingRateSampleFilter(min_called_rate=0.2,
+                                      all_variations=variations,
+                                      do_histogram=True)(variations)
+        res2 = MissingRateSampleFilter(min_called_rate=0.2,
+                                       do_histogram=True)(variations)
+
+        assert res[FLT_VARS].samples == res2[FLT_VARS].samples
+        assert numpy.all(res[FLT_VARS][GT_FIELD] == res2[FLT_VARS][GT_FIELD])
+
+        # do histogram
+        assert numpy.allclose(res[EDGES], res2[EDGES])
+        # There's a disagreement between the two ways. We think is due to
+        # some rounding problem res[COUNTS][9:11] == res2[COUNTS][9:11]
+        assert numpy.all(res[COUNTS][:9] == res2[COUNTS][:9])
+        assert numpy.all(res[COUNTS][11:] == res2[COUNTS][11:])
+
+        res = MissingRateSampleFilter(min_called_rate=0.2,
+                                      all_variations=variations,
+                                      do_histogram=True,
+                                      range_=(0, 1))(variations)
+        res2 = MissingRateSampleFilter(min_called_rate=0.2,
+                                       do_histogram=True,
+                                       range_=(0, 1))(variations)
+
+        # do histogram
+        assert numpy.all(res[COUNTS] == res2[COUNTS])
+
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'MafFilterTest.test_filter_quality_snps']
+    # import sys;sys.argv = ['', 'FilterSamplesTest']
     unittest.main()

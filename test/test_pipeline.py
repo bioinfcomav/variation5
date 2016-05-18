@@ -16,7 +16,7 @@ from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           MacFilter, ObsHetFilter, FLT_VARS,
                                           LowDPGTsToMissingSetter,
                                           SNPQualFilter, NonBiallelicFilter,
-                                          StdDepthFilter,
+                                          StdDepthFilter, SampleFilter,
                                           Chi2GtFreqs2SampleSetsFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from test.test_utils import TEST_DATA_DIR
@@ -197,6 +197,22 @@ class PipelineTest(unittest.TestCase):
         assert numpy.allclose(vars_out['/calls/GT'],
                               result2[FLT_VARS]['/calls/GT'])
 
+    def test_filter_samples(self):
+        pipeline = Pipeline()
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        samples = hdf5.samples[:20]
+        flt = SampleFilter(samples)
+        pipeline.append(flt)
+
+        vars_out = VariationsArrays()
+        pipeline.run(hdf5, vars_out)
+
+        # check same result with no pipeline
+        result2 = flt(hdf5)
+        assert numpy.allclose(vars_out['/calls/GT'],
+                              result2[FLT_VARS]['/calls/GT'])
+
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'PipelineTest.test_min_mac']
+    # import sys;sys.argv = ['', 'PipelineTest.test_min_mac']
     unittest.main()

@@ -1,5 +1,6 @@
 from functools import partial
 import array
+from collections import Counter
 
 import numpy
 from scipy.stats import chi2_contingency
@@ -154,110 +155,6 @@ def filter_macs(variations, filtered_vars=None, min_mac=None, max_mac=None,
                             min_=min_mac, max_=max_mac,
                             min_num_genotypes=min_num_genotypes)
 
-
-def _filter_obs_het2(variations, filtered_vars, min_=None, max_=None,
-                     min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                     min_call_dp=0, samples=None):
-    if samples is None:
-        vars_for_stat = variations
-    else:
-        vars_for_stat = filter_samples(variations, samples, by_chunk=False)
-
-    obs_het = calc_obs_het(vars_for_stat, min_num_genotypes=min_num_genotypes,
-                           min_call_dp=min_call_dp)
-
-    with numpy.errstate(invalid='ignore'):
-        selector_max = None if max_ is None else obs_het <= max_
-        selector_min = None if min_ is None else obs_het >= min_
-
-    if selector_max is None and selector_min is not None:
-        selected_rows = selector_min
-    elif selector_max is not None and selector_min is None:
-        selected_rows = selector_max
-    elif selector_max is not None and selector_min is not None:
-        selected_rows = selector_min & selector_max
-    else:
-        selected_rows = _filter_no_row(variations)
-    flt_vars = _filter_chunk2(variations, filtered_vars, selected_rows)
-    return flt_vars, obs_het
-
-
-def _filter_obs_het(variations, filtered_vars, min_=None, max_=None,
-                    min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                    min_call_dp=0):
-    res = _filter_obs_het2(variations, filtered_vars=filtered_vars,
-                           min_=min_, max_=max_,
-                           min_num_genotypes=min_num_genotypes,
-                           min_call_dp=min_call_dp)
-    return res[0]
-
-
-def filter_obs_het(variations, filtered_vars=None, min_het=None, max_het=None,
-                   min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                   min_call_dp=0, by_chunk=True):
-    if by_chunk:
-        filter_funct = partial(_filter_obs_het, min_=min_het, max_=max_het,
-                               min_num_genotypes=min_num_genotypes,
-                               min_call_dp=min_call_dp)
-        return _filter_by_chunk(variations, filtered_vars, filter_funct)
-    else:
-        return _filter_obs_het(variations, filtered_vars=filtered_vars,
-                               min_=min_het, max_=max_het,
-                               min_num_genotypes=min_num_genotypes,
-                               min_call_dp=min_call_dp)
-
-
-def flt_hist_obs_het(variations, filtered_vars=None,
-                     min_het=None, max_het=None,
-                     min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                     min_call_dp=0, samples=None, n_bins=DEF_NUM_BINS,
-                     range_=None):
-    res = _filter_obs_het2(variations, filtered_vars=filtered_vars,
-                           min_=min_het, max_=max_het,
-                           min_num_genotypes=min_num_genotypes,
-                           min_call_dp=min_call_dp, samples=samples)
-    variations, stat = res
-    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
-    return variations, counts, edges
-
-
-def _filter_min_called_gts2(variations, filtered_vars=None, min_=None,
-                            rates=True):
-    called_gts = calc_called_gt(variations, rates=rates)
-    if min_ is not None:
-        selected_rows = None if min_ is None else called_gts > min_
-    else:
-        selected_rows = _filter_no_row(variations)
-    return _filter_chunk2(variations, filtered_vars, selected_rows), called_gts
-
-
-def _filter_min_called_gts(variations, filtered_vars=None, min_=None,
-                           rates=True):
-    return _filter_min_called_gts2(variations, filtered_vars=filtered_vars,
-                                   min_=min_, rates=rates)[0]
-
-
-def flt_hist_min_called_gts(variations, filtered_vars=None, min_=None,
-                            rates=True, n_bins=DEF_NUM_BINS, range_=None):
-    res = _filter_min_called_gts2(variations, filtered_vars=filtered_vars,
-                                  min_=min_, rates=rates)
-    variations, stat = res
-    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
-    return variations, counts, edges
-
-
-def filter_min_called_gts(variations, filtered_vars=None, min_called=None,
-                          rates=True, by_chunk=True):
-    no_chunk_flt_funct = _filter_min_called_gts
-    if by_chunk:
-        filter_funct = partial(no_chunk_flt_funct, min_=min_called,
-                               rates=rates)
-        return _filter_by_chunk(variations, filtered_vars, filter_funct)
-    else:
-        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
-                                  min_=min_called, rates=rates)
-
-
 def _filter_gt_by_chunk(variations, filter_funct, field_path):
 
     gt_mat = variations[GT_FIELD]
@@ -330,58 +227,6 @@ def filter_snps_by_qual(variations, filtered_vars=None, min_qual=None,
     else:
         return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
                                   min_=min_qual, max_=max_qual)
-
-
-def _filter_standarized_by_sample_depth(variations, filtered_vars=None,
-                                        max_std_dp=None, samples=None):
-    if samples is None:
-        vars_for_stat = variations
-    else:
-        vars_for_stat = filter_samples(variations, samples, by_chunk=False)
-
-    stat = _calc_standarized_by_sample_depth(vars_for_stat)
-
-    if max_std_dp:
-        selected_rows = stat <= max_std_dp
-    else:
-        selected_rows = numpy.full_like(stat, True, dtype=numpy.bool_)
-
-    return _filter_chunk2(variations, filtered_vars, selected_rows), stat
-
-
-def _filter_standarized_by_sample_depth2(variations, filtered_vars=None,
-                                         max_std_dp=None, samples=None):
-    return _filter_standarized_by_sample_depth(variations,
-                                               filtered_vars=filtered_vars,
-                                               max_std_dp=max_std_dp,
-                                               samples=samples)[0]
-
-
-def filter_standarized_by_sample_depth(variations, filtered_vars=None,
-                                       max_std_dp=None,
-                                       chunk_size=SNPS_PER_CHUNK,
-                                       samples=None):
-    no_chunk_flt_funct = _filter_standarized_by_sample_depth2
-
-    if chunk_size is None:
-        return no_chunk_flt_funct(variations, filtered_vars=filtered_vars,
-                                  max_std_dp=max_std_dp, samples=samples)
-    else:
-        filter_funct = partial(no_chunk_flt_funct, max_std_dp=max_std_dp,
-                               samples=samples)
-        return _filter_by_chunk(variations, filtered_vars, filter_funct)
-
-
-def flt_hist_standarized_by_sample_depth(variations, filtered_vars=None,
-                                         max_std_dp=None, n_bins=DEF_NUM_BINS,
-                                         range_=None, samples=None):
-    res = _filter_standarized_by_sample_depth(variations,
-                                              filtered_vars=filtered_vars,
-                                              max_std_dp=max_std_dp,
-                                              samples=samples)
-    variations, stat = res
-    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
-    return variations, counts, edges
 
 
 def _filter_monomorphic_snps(variations, filtered_vars=None, min_maf=None,
@@ -492,46 +337,6 @@ def keep_biallelic_and_monomorphic(variations, filtered_vars=None,
                                  keep_monomorphic=True, by_chunk=by_chunk)
 
 
-
-
-def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
-                             reverse=False):
-    if filtered_vars is None:
-        filtered_vars = VariationsArrays()
-
-    samples = variations.samples
-    try:
-        dtype = sample_cols.dtype
-        is_bool = numpy.issubdtype(dtype, numpy.bool)
-    except AttributeError:
-        item = first(iter(sample_cols))
-        is_bool = isinstance(item, bool)
-    if not is_bool:
-        sample_cols = [idx in sample_cols for idx in range(len(samples))]
-
-    if 'shape' not in dir(sample_cols):
-        sample_cols = numpy.array(sample_cols, dtype=numpy.bool)
-
-    if reverse:
-        sample_cols = numpy.logical_not(sample_cols)
-
-    for path in variations.keys():
-        matrix = variations[path]
-        if is_dataset(matrix):
-            matrix = matrix[:]
-        if 'calls' in path:
-            flt_data = matrix[:, sample_cols]
-            # flt_data = numpy.compress(sample_cols, , axis=1)
-            filtered_vars[path] = flt_data
-        else:
-            filtered_vars[path] = matrix
-    filtered_vars.metadata = variations.metadata
-    kept_samples = [samples[idx] for idx, keep in enumerate(sample_cols)
-                    if keep]
-    filtered_vars.samples = kept_samples
-    return filtered_vars
-
-
 def filter_samples_by_index(variations, sample_cols, filtered_vars=None,
                             reverse=False, by_chunk=True):
     if by_chunk:
@@ -549,25 +354,6 @@ def filter_samples_by_index(variations, sample_cols, filtered_vars=None,
         return _filter_samples_by_index(variations, sample_cols,
                                         filtered_vars=filtered_vars,
                                         reverse=reverse)
-
-
-def filter_samples(variations, samples, filtered_vars=None,
-                   reverse=False, by_chunk=True):
-    var_samples = variations.samples
-    if len(set(var_samples)) != len(var_samples):
-        raise ValueError('Some samples in the given variations are repeated')
-    if len(set(samples)) != len(samples):
-        raise ValueError('Some samples in the given samples are repeated')
-    samples_not_int_vars = set(samples).difference(var_samples)
-    if samples_not_int_vars:
-        msg = 'Samples not found in variations: '
-        msg += ','.join(samples_not_int_vars)
-        raise ValueError(msg)
-
-    idx_to_keep = [var_samples.index(sample) for sample in samples]
-
-    return filter_samples_by_index(variations, idx_to_keep, reverse=reverse,
-                                   by_chunk=by_chunk)
 
 
 def flt_hist_samples_by_missing(variations, min_called_rate,
@@ -608,7 +394,8 @@ class _BaseFilter:
         self.can_be_in_pipeline = can_be_in_pipeline
         self.n_bins = n_bins
         self.range = range_
-        self.samples = samples
+        self._samples = samples
+        self._filter_samples = None
 
     def _filter(self, variations, stat):
         min_ = getattr(self, 'min', None)
@@ -626,14 +413,26 @@ class _BaseFilter:
             selected_rows = selector_min & selector_max
         else:
             selected_rows = _filter_no_row(variations)
-        print(selected_rows)
         return variations.get_chunk(selected_rows)
+
+    @property
+    def samples(self):
+        return self._samples
+
+    def _get_sample_filter(self):
+        if self._filter_samples is not None:
+            return self._filter_samples
+
+        filter_samples = SampleFilter(self.samples, self._samples)
+        self._filter_samples = filter_samples
+        return filter_samples
 
     def _filter_samples_for_stats(self, variations):
         if self.samples is None:
             vars_for_stat = variations
         else:
-            vars_for_stat = filter_samples(variations, self.samples)
+            filter_samples = self._get_sample_filter()
+            vars_for_stat = filter_samples(variations)[FLT_VARS]
         return vars_for_stat
 
     def _calc_stat_for_filtered_samples(self, variations):
@@ -777,7 +576,7 @@ class NonBiallelicFilter(_BaseFilter):
 
     def __init__(self, samples=None):
         self.keep_monomorphic = False
-        self.samples = samples
+        self._samples = samples
         self.can_be_in_pipeline = True
 
     @property
@@ -841,8 +640,8 @@ class StdDepthFilter(_BaseFilter):
 
 
 def _calc_fisher_for_gts(variations, samples1, samples2):
-    snps1 = filter_samples(variations, samples1, by_chunk=False)
-    snps2 = filter_samples(variations, samples2, by_chunk=False)
+    snps1 = SampleFilter(samples1)(variations)[FLT_VARS]
+    snps2 = SampleFilter(samples2)(variations)[FLT_VARS]
     gt_counts1 = _count_gts(snps1)
     gt_counts2 = _count_gts(snps2)
 
@@ -945,3 +744,99 @@ class Chi2GtFreqs2SampleSetsFilter(_BaseFilter):
         _, p_vals, _ = _calc_fisher_for_gts(variations, self.samples1,
                                             self.samples2)
         return p_vals
+
+
+def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
+                             reverse=False):
+    if filtered_vars is None:
+        filtered_vars = VariationsArrays()
+
+    samples = variations.samples
+    try:
+        dtype = sample_cols.dtype
+        is_bool = numpy.issubdtype(dtype, numpy.bool)
+    except AttributeError:
+        item = first(iter(sample_cols))
+        is_bool = isinstance(item, bool)
+    if not is_bool:
+        sample_cols = [idx in sample_cols for idx in range(len(samples))]
+
+    if 'shape' not in dir(sample_cols):
+        sample_cols = numpy.array(sample_cols, dtype=numpy.bool)
+
+    if reverse:
+        sample_cols = numpy.logical_not(sample_cols)
+
+    for path in variations.keys():
+        matrix = variations[path]
+        if is_dataset(matrix):
+            matrix = matrix[:]
+        if 'calls' in path:
+            flt_data = matrix[:, sample_cols]
+            # flt_data = numpy.compress(sample_cols, , axis=1)
+            filtered_vars[path] = flt_data
+        else:
+            filtered_vars[path] = matrix
+    filtered_vars.metadata = variations.metadata
+    kept_samples = [samples[idx] for idx, keep in enumerate(sample_cols)
+                    if keep]
+    filtered_vars.samples = kept_samples
+    return filtered_vars
+
+
+class SamplesFilterByIndex:
+    def __init__(self, samples_col_idxs, reverse=False):
+        self.samples_col_idxs = samples_col_idxs
+        self.reverse = reverse
+        self.can_be_in_pipeline = True
+
+    @property
+    def do_filtering(self):
+        return True
+
+    @property
+    def do_histogram(self):
+        return False
+
+    def __call__(self, variations):
+        flt_vars = _filter_samples_by_index(variations, self.samples_col_idxs,
+                                           reverse=self.reverse)
+        return {FLT_VARS: flt_vars}
+
+
+class SampleFilter:
+    def __init__(self, samples, reverse=False):
+        self.samples = samples
+        self.reverse = reverse
+        self.can_be_in_pipeline = True
+
+    @property
+    def do_filtering(self):
+        return True
+
+    @property
+    def do_histogram(self):
+        return False
+
+    def __call__(self, variations):
+        samples = self.samples
+        var_samples = variations.samples
+        if len(set(var_samples)) != len(var_samples):
+            repeated_samples = [item for item, cnt in
+                                Counter(var_samples).items() if cnt > 1]
+            msg = 'Some samples in the given variations are repeated: '
+            msg += ','.join(repeated_samples)
+            raise ValueError(msg)
+        if len(set(samples)) != len(samples):
+            raise ValueError('Some samples in the given samples are repeated')
+        samples_not_int_vars = set(samples).difference(var_samples)
+        if samples_not_int_vars:
+            msg = 'Samples not found in variations: '
+            msg += ','.join(samples_not_int_vars)
+            raise ValueError(msg)
+
+        idx_to_keep = [var_samples.index(sample) for sample in samples]
+
+        filter_samples = SamplesFilterByIndex(idx_to_keep,
+                                              reverse=self.reverse)
+        return filter_samples(variations)

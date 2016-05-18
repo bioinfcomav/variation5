@@ -16,10 +16,8 @@ import numpy
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (filter_snps_by_qual,
-                                          filter_samples,
                                           filter_samples_by_missing,
                                           filter_high_density_snps,
-                                          filter_standarized_by_sample_depth,
                                           flt_hist_high_density_snps,
                                           flt_hist_samples_by_missing,
                                           MinCalledGTsFilter, FLT_VARS, COUNTS,
@@ -28,7 +26,8 @@ from variation.variations.filters import (filter_snps_by_qual,
                                           LowDPGTsToMissingSetter,
                                           LowQualGTsToMissingSetter,
                                           NonBiallelicFilter, StdDepthFilter,
-                                          Chi2GtFreqs2SampleSetsFilter)
+                                          Chi2GtFreqs2SampleSetsFilter,
+                                          SampleFilter)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -58,27 +57,7 @@ class FilterTest(unittest.TestCase):
         assert list(edges) == [2., 2.5, 3.]
 
 
-class FilterSamplesTest(unittest.TestCase):
-    def test_filter_samples(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        samples = ['1_14_1_gbs', '1_17_1_gbs', '1_18_4_gbs']
-        varis = filter_samples(hdf5, samples=samples)
-        assert varis.samples == samples
-        assert varis[GT_FIELD].shape == (943, 3, 2)
-        assert varis[GQ_FIELD].shape == (943, 3)
-        assert varis[CHROM_FIELD].shape == (943,)
-
-        varis = filter_samples(hdf5, samples=samples, reverse=True,
-                               by_chunk=True)
-        assert all([sample not in samples for sample in varis.samples])
-        n_samples = len(hdf5.samples)
-        assert varis[GT_FIELD].shape == (943, n_samples - 3, 2)
-        assert varis[GQ_FIELD].shape == (943, n_samples - 3)
-        assert varis[CHROM_FIELD].shape == (943,)
-
-        varis2 = filter_samples(hdf5, samples=samples, reverse=True,
-                                by_chunk=False)
-        assert numpy.all(varis[GT_FIELD] == varis2[GT_FIELD])
+class FilterSamplesTest_old(unittest.TestCase):
 
     def test_filter_samples_by_missing(self):
         variations = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -276,6 +255,7 @@ class ObsHetFiltterTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
                            [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
         variations[GT_FIELD] = gts
+        variations.samples = [1, 2, 3, 4, 5]
 
         filtered = ObsHetFilter(min_num_genotypes=0)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
@@ -310,7 +290,7 @@ class ObsHetFiltterTest(unittest.TestCase):
         filtered = ObsHetFilter(min_het=0.6, max_het=0.9, min_call_dp=5,
                                 n_bins=3, range_=(0, 1), samples=samples)(hdf5)
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
-        assert numpy.all(filtered[COUNTS] == [340, 14, 5])
+        assert numpy.all(filtered[COUNTS] == [339, 14, 6])
 
 
 class SNPQualFilterTest(unittest.TestCase):
@@ -454,7 +434,7 @@ class DepthFilterTest(unittest.TestCase):
         vars_['/calls/DP'] = dps
         vars2 = StdDepthFilter(max_std_dp=None)(vars_)[FLT_VARS]
         numpy.allclose(vars2['/calls/DP'], dps)
-        vars2 = filter_standarized_by_sample_depth(vars_, max_std_dp=1.5)
+        vars2 = StdDepthFilter(max_std_dp=1.5)(vars_)[FLT_VARS]
         numpy.allclose(vars2['/calls/DP'], dps[0, :])
 
         result = StdDepthFilter(max_std_dp=None, n_bins=2)(vars_)
@@ -468,11 +448,28 @@ class DepthFilterTest(unittest.TestCase):
         vars2 = StdDepthFilter(max_std_dp=1.5)(hdf5)[FLT_VARS]
         vars3 = StdDepthFilter(max_std_dp=1.5)(snps)[FLT_VARS]
         assert numpy.allclose(vars2[DP_FIELD], vars3[DP_FIELD])
-        vars3 = filter_standarized_by_sample_depth(snps, max_std_dp=1.5,
-                                                   chunk_size=0)
-        assert numpy.allclose(vars2[DP_FIELD], vars3[DP_FIELD])
 
         StdDepthFilter(max_std_dp=1.5, samples=snps.samples[1:20])(snps)
+
+
+class FilterSamplesTest(unittest.TestCase):
+
+    def test_filter_samples(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        samples = ['1_14_1_gbs', '1_17_1_gbs', '1_18_4_gbs']
+        varis = SampleFilter(samples=samples)(hdf5)[FLT_VARS]
+        # varis = filter_samples(hdf5, samples=samples)
+        assert varis.samples == samples
+        assert varis[GT_FIELD].shape == (943, 3, 2)
+        assert varis[GQ_FIELD].shape == (943, 3)
+        assert varis[CHROM_FIELD].shape == (943,)
+
+        varis = SampleFilter(samples=samples, reverse=True)(hdf5)[FLT_VARS]
+        assert all([sample not in samples for sample in varis.samples])
+        n_samples = len(hdf5.samples)
+        assert varis[GT_FIELD].shape == (943, n_samples - 3, 2)
+        assert varis[GQ_FIELD].shape == (943, n_samples - 3)
+        assert varis[CHROM_FIELD].shape == (943,)
 
 
 if __name__ == "__main__":

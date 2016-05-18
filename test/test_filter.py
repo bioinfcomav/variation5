@@ -18,7 +18,6 @@ from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (filter_snps_by_qual,
                                           filter_high_density_snps,
                                           flt_hist_high_density_snps,
-                                          flt_hist_samples_by_missing,
                                           MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
                                           ObsHetFilter, SNPQualFilter,

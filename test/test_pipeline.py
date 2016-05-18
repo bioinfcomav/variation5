@@ -172,6 +172,7 @@ class PipelineTest(unittest.TestCase):
     def test_filter_snp_by_std_depth(self):
         pipeline = Pipeline()
         flt = StdDepthFilter(max_std_dp=1.5, do_histogram=True)
+        # TODO fixme
         try:
             pipeline.append(flt)
             self.fail('ValueError expected')

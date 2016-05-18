@@ -4,10 +4,6 @@ import array
 import numpy
 from scipy.stats import chi2_contingency
 
-from allel.chunked.util import get_blen_array
-from allel.model.ndarray import GenotypeArray
-from allel.opt.stats import gn_locate_unlinked_int8
-
 from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_called_gt, GQ_FIELD, DP_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT,
@@ -16,8 +12,7 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         histogram, DEF_NUM_BINS)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT
-from variation.matrix.methods import (append_matrix, is_dataset,
-                                      iterate_matrix_chunks)
+from variation.matrix.methods import append_matrix, is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import row_value_counter_fact
 

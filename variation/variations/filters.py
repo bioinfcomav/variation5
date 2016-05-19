@@ -15,62 +15,20 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_depth_modes_by_sample)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT)
-from variation.matrix.methods import append_matrix, is_dataset
+from variation.matrix.methods import is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import row_value_counter_fact
 
 
-def _filter_dsets_chunks(selector_function, dsets_chunks):
-    for dsets_chunk in dsets_chunks:
-        bool_selection = selector_function(dsets_chunk)
-        flt_dsets_chunk = {}
-        for field, dset_chunk in dsets_chunk.items():
-            flt_data = numpy.compress(bool_selection, dset_chunk.data, axis=0)
-            flt_dsets_chunk[field] = flt_data
-        yield flt_dsets_chunk
-
-
-def _filter_all_rows(chunk):
-    n_snps = chunk.num_variations
-    selector = numpy.zeros((n_snps,), dtype=numpy.bool_)
-    return selector
+COUNTS = 'counts'
+EDGES = 'edges'
+FLT_VARS = 'flt_vars'
 
 
 def _filter_no_row(chunk):
     n_snps = chunk.num_variations
     selector = numpy.ones((n_snps,), dtype=numpy.bool_)
     return selector
-
-
-def _filter_chunk(chunk, fields, filter_funct):
-    selected_rows = filter_funct(chunk)
-    return _filter_chunk2(chunk, selected_rows)
-
-
-def _filter_chunk2(chunk, filtered_chunk, selected_rows):
-    if filtered_chunk is None:
-        filtered_chunk = VariationsArrays()
-
-    for path in chunk.keys():
-        matrix = chunk[path]
-        try:
-            array = matrix.data
-        except:
-            array = matrix
-        flt_data = numpy.compress(selected_rows, array, axis=0)
-        try:
-            out_mat = filtered_chunk[path]
-            append_matrix(out_mat, flt_data)
-        except KeyError:
-            filtered_chunk[path] = flt_data
-    filtered_chunk.metadata = chunk.metadata
-    filtered_chunk.samples = chunk.samples
-    return filtered_chunk
-
-
-COUNTS = 'counts'
-EDGES = 'edges'
-FLT_VARS = 'flt_vars'
 
 
 class _BaseFilter:

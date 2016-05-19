@@ -16,9 +16,10 @@ from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           MacFilter, ObsHetFilter, FLT_VARS,
                                           LowDPGTsToMissingSetter,
                                           SNPQualFilter, NonBiallelicFilter,
-                                          SampleFilter,
+                                          SampleFilter, FieldFilter,
                                           Chi2GtFreqs2SampleSetsFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
+from variation import GT_FIELD
 from test.test_utils import TEST_DATA_DIR
 
 
@@ -187,6 +188,23 @@ class PipelineTest(unittest.TestCase):
         assert numpy.allclose(result['0']['edges'], result2['edges'])
         assert numpy.allclose(vars_out['/calls/GT'],
                               result2[FLT_VARS]['/calls/GT'])
+
+    def test_field_filter(self):
+        pipeline = Pipeline()
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        flt = FieldFilter(kept_fields=[GT_FIELD])
+        pipeline.append(flt)
+
+        vars_out = VariationsArrays()
+        result = pipeline.run(hdf5, vars_out)
+
+        # check same result with no pipeline
+        result2 = flt(hdf5)
+        assert numpy.allclose(vars_out['/calls/GT'],
+                              result2[FLT_VARS]['/calls/GT'])
+        assert list(vars_out.keys()) == [GT_FIELD]
+        assert list(result2[FLT_VARS].keys()) == [GT_FIELD]
 
     def test_filter_samples(self):
         pipeline = Pipeline()

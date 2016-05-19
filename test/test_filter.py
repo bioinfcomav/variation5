@@ -22,7 +22,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           LowQualGTsToMissingSetter,
                                           NonBiallelicFilter, std_depth_filter,
                                           Chi2GtFreqs2SampleSetsFilter,
-                                          SampleFilter,
+                                          SampleFilter, FieldFilter,
                                           filter_samples_by_missing_rate,
                                           filter_variation_density)
 from variation.iterutils import first
@@ -422,6 +422,18 @@ class Chi2GtFilterTest(unittest.TestCase):
         res = flt(variations)
         assert list(res[COUNTS]) == [2, 2]
         assert numpy.all(res[FLT_VARS][GT_FIELD] == gts[:2, ...])
+
+
+class FieldFilterTest(unittest.TestCase):
+    def test_field_filter(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        orig_keys = hdf5.keys()
+
+        varis = FieldFilter(kept_fields=[GT_FIELD])(hdf5)[FLT_VARS]
+        assert [GT_FIELD] == list(varis.keys())
+
+        varis = FieldFilter(ignored_fields=[GT_FIELD])(hdf5)[FLT_VARS]
+        assert set(orig_keys).difference(varis.keys()) == set([GT_FIELD])
 
 
 class DepthFilterTest(unittest.TestCase):

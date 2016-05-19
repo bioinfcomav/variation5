@@ -423,6 +423,29 @@ def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
     return filtered_vars
 
 
+class FieldFilter:
+
+    def __init__(self, kept_fields=None, ignored_fields=None):
+        self.kept_fields = kept_fields
+        self.ignored_fields = ignored_fields
+
+        self.do_filtering = True
+
+    def _filter(self, variations):
+        return variations.get_chunk(slice(None, None),
+                                    kept_fields=self.kept_fields,
+                                    ignored_fields=self.ignored_fields)
+
+    def __call__(self, variations):
+
+        result = {}
+
+        if self.do_filtering:
+            result[FLT_VARS] = self._filter(variations)
+
+        return result
+
+
 class SamplesFilterByIndex:
     def __init__(self, samples_col_idxs, reverse=False):
         self.samples_col_idxs = samples_col_idxs

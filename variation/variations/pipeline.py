@@ -49,7 +49,11 @@ class Pipeline():
                     callable_instance = step['callable']
                     result[step_id] = {'name': step['name']}
 
-                if callable_instance.do_histogram:
+                if not hasattr(callable_instance, 'do_histogram'):
+                    do_hist = False
+                else:
+                    do_hist = callable_instance.do_histogram
+                if do_hist:
                     if COUNTS not in result[step_id]:
                         result[step_id][COUNTS] = step_result[COUNTS]
                         result[step_id][EDGES] = step_result[EDGES]
@@ -69,6 +73,8 @@ class Pipeline():
         callables_to_check = []
         for step in self._pipeline:
             callable_instance = step['callable']
+            if not hasattr(callable_instance, 'do_histogram'):
+                continue
             if (callable_instance.do_histogram and
                callable_instance.range is None):
                 callables_to_check.append(callable_instance)

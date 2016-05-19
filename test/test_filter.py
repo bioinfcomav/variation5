@@ -15,9 +15,7 @@ import numpy
 
 from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
-from variation.variations.filters import (filter_high_density_snps,
-                                          flt_hist_high_density_snps,
-                                          MinCalledGTsFilter, FLT_VARS, COUNTS,
+from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
                                           ObsHetFilter, SNPQualFilter,
                                           LowDPGTsToMissingSetter,
@@ -25,7 +23,8 @@ from variation.variations.filters import (filter_high_density_snps,
                                           NonBiallelicFilter, StdDepthFilter,
                                           Chi2GtFreqs2SampleSetsFilter,
                                           SampleFilter,
-                                          MissingRateSampleFilter)
+                                          MissingRateSampleFilter,
+                                          filter_variation_density)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -33,26 +32,44 @@ from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 class FilterTest(unittest.TestCase):
 
     def test_filter_high_density(self):
-        varis = VariationsArrays()
-        flt_varis = filter_high_density_snps(varis, max_density=1, window=1)
-        assert not flt_varis.keys()
+        in_vars = VariationsArrays()
+        out_vars = VariationsArrays()
+        res = filter_variation_density(in_vars, out_vars=out_vars,
+                                       max_density=1, window=1)
+        assert not out_vars.keys()
+        assert not res
 
         varis = VariationsArrays()
+        out_vars = VariationsArrays()
         varis[CHROM_FIELD] = numpy.array([b'chr1'] * 6)
         varis[POS_FIELD] = numpy.array([1, 2, 3, 4, 10, 11])
-        flt_varis = filter_high_density_snps(varis, max_density=2, window=3)
-        assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
+        result = filter_variation_density(varis, out_vars=out_vars,
+                                          max_density=2, window=3, n_bins=2)
+        assert list(out_vars[POS_FIELD]) == [1, 4, 10, 11]
+        assert list(result[COUNTS]) == [4, 2]
+        assert list(result[EDGES]) == [2., 2.5, 3.]
 
-        flt_varis = filter_high_density_snps(varis, max_density=2, window=3,
-                                             chunk_size=1)
-        assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
+        varis = VariationsArrays()
+        out_vars = VariationsArrays()
+        varis[CHROM_FIELD] = numpy.array([b'chr1'] * 6)
+        varis[POS_FIELD] = numpy.array([1, 2, 3, 4, 10, 11])
+        result = filter_variation_density(varis, out_vars=out_vars,
+                                          max_density=2, window=3, n_bins=2,
+                                          chunk_size=1)
+        assert list(out_vars[POS_FIELD]) == [1, 4, 10, 11]
+        assert list(result[COUNTS]) == [4, 2]
+        assert list(result[EDGES]) == [2., 2.5, 3.]
 
-        res = flt_hist_high_density_snps(varis, max_density=2, window=3,
-                                         n_bins=2)
-        flt_varis, counts, edges = res
-        assert list(flt_varis[POS_FIELD]) == [1, 4, 10, 11]
-        assert list(counts) == [4, 2]
-        assert list(edges) == [2., 2.5, 3.]
+        varis = VariationsArrays()
+        out_vars = VariationsArrays()
+        varis[CHROM_FIELD] = numpy.array([b'chr1'] * 6)
+        varis[POS_FIELD] = numpy.array([1, 2, 3, 4, 10, 11])
+        result = filter_variation_density(varis, out_vars=out_vars,
+                                          max_density=2, window=3, n_bins=2,
+                                          chunk_size=None)
+        assert list(out_vars[POS_FIELD]) == [1, 4, 10, 11]
+        assert list(result[COUNTS]) == [4, 2]
+        assert list(result[EDGES]) == [2., 2.5, 3.]
 
 
 class MinCalledGTTest(unittest.TestCase):

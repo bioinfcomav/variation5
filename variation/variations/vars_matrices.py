@@ -499,6 +499,10 @@ class _VariationMatrices():
                 else:
                     raise
             var_array[path] = matrix
+
+        if var_array is None:
+            var_array = self.__class__()
+
         var_array._set_metadata(self.metadata)
         var_array._set_samples(self.samples)
         return var_array

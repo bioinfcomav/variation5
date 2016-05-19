@@ -1,6 +1,7 @@
-from functools import partial
+
 import array
 from collections import Counter
+import itertools
 
 import numpy
 from scipy.stats import chi2_contingency
@@ -12,7 +13,8 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         _calc_standarized_by_sample_depth,
                                         histogram, DEF_NUM_BINS)
 from variation.variations.vars_matrices import VariationsArrays
-from variation import MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT
+from variation import MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT, POS_FIELD, \
+    REF_FIELD, CHROM_FIELD
 from variation.matrix.methods import append_matrix, is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import row_value_counter_fact
@@ -64,43 +66,6 @@ def _filter_chunk2(chunk, filtered_chunk, selected_rows):
     filtered_chunk.metadata = chunk.metadata
     filtered_chunk.samples = chunk.samples
     return filtered_chunk
-
-
-def flt_hist_high_density_snps(variations, max_density, window,
-                               filtered_vars=None, n_bins=DEF_NUM_BINS,
-                               range_=None):
-    res = _filter_high_density_snps(variations, max_density, window,
-                                    filtered_vars=filtered_vars)
-    variations, stat = res
-    counts, edges = histogram(stat, n_bins=n_bins, range_=range_)
-    return variations, counts, edges
-
-
-def _filter_high_density_snps(variations, max_density, window,
-                              filtered_vars=None):
-    densities = calc_snp_density(variations, window)
-    densities = numpy.array(array.array('I', densities))
-    selected_rows = [dens <= max_density for dens in densities]
-    filtered_vars = _filter_chunk2(variations, filtered_vars, selected_rows)
-    if filtered_vars is None:
-        filtered_vars = VariationsArrays()
-    return filtered_vars, densities
-
-
-def filter_high_density_snps(variations, max_density, window,
-                             filtered_vars=None, chunk_size=SNPS_PER_CHUNK):
-    densities = calc_snp_density(variations, window)
-    densities = group_in_packets(densities, chunk_size)
-    for chunk_idx0, chunk_densities in zip(range(0, variations.num_variations,
-                                                 chunk_size),
-                                           densities):
-        chunk_idx1 = chunk_idx0 + chunk_size
-        chunk = variations.get_chunk(slice(chunk_idx0, chunk_idx1))
-        selected_rows = [dens <= max_density for dens in chunk_densities]
-        filtered_vars = _filter_chunk2(chunk, filtered_vars, selected_rows)
-    if filtered_vars is None:
-        filtered_vars = VariationsArrays()
-    return filtered_vars
 
 
 COUNTS = 'counts'
@@ -622,3 +587,65 @@ class MissingRateSampleFilter(_BaseFilter):
         idx_to_keep = stat > self.min
         filter_samples = SamplesFilterByIndex(idx_to_keep)
         return filter_samples(variations)[FLT_VARS]
+
+
+def _calc_range_for_var_density(variations, window, chunk_size):
+
+    min_, max_ = None, None
+    for stats in group_in_packets(calc_snp_density(variations, window),
+                                  chunk_size):
+        stats = array.array('I', stats)
+        this_min = min(stats)
+        if min_ is None or min_ > this_min:
+            min_ = this_min
+        this_max = max(stats)
+        if max_ is None or max_ < this_max:
+            max_ = this_max
+    return min_, max_
+
+
+def filter_variation_density(in_vars, max_density, window, out_vars=None,
+                             chunk_size=SNPS_PER_CHUNK, n_bins=DEF_NUM_BINS,
+                             range_=None, do_histogram=None):
+    if (n_bins != DEF_NUM_BINS or range_ is not None) and do_histogram is None:
+        do_histogram = True
+    elif do_histogram is None:
+        do_histogram = False
+
+    num_vars = in_vars.num_variations
+    if not num_vars:
+        if do_histogram:
+            return {EDGES: [], COUNTS: []}
+        else:
+            return {}
+
+    if chunk_size is None:
+        chunk_size = num_vars
+
+    do_filtering = False if out_vars is None else True
+
+    if do_histogram and range_ is None:
+        range_ = _calc_range_for_var_density(in_vars, window, chunk_size)
+
+    stats = calc_snp_density(in_vars, window)
+    edges, counts = None, None
+    for chunk in in_vars.iterate_chunks(chunk_size=chunk_size):
+        stats_for_chunk = itertools.islice(stats, chunk.num_variations)
+        stats_for_chunk = numpy.array(array.array('I', stats_for_chunk))
+
+        if do_filtering:
+            selected_rows = stats_for_chunk <= max_density
+            out_vars.put_chunks([chunk.get_chunk(selected_rows)])
+
+        if do_histogram:
+            this_counts, this_edges = histogram(stats_for_chunk, n_bins=n_bins,
+                                                range_=range_)
+            if edges is None:
+                edges = this_edges
+                counts = this_counts
+            else:
+                counts += this_counts
+                if not numpy.allclose(edges, this_edges):
+                    msg = 'Bin edges do not match in a chunk iteration'
+                    raise RuntimeError(msg)
+    return {EDGES: edges, COUNTS: counts}

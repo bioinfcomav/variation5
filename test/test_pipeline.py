@@ -238,8 +238,6 @@ class PipelineTest(unittest.TestCase):
         except ValueError:
             pass
 
-
-
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PipelineTest.test_min_mac']
+    # import sys;sys.argv = ['', 'PipelineTest.test_filter_high_density']
     unittest.main()

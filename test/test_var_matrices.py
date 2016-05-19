@@ -368,5 +368,5 @@ class Mat012Test(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VcfWrittenTest.test_real_file']
+    import sys; sys.argv = ['', 'VarMatsTests.test_get_empty_chunk']
     unittest.main()

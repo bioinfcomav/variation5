@@ -8,8 +8,11 @@ from variation import (MISSING_VALUES, SNPS_PER_CHUNK)
 from variation.utils.compressed_queue import CCache
 from variation.iterutils import group_items
 
+# The following functions have to be compiled with
+# python setup.py build_ext --inplace
 from variation.gt_parsers.vcf_field_parsers import (_parse_info,
-                                                    _parse_calls)
+                                                   _parse_calls)
+
 # Missing docstring
 # pylint: disable=C0111
 

@@ -20,7 +20,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           ObsHetFilter, SNPQualFilter,
                                           LowDPGTsToMissingSetter,
                                           LowQualGTsToMissingSetter,
-                                          NonBiallelicFilter, StdDepthFilter,
+                                          NonBiallelicFilter, std_depth_filter,
                                           Chi2GtFreqs2SampleSetsFilter,
                                           SampleFilter,
                                           filter_samples_by_missing_rate,
@@ -430,24 +430,27 @@ class DepthFilterTest(unittest.TestCase):
         vars_ = VariationsArrays()
         dps = numpy.array([[4, 2, 2, 0, 0], [2, 1, 1, 0, 1]])
         vars_['/calls/DP'] = dps
-        vars2 = StdDepthFilter(max_std_dp=None)(vars_)[FLT_VARS]
-        numpy.allclose(vars2['/calls/DP'], dps)
-        vars2 = StdDepthFilter(max_std_dp=1.5)(vars_)[FLT_VARS]
+        vars2 = VariationsArrays()
+        std_depth_filter(vars_, max_std_dp=1.5, out_vars=vars2)
         numpy.allclose(vars2['/calls/DP'], dps[0, :])
 
-        result = StdDepthFilter(max_std_dp=None, n_bins=2)(vars_)
-        numpy.allclose(result[FLT_VARS]['/calls/DP'], dps)
+        result = std_depth_filter(vars_, max_std_dp=None, n_bins=2)
         numpy.allclose(result[COUNTS], [1, 1])
         numpy.allclose(result[EDGES], [1, 1.5, 2])
 
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks())
-        vars2 = StdDepthFilter(max_std_dp=1.5)(hdf5)[FLT_VARS]
-        vars3 = StdDepthFilter(max_std_dp=1.5)(snps)[FLT_VARS]
-        assert numpy.allclose(vars2[DP_FIELD], vars3[DP_FIELD])
+        out1 = VariationsArrays()
+        res1 = std_depth_filter(hdf5, max_std_dp=1.5, n_bins=2,
+                                out_vars=out1)
+        out2 = VariationsArrays()
+        res2 = std_depth_filter(snps, max_std_dp=1.5, n_bins=2,
+                                out_vars=out2)
 
-        StdDepthFilter(max_std_dp=1.5, samples=snps.samples[1:20])(snps)
+        assert numpy.allclose(out1[DP_FIELD], out2[DP_FIELD])
+        assert numpy.allclose(res1[EDGES], res2[EDGES])
+        assert numpy.all(res1[COUNTS][:] == res2[COUNTS][:])
 
 
 class FilterSamplesTest(unittest.TestCase):

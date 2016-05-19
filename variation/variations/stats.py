@@ -206,14 +206,14 @@ def calc_depth(variations):
     return mat.reshape(shape[0] * shape[1])
 
 
-def _calc_std_by_smpl_dp_for_mat(mat, sample_mode=None):
+def _calc_std_by_smpl_dp_for_mat(mat, depth_modes=None):
 
-    if sample_mode is None:
-        sample_mode = mode(mat, axis=0)[0][0]
+    if depth_modes is None:
+        depth_modes = mode(mat, axis=0)[0][0]
 
     # dp / smpl_mode by column
     with numpy.errstate(invalid='ignore'):
-        std_dp = numpy.nan_to_num(mat / sample_mode[None, :])
+        std_dp = numpy.nan_to_num(mat / depth_modes[None, :])
 
     num_called_by_snp = (std_dp != 0).sum(axis=1)
 
@@ -221,7 +221,7 @@ def _calc_std_by_smpl_dp_for_mat(mat, sample_mode=None):
     return std_dp_by_snp
 
 
-def _calc_standarized_by_sample_depth(variations, sample_mode=None):
+def _calc_standarized_by_sample_depth(variations, depth_modes=None):
     mat = variations[DP_FIELD]
     if is_dataset(mat):
         mat = mat[:]
@@ -229,11 +229,10 @@ def _calc_standarized_by_sample_depth(variations, sample_mode=None):
     mat = mat.astype(numpy.float)
     mat[mat == 0] = numpy.nan
 
-    return _calc_std_by_smpl_dp_for_mat(mat, sample_mode=sample_mode)
+    return _calc_std_by_smpl_dp_for_mat(mat, depth_modes=depth_modes)
 
 
-def _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=SNPS_PER_CHUNK):
-    # This is not done by chunk
+def calc_depth_modes_by_sample(variations):
     mat = variations[DP_FIELD]
     if is_dataset(mat):
         mat = mat[:]
@@ -241,6 +240,19 @@ def _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=SNPS_PER_CHUNK):
     mat[mat == 0] = numpy.nan
 
     smpl_mode = mode(mat, axis=0)[0][0]
+    return smpl_mode
+
+
+def _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=SNPS_PER_CHUNK,
+                                  depth_modes=None):
+    if depth_modes is not None:
+        smpl_mode = calc_depth_modes_by_sample(variations)
+    else:
+        smpl_mode = depth_modes
+
+    mat = variations[DP_FIELD]
+    if is_dataset(mat):
+        mat = mat[:]
 
     stat = None
     for chunk in iterate_matrix_chunks(mat, chunk_size=chunk_size):
@@ -254,11 +266,14 @@ def _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=SNPS_PER_CHUNK):
     return stat
 
 
-def calc_standarized_by_sample_depth(variations, chunk_size=SNPS_PER_CHUNK):
+def calc_standarized_by_sample_depth(variations, chunk_size=SNPS_PER_CHUNK,
+                                     depth_modes=None):
     if chunk_size is None:
-        return _calc_standarized_by_sample_depth(variations)
+        return _calc_standarized_by_sample_depth(variations,
+                                                 depth_modes=depth_modes)
     else:
-        return _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=chunk_size)
+        return _calc_std_by_smpl_dp_by_chunk(variations, chunk_size=chunk_size,
+                                             depth_modes=depth_modes)
 
 
 def calc_genotype_qual(variations):

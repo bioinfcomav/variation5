@@ -16,7 +16,7 @@ from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           MacFilter, ObsHetFilter, FLT_VARS,
                                           LowDPGTsToMissingSetter,
                                           SNPQualFilter, NonBiallelicFilter,
-                                          StdDepthFilter, SampleFilter,
+                                          SampleFilter,
                                           Chi2GtFreqs2SampleSetsFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from test.test_utils import TEST_DATA_DIR
@@ -167,16 +167,6 @@ class PipelineTest(unittest.TestCase):
         result2 = flt(hdf5)
         assert numpy.allclose(vars_out['/calls/GT'],
                               result2[FLT_VARS]['/calls/GT'])
-
-    def test_filter_snp_by_std_depth(self):
-        pipeline = Pipeline()
-        flt = StdDepthFilter(max_std_dp=1.5, do_histogram=True)
-        # TODO fixme
-        try:
-            pipeline.append(flt)
-            self.fail('ValueError expected')
-        except ValueError:
-            pass
 
     def test_filter_chi2_gt_sample_sets(self):
         pipeline = Pipeline()

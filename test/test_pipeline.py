@@ -17,8 +17,7 @@ from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           LowDPGTsToMissingSetter,
                                           SNPQualFilter, NonBiallelicFilter,
                                           StdDepthFilter, SampleFilter,
-                                          Chi2GtFreqs2SampleSetsFilter,
-                                          MissingRateSampleFilter)
+                                          Chi2GtFreqs2SampleSetsFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from test.test_utils import TEST_DATA_DIR
 
@@ -214,29 +213,6 @@ class PipelineTest(unittest.TestCase):
         result2 = flt(hdf5)
         assert numpy.allclose(vars_out['/calls/GT'],
                               result2[FLT_VARS]['/calls/GT'])
-
-    def test_filter_samples_by_missing_rate(self):
-        pipeline = Pipeline()
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-
-        flt = MissingRateSampleFilter(min_called_rate=0.9, all_variations=hdf5)
-        pipeline.append(flt)
-
-        vars_out = VariationsArrays()
-        pipeline.run(hdf5, vars_out)
-
-        # check same result with no pipeline
-        result2 = flt(hdf5)
-        assert numpy.allclose(vars_out['/calls/GT'],
-                              result2[FLT_VARS]['/calls/GT'])
-
-        pipeline = Pipeline()
-        flt = MissingRateSampleFilter(min_called_rate=0.9)
-        try:
-            pipeline.append(flt)
-            self.fail('ValueError expected')
-        except ValueError:
-            pass
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PipelineTest.test_filter_high_density']

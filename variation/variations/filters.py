@@ -535,58 +535,55 @@ class SampleFilter:
         return filter_samples(variations)
 
 
-class MissingRateSampleFilter(_BaseFilter):
-    def __init__(self, min_called_rate, all_variations=None,
-                 chunk_size=SNPS_PER_CHUNK, **kwargs):
-        self.min = min_called_rate
-        self.all_variations = all_variations
-        self.chunk_size = chunk_size
+def _calc_sample_missing_rates(variations, chunk_size):
 
-        self.how_to_be_in_pipeline = 'Add all_variations to __init__'
+    chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                       chunk_size=chunk_size)
 
-        can_be_in_pipeline = False if all_variations is None else True
-        kwargs['can_be_in_pipeline'] = can_be_in_pipeline
-
-        super().__init__(**kwargs)
-
-    def _calc_stat_for_filtered_samples(self, variations):
-        if self.samples is not None:
-            msg = self.__class__.__name__
-            msg += ' does not support samples'
-            raise ValueError(msg)
-        return super()._calc_stat_for_filtered_samples(variations)
-
-    def _calc_stats_one_chunk(self, chunk):
-        return calc_called_gt(chunk, rates=True, axis=0)
-
-    def _calc_stats_by_chunk(self):
-        variations = self.all_variations
-        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
-                                           chunk_size=self.chunk_size)
-
-        missing = None
-        for chunk in chunks:
-            chunk_missing = calc_called_gt(chunk, rates=False, axis=0)
-            if missing is None:
-                missing = chunk_missing
-            else:
-                missing += chunk_missing
-        rates = missing / variations.num_variations
-        if self.range is None:
-            self.range = min(rates), max(rates)
-        return rates
-
-    def _calc_stat(self, variations):
-        if self.all_variations is None:
-            missing_rates = self._calc_stats_one_chunk(variations)
+    missing = None
+    for chunk in chunks:
+        chunk_missing = calc_called_gt(chunk, rates=False, axis=0)
+        if missing is None:
+            missing = chunk_missing
         else:
-            missing_rates = self._calc_stats_by_chunk()
-        return missing_rates
+            missing += chunk_missing
+    rates = missing / variations.num_variations
+    return rates
 
-    def _filter(self, variations, stat):
-        idx_to_keep = stat > self.min
-        filter_samples = SamplesFilterByIndex(idx_to_keep)
-        return filter_samples(variations)[FLT_VARS]
+
+def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
+                                   chunk_size=SNPS_PER_CHUNK,
+                                   n_bins=DEF_NUM_BINS,
+                                   range_=None, do_histogram=None):
+    do_histogram = _check_if_histogram_is_required(do_histogram, n_bins,
+                                                   range_)
+    res = _get_result_if_empty_vars(in_vars, do_histogram)
+    if res is not None:
+        return None
+
+    if chunk_size is None:
+        chunk_size = in_vars.num_variations
+
+    do_filtering = False if out_vars is None else True
+
+    missing_rates = _calc_sample_missing_rates(in_vars, chunk_size)
+    if do_histogram and range_ is None:
+        range_ = min(missing_rates), max(missing_rates)
+
+    idx_to_keep = missing_rates > min_called_rate
+    filter_samples = SamplesFilterByIndex(idx_to_keep)
+
+    if do_histogram:
+        counts, edges = histogram(missing_rates, n_bins=n_bins, range_=range_)
+
+    for chunk in in_vars.iterate_chunks(chunk_size=chunk_size):
+
+        if do_filtering:
+            flt_chunk = filter_samples(chunk)[FLT_VARS]
+            out_vars.put_chunks([flt_chunk])
+
+    res = {EDGES: edges, COUNTS: counts} if do_histogram else {}
+    return res
 
 
 def _calc_range_for_var_density(variations, window, chunk_size):
@@ -604,23 +601,35 @@ def _calc_range_for_var_density(variations, window, chunk_size):
     return min_, max_
 
 
-def filter_variation_density(in_vars, max_density, window, out_vars=None,
-                             chunk_size=SNPS_PER_CHUNK, n_bins=DEF_NUM_BINS,
-                             range_=None, do_histogram=None):
+def _check_if_histogram_is_required(do_histogram, n_bins, range_):
     if (n_bins != DEF_NUM_BINS or range_ is not None) and do_histogram is None:
         do_histogram = True
     elif do_histogram is None:
         do_histogram = False
+    return do_histogram
 
-    num_vars = in_vars.num_variations
-    if not num_vars:
+
+def _get_result_if_empty_vars(variations, do_histogram):
+    if variations is None or not variations.num_variations:
         if do_histogram:
             return {EDGES: [], COUNTS: []}
         else:
             return {}
+    return None
+
+
+def filter_variation_density(in_vars, max_density, window, out_vars=None,
+                             chunk_size=SNPS_PER_CHUNK, n_bins=DEF_NUM_BINS,
+                             range_=None, do_histogram=None):
+    do_histogram = _check_if_histogram_is_required(do_histogram, n_bins,
+                                                   range_)
+
+    res = _get_result_if_empty_vars(in_vars, do_histogram)
+    if res is not None:
+        return None
 
     if chunk_size is None:
-        chunk_size = num_vars
+        chunk_size = in_vars.num_variations
 
     do_filtering = False if out_vars is None else True
 
@@ -648,4 +657,6 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
                 if not numpy.allclose(edges, this_edges):
                     msg = 'Bin edges do not match in a chunk iteration'
                     raise RuntimeError(msg)
-    return {EDGES: edges, COUNTS: counts}
+
+    res = {EDGES: edges, COUNTS: counts} if do_histogram else {}
+    return res

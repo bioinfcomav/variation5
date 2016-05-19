@@ -23,7 +23,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           NonBiallelicFilter, StdDepthFilter,
                                           Chi2GtFreqs2SampleSetsFilter,
                                           SampleFilter,
-                                          MissingRateSampleFilter,
+                                          filter_samples_by_missing_rate,
                                           filter_variation_density)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
@@ -473,39 +473,31 @@ class FilterSamplesTest(unittest.TestCase):
         variations = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         chunk = first(variations.iterate_chunks())
 
-        new_var = MissingRateSampleFilter(min_called_rate=0.9)(chunk)[FLT_VARS]
+        new_var = VariationsArrays()
+        filter_samples_by_missing_rate(chunk, min_called_rate=0.9,
+                                       out_vars=new_var)
         assert len(new_var.samples) == 0
 
-        new_var = MissingRateSampleFilter(min_called_rate=0.1)(chunk)[FLT_VARS]
+        new_var = VariationsArrays()
+        filter_samples_by_missing_rate(chunk, min_called_rate=0.1,
+                                       out_vars=new_var)
         assert len(new_var.samples) == len(chunk.samples)
 
         # check that it works by chunk
-        res = MissingRateSampleFilter(min_called_rate=0.2,
-                                      all_variations=variations,
-                                      do_histogram=True)(variations)
-        res2 = MissingRateSampleFilter(min_called_rate=0.2,
-                                       do_histogram=True)(variations)
+        new_var = VariationsArrays()
+        res = filter_samples_by_missing_rate(variations, min_called_rate=0.2,
+                                             out_vars=new_var,
+                                             do_histogram=True)
+        new_var2 = VariationsArrays()
+        res2 = filter_samples_by_missing_rate(variations, min_called_rate=0.2,
+                                              out_vars=new_var2,
+                                              chunk_size=None,
+                                              do_histogram=True)
 
-        assert res[FLT_VARS].samples == res2[FLT_VARS].samples
-        assert numpy.all(res[FLT_VARS][GT_FIELD] == res2[FLT_VARS][GT_FIELD])
-
-        # do histogram
+        assert new_var.samples == new_var2.samples
+        assert numpy.all(new_var[GT_FIELD] == new_var2[GT_FIELD])
         assert numpy.allclose(res[EDGES], res2[EDGES])
-        # There's a disagreement between the two ways. We think is due to
-        # some rounding problem res[COUNTS][9:11] == res2[COUNTS][9:11]
-        assert numpy.all(res[COUNTS][:9] == res2[COUNTS][:9])
-        assert numpy.all(res[COUNTS][11:] == res2[COUNTS][11:])
-
-        res = MissingRateSampleFilter(min_called_rate=0.2,
-                                      all_variations=variations,
-                                      do_histogram=True,
-                                      range_=(0, 1))(variations)
-        res2 = MissingRateSampleFilter(min_called_rate=0.2,
-                                       do_histogram=True,
-                                       range_=(0, 1))(variations)
-
-        # do histogram
-        assert numpy.all(res[COUNTS] == res2[COUNTS])
+        assert numpy.all(res[COUNTS][:] == res2[COUNTS][:])
 
 
 if __name__ == "__main__":

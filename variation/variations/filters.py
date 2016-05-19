@@ -34,7 +34,7 @@ def _filter_no_row(chunk):
 class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=None, samples=None, can_be_in_pipeline=True):
+                 do_histogram=None, samples=None):
         if do_histogram is None:
             if range_ is not None or n_bins != DEF_NUM_BINS:
                 do_histogram = True
@@ -42,7 +42,7 @@ class _BaseFilter:
                 do_histogram = False
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
-        self.can_be_in_pipeline = can_be_in_pipeline
+
         self.n_bins = n_bins
         self.range = range_
         self._samples = samples
@@ -185,7 +185,6 @@ class _GTsToMissingSetter:
     def __init__(self, min_, field_path):
         self.min = min_
         self.field_path = field_path
-        self.can_be_in_pipeline = True
 
     @property
     def do_filtering(self):
@@ -228,7 +227,6 @@ class NonBiallelicFilter(_BaseFilter):
     def __init__(self, samples=None):
         self.keep_monomorphic = False
         self._samples = samples
-        self.can_be_in_pipeline = True
 
     @property
     def do_filtering(self):
@@ -429,7 +427,6 @@ class SamplesFilterByIndex:
     def __init__(self, samples_col_idxs, reverse=False):
         self.samples_col_idxs = samples_col_idxs
         self.reverse = reverse
-        self.can_be_in_pipeline = True
 
     @property
     def do_filtering(self):
@@ -449,7 +446,6 @@ class SampleFilter:
     def __init__(self, samples, reverse=False):
         self.samples = samples
         self.reverse = reverse
-        self.can_be_in_pipeline = True
 
     @property
     def do_filtering(self):

@@ -12,15 +12,6 @@ class Pipeline():
         self._pipeline = []
 
     def append(self, callable_instance, id_=None):
-        if not callable_instance.can_be_in_pipeline:
-            name = callable_instance.__class__.__name__
-            msg = 'This function can not be in a pipeline: ' + name
-
-            if hasattr(callable_instance, 'how_to_be_in_pipeline'):
-                msg += '\nBut it could be fixed: '
-                msg += callable_instance.how_to_be_in_pipeline
-
-            raise ValueError(msg)
 
         if id_ is None:
             id_ = str(len(self._pipeline))

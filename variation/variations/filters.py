@@ -537,9 +537,11 @@ class SampleFilter:
 
 def _calc_sample_missing_rates(variations, chunk_size):
 
-    chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
-                                       chunk_size=chunk_size)
-
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                           chunk_size=chunk_size)
     missing = None
     for chunk in chunks:
         chunk_missing = calc_called_gt(chunk, rates=False, axis=0)
@@ -561,9 +563,6 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
     if res is not None:
         return None
 
-    if chunk_size is None:
-        chunk_size = in_vars.num_variations
-
     do_filtering = False if out_vars is None else True
 
     missing_rates = _calc_sample_missing_rates(in_vars, chunk_size)
@@ -576,7 +575,11 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
     if do_histogram:
         counts, edges = histogram(missing_rates, n_bins=n_bins, range_=range_)
 
-    for chunk in in_vars.iterate_chunks(chunk_size=chunk_size):
+    if chunk_size is None:
+        chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
+    else:
+        chunks = [in_vars]
+    for chunk in chunks:
 
         if do_filtering:
             flt_chunk = filter_samples(chunk)[FLT_VARS]
@@ -628,9 +631,6 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
     if res is not None:
         return None
 
-    if chunk_size is None:
-        chunk_size = in_vars.num_variations
-
     do_filtering = False if out_vars is None else True
 
     if do_histogram and range_ is None:
@@ -638,7 +638,12 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
 
     stats = calc_snp_density(in_vars, window)
     edges, counts = None, None
-    for chunk in in_vars.iterate_chunks(chunk_size=chunk_size):
+
+    if chunk_size is None:
+        chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
+    else:
+        chunks = [in_vars]
+    for chunk in chunks:
         stats_for_chunk = itertools.islice(stats, chunk.num_variations)
         stats_for_chunk = numpy.array(array.array('I', stats_for_chunk))
 

@@ -367,6 +367,29 @@ class Mat012Test(unittest.TestCase):
         assert numpy.allclose(gts012, expected, equal_nan=True)
 
 
+class SamplesTest(unittest.TestCase):
+    def test_samples(self):
+        gts = numpy.array([[[0, 0], [0, 1], [2, 2], [-1, 3]],
+                           [[0, 0], [0, 0], [1, 1], [2, 2]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4]
+        assert varis.samples == [1, 2, 3, 4]
+
+        # With another file
+        tmp_fhand = NamedTemporaryFile()
+        path = tmp_fhand.name
+        tmp_fhand.close()
+        fhand = open(join(TEST_DATA_DIR, 'phylome.sample.vcf'), 'rb')
+        vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000)
+        h5 = VariationsH5(path, mode='w', ignore_undefined_fields=True)
+        h5.put_vars(vcf_parser)
+        fhand.close()
+        samples = h5.samples
+        samples[0] = '0'
+        h5.samples = samples
+
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'VarMatsTests.test_get_empty_chunk']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_get_empty_chunk']
     unittest.main()

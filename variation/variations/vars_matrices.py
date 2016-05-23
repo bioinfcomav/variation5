@@ -804,16 +804,30 @@ class VariationsH5(_VariationMatrices):
     def _set_samples(self, samples):
         self._h5file.attrs['samples'] = json.dumps(samples)
 
-    @property
-    def samples(self):
+    def get_samples(self):
         if 'samples' in self._h5file.attrs:
             samples = json.loads(self._h5file.attrs['samples'])
         else:
-            if '/calls/GT' not in self.keys():
-                raise 'There are not genotypes in hdf5 file'
+            if GT_FIELD not in self.keys():
+                raise RuntimeError('There are not genotypes in hdf5 file')
             samples = None
         return samples
 
+    def set_samples(self, samples):
+        old_samples = self.get_samples()
+        if old_samples is None:
+            if GT_FIELD in self.keys():
+                n_samples = self[GT_FIELD].shape[1]
+                if n_samples != len(samples):
+                    msg = 'New samples should have the same length as GTs'
+                    raise ValueError(msg)
+        else:
+            if len(samples) != len(old_samples):
+                msg = 'New samples should have the same length as old samples'
+                raise ValueError(msg)
+        self._h5file.attrs['samples'] = json.dumps(samples)
+
+    samples = property(get_samples, set_samples)
 
 def select_dset_from_chunks(chunks, dset_path):
     return (chunk[dset_path] for chunk in chunks)

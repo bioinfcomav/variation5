@@ -333,7 +333,7 @@ class SNPQualFilterTest(unittest.TestCase):
         assert first(flt_chunk.values()).shape[0] == 18
 
         flt_chunk = SNPQualFilter(min_qual=586325202)(chunk)[FLT_VARS]
-        assert first(flt_chunk.values()).shape[0] == 13
+        assert first(flt_chunk.values()).shape[0] == 0
 
         flt_chunk = SNPQualFilter(max_qual=-1)(chunk)[FLT_VARS]
         assert first(flt_chunk.values()).shape[0] == 0

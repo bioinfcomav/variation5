@@ -175,7 +175,8 @@ class SNPQualFilter(_BaseFilter):
         stat = variations['/variations/qual']
         if is_dataset(stat):
             stat = stat[:]
-        stat[numpy.isinf(stat)] = numpy.finfo(stat.dtype).max
+        if numpy.issubdtype(stat.dtype, numpy.float):
+            stat[numpy.isinf(stat)] = numpy.finfo(stat.dtype).max
         return stat
 
 
@@ -541,9 +542,9 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
         counts, edges = histogram(missing_rates, n_bins=n_bins, range_=range_)
 
     if chunk_size is None:
-        chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
-    else:
         chunks = [in_vars]
+    else:
+        chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
     for chunk in chunks:
 
         if do_filtering:

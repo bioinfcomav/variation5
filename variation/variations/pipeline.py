@@ -41,7 +41,8 @@ class Pipeline():
     def _reduce_results(self, results, vars_out):
         result = {}
         for slice_result, chunk in results:
-            vars_out.put_chunks([chunk])
+            if vars_out is not None:
+                vars_out.put_chunks([chunk])
             for step_result, step in zip(slice_result, self._pipeline):
                 step_id = step['id']
 
@@ -107,7 +108,7 @@ class Pipeline():
             callable_instance.do_filtering = original_do_filterings[idx]
             callable_instance.range = mins[idx], maxs[idx]
 
-    def run(self, vars_in, vars_out, chunk_size=SNPS_PER_CHUNK,
+    def run(self, vars_in, vars_out=None, chunk_size=SNPS_PER_CHUNK,
             kept_fields=None, ignored_fields=None):
 
         self._check_and_fix_histogram_ranges(vars_in, chunk_size,

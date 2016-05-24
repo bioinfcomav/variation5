@@ -86,6 +86,22 @@ class PipelineTest(unittest.TestCase):
         assert numpy.allclose(vars_out['/calls/GT'],
                               result2[FLT_VARS]['/calls/GT'])
 
+    def test_no_filtering(self):
+        pipeline = Pipeline()
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        flt = MafFilter(min_maf=0.1, max_maf=0.9, do_histogram=True,
+                        do_filtering=False)
+        pipeline.append(flt, id_='filter1')
+
+        vars_out = None
+        result = pipeline.run(hdf5, vars_out)
+
+        # check same result with no pipeline
+        result2 = flt(hdf5)
+        assert numpy.allclose(result['filter1']['counts'], result2['counts'])
+        assert numpy.allclose(result['filter1']['edges'], result2['edges'])
+
     def test_min_mac(self):
         pipeline = Pipeline()
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -197,7 +213,7 @@ class PipelineTest(unittest.TestCase):
         pipeline.append(flt)
 
         vars_out = VariationsArrays()
-        result = pipeline.run(hdf5, vars_out)
+        pipeline.run(hdf5, vars_out)
 
         # check same result with no pipeline
         result2 = flt(hdf5)
@@ -223,5 +239,5 @@ class PipelineTest(unittest.TestCase):
                               result2[FLT_VARS]['/calls/GT'])
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PipelineTest.test_filter_high_density']
+    # import sys;sys.argv = ['', 'PipelineTest.test_no_filtering']
     unittest.main()

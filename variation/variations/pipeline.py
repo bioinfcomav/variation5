@@ -45,9 +45,9 @@ class Pipeline():
                 vars_out.put_chunks([chunk])
             for step_result, step in zip(slice_result, self._pipeline):
                 step_id = step['id']
+                callable_instance = step['callable']
 
                 if step_id not in result:
-                    callable_instance = step['callable']
                     result[step_id] = {'name': step['name']}
 
                 if not hasattr(callable_instance, 'do_histogram'):

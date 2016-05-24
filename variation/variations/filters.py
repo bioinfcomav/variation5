@@ -93,7 +93,6 @@ class _BaseFilter:
     def __call__(self, variations):
         stats = self._calc_stat_for_filtered_samples(variations)
         result = {}
-
         if self.do_histogram:
             counts, edges = histogram(stats, n_bins=self.n_bins,
                                       range_=self.range)

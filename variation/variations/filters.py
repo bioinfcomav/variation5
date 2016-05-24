@@ -177,6 +177,7 @@ class SNPQualFilter(_BaseFilter):
         stat = variations['/variations/qual']
         if is_dataset(stat):
             stat = stat[:]
+        stat[numpy.isinf(stat)] = numpy.finfo(stat.dtype).max
         return stat
 
 

@@ -106,8 +106,6 @@ class _BaseFilter:
 
 
 class MinCalledGTsFilter(_BaseFilter):
-    # def __init__(self, min_called=None, rates=True, n_bins=DEF_NUM_BINS,
-    #             range_=None, do_filtering=True, do_histogram=True):
     def __init__(self, min_called=None, rates=True, **kwargs):
         self.rates = rates
         self.min = min_called

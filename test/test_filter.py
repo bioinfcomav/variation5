@@ -347,8 +347,9 @@ class MissingGTSettersTest(unittest.TestCase):
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
         set_low_dp_gts_to_missing = LowDPGTsToMissingSetter(min_dp=300)
-        set_low_dp_gts_to_missing(chunk)
+        res = set_low_dp_gts_to_missing(chunk)
         assert numpy.all(chunk[GT_FIELD][0][147] == [-1, -1])
+        assert COUNTS in res
 
         set_low_dp_gts_to_missing(chunk)
         assert numpy.all(chunk[GT_FIELD].shape[0] == 200)

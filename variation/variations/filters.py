@@ -181,17 +181,14 @@ class SNPQualFilter(_BaseFilter):
 
 
 class _GTsToMissingSetter:
-    def __init__(self, min_, field_path):
+    def __init__(self, min_, field_path, do_histogram=True, range_=None,
+                 do_filtering=True, n_bins=DEF_NUM_BINS):
         self.min = min_
         self.field_path = field_path
-
-    @property
-    def do_filtering(self):
-        return True
-
-    @property
-    def do_histogram(self):
-        return False
+        self.do_histogram = do_histogram
+        self.do_filtering = do_filtering
+        self.range = range_
+        self.n_bins = n_bins
 
     def __call__(self, variations):
 
@@ -204,21 +201,35 @@ class _GTsToMissingSetter:
         else:
             gts[mat_to_check < self.min] = MISSING_INT
 
-        copied_vars = variations.get_chunk(slice(None, None),
-                                           ignored_fields=[GT_FIELD])
-        copied_vars[GT_FIELD] = gts
+        result = {}
+        if self.do_filtering:
+            copied_vars = variations.get_chunk(slice(None, None),
+                                               ignored_fields=[GT_FIELD])
+            copied_vars[GT_FIELD] = gts
 
-        return {FLT_VARS: copied_vars}
+            result[FLT_VARS] = copied_vars
+
+        if self.do_histogram:
+            counts, edges = histogram(mat_to_check, n_bins=self.n_bins,
+                                      range_=self.range)
+            result[COUNTS] = counts
+            result[EDGES] = edges
+
+        return result
 
 
 class LowDPGTsToMissingSetter(_GTsToMissingSetter):
-    def __init__(self, min_dp):
-        super().__init__(min_=min_dp, field_path=DP_FIELD)
+    def __init__(self, min_dp, **kwargs):
+        kwargs['min_'] = min_dp
+        kwargs['field_path'] = DP_FIELD
+        super().__init__(**kwargs)
 
 
 class LowQualGTsToMissingSetter(_GTsToMissingSetter):
-    def __init__(self, min_qual):
-        super().__init__(min_=min_qual, field_path=GQ_FIELD)
+    def __init__(self, min_qual, **kwargs):
+        kwargs['min_'] = min_qual
+        kwargs['field_path'] = GQ_FIELD
+        super().__init__(**kwargs)
 
 
 class NonBiallelicFilter(_BaseFilter):

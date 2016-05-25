@@ -17,7 +17,8 @@ from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           LowDPGTsToMissingSetter,
                                           SNPQualFilter, NonBiallelicFilter,
                                           SampleFilter, FieldFilter,
-                                          Chi2GtFreqs2SampleSetsFilter)
+                                          Chi2GtFreqs2SampleSetsFilter, N_KEPT,
+                                          FLT_STATS, TOT, N_FILTERED_OUT)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from variation import GT_FIELD
 from test.test_utils import TEST_DATA_DIR
@@ -40,6 +41,11 @@ class PipelineTest(unittest.TestCase):
         assert numpy.allclose(result['filter1']['edges'], result2['edges'])
         assert numpy.allclose(vars_out['/calls/GT'],
                               result2[FLT_VARS]['/calls/GT'])
+        assert (result['filter1'][FLT_STATS][N_KEPT] ==
+                result2[FLT_STATS][N_KEPT])
+        assert result['filter1'][FLT_STATS][TOT] == result2[FLT_STATS][TOT]
+        assert (result['filter1'][FLT_STATS][N_FILTERED_OUT] ==
+                result2[FLT_STATS][N_FILTERED_OUT])
 
         # check with no range set
         pipeline = Pipeline()
@@ -239,5 +245,5 @@ class PipelineTest(unittest.TestCase):
                               result2[FLT_VARS]['/calls/GT'])
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PipelineTest.test_no_filtering']
+    # import sys;sys.argv = ['', 'PipelineTest.test_pipeline']
     unittest.main()

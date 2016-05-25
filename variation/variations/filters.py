@@ -23,6 +23,10 @@ from variation.matrix.stats import row_value_counter_fact
 COUNTS = 'counts'
 EDGES = 'edges'
 FLT_VARS = 'flt_vars'
+N_KEPT = 'n_kept'
+N_FILTERED_OUT = 'n_filtered_out'
+TOT = 'tot'
+FLT_STATS = 'flt_stats'
 
 
 def _filter_no_row(chunk):
@@ -64,7 +68,13 @@ class _BaseFilter:
             selected_rows = selector_min & selector_max
         else:
             selected_rows = _filter_no_row(variations)
-        return variations.get_chunk(selected_rows)
+
+        n_kept = numpy.count_nonzero(selected_rows)
+        tot = selected_rows.shape[0]
+        n_filtered_out = tot - n_kept
+        stats = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out, TOT: tot}
+
+        return variations.get_chunk(selected_rows), stats
 
     @property
     def samples(self):
@@ -100,7 +110,9 @@ class _BaseFilter:
             result[EDGES] = edges
 
         if self.do_filtering:
-            result[FLT_VARS] = self._filter(variations, stats)
+            flt_vars, flt_stats = self._filter(variations, stats)
+            result[FLT_VARS] = flt_vars
+            result[FLT_STATS] = flt_stats
 
         return result
 
@@ -281,7 +293,16 @@ class NonBiallelicFilter(_BaseFilter):
         vars_for_stat = self._filter_samples_for_stats(variations)
 
         selected_rows = self._select_mono(vars_for_stat)
+
         result = {}
+
+        n_kept = numpy.count_nonzero(selected_rows)
+        tot = selected_rows.shape[0]
+        n_filtered_out = tot - n_kept
+        result[FLT_STATS] = {N_KEPT: n_kept,
+                             N_FILTERED_OUT: n_filtered_out,
+                             TOT: tot}
+
         if self.do_filtering:
             result[FLT_VARS] = variations.get_chunk(selected_rows)
 
@@ -624,6 +645,8 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
         chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
     else:
         chunks = [in_vars]
+
+    n_kept, tot, n_filtered_out = 0, 0, 0
     for chunk in chunks:
         stats_for_chunk = itertools.islice(stats, chunk.num_variations)
         stats_for_chunk = numpy.array(array.array('I', stats_for_chunk))
@@ -631,6 +654,10 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
         if do_filtering:
             selected_rows = stats_for_chunk <= max_density
             out_vars.put_chunks([chunk.get_chunk(selected_rows)])
+
+            n_kept += numpy.count_nonzero(selected_rows)
+            tot += selected_rows.shape[0]
+            n_filtered_out += tot - n_kept
 
         if do_histogram:
             this_counts, this_edges = histogram(stats_for_chunk, n_bins=n_bins,
@@ -644,7 +671,15 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
                     msg = 'Bin edges do not match in a chunk iteration'
                     raise RuntimeError(msg)
 
-    res = {EDGES: edges, COUNTS: counts} if do_histogram else {}
+    res = {}
+    if do_filtering:
+        res[FLT_STATS] = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out,
+                          TOT: tot}
+
+    if do_histogram:
+        res[EDGES] = edges
+        res[COUNTS] = counts
+
     return res
 
 
@@ -672,6 +707,7 @@ def std_depth_filter(in_vars, max_std_dp, out_vars=None,
         chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
     else:
         chunks = [in_vars]
+    n_kept, tot, n_filtered_out = 0, 0, 0
     for chunk in chunks:
         stats = calc_standarized_by_sample_depth(chunk, chunk_size=None,
                                                  depth_modes=depth_modes)
@@ -679,6 +715,10 @@ def std_depth_filter(in_vars, max_std_dp, out_vars=None,
         if do_filtering:
             selected_rows = stats <= max_std_dp
             out_vars.put_chunks([chunk.get_chunk(selected_rows)])
+
+            n_kept += numpy.count_nonzero(selected_rows)
+            tot += selected_rows.shape[0]
+            n_filtered_out += tot - n_kept
 
         if do_histogram:
             this_counts, this_edges = histogram(stats, n_bins=n_bins,
@@ -692,5 +732,13 @@ def std_depth_filter(in_vars, max_std_dp, out_vars=None,
                     msg = 'Bin edges do not match in a chunk iteration'
                     raise RuntimeError(msg)
 
-    res = {EDGES: edges, COUNTS: counts} if do_histogram else {}
+    res = {}
+    if do_filtering:
+        res[FLT_STATS] = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out,
+                          TOT: tot}
+
+    if do_histogram:
+        res[EDGES] = edges
+        res[COUNTS] = counts
+
     return res

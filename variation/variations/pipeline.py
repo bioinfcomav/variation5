@@ -4,7 +4,8 @@ import functools
 import numpy
 
 from variation import SNPS_PER_CHUNK
-from variation.variations.filters import COUNTS, EDGES, FLT_VARS
+from variation.variations.filters import (COUNTS, EDGES, FLT_VARS, FLT_STATS,
+                                          N_KEPT, TOT, N_FILTERED_OUT)
 
 
 class Pipeline():
@@ -67,6 +68,17 @@ class Pipeline():
                             msg %= step['id'], step['name']
                             raise RuntimeError(msg)
                         result[step_id][COUNTS] += step_result[COUNTS]
+
+                if FLT_STATS in step_result:
+                    if FLT_STATS not in result[step_id]:
+                        result[step_id][FLT_STATS] = step_result[FLT_STATS]
+                    else:
+                        n_kept = step_result[FLT_STATS][N_KEPT]
+                        tot = step_result[FLT_STATS][TOT]
+                        flt_out = step_result[FLT_STATS][N_FILTERED_OUT]
+                        result[step_id][FLT_STATS][N_KEPT] += n_kept
+                        result[step_id][FLT_STATS][TOT] += tot
+                        result[step_id][FLT_STATS][N_FILTERED_OUT] += flt_out
         return result
 
     def _check_and_fix_histogram_ranges(self, vars_in, chunk_size, kept_fields,

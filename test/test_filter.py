@@ -17,14 +17,15 @@ from test.test_utils import TEST_DATA_DIR
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
-                                          ObsHetFilter, SNPQualFilter,
-                                          LowDPGTsToMissingSetter,
-                                          LowQualGTsToMissingSetter,
+                                          ObsHetFilter, SNPQualFilter, TOT,
+                                          LowDPGTsToMissingSetter, FLT_STATS,
+                                          LowQualGTsToMissingSetter, N_KEPT,
                                           NonBiallelicFilter, std_depth_filter,
                                           Chi2GtFreqs2SampleSetsFilter,
                                           SampleFilter, FieldFilter,
                                           filter_samples_by_missing_rate,
-                                          filter_variation_density)
+                                          filter_variation_density,
+                                          N_FILTERED_OUT)
 from variation.iterutils import first
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD, DP_FIELD
 
@@ -48,6 +49,9 @@ class FilterTest(unittest.TestCase):
         assert list(out_vars[POS_FIELD]) == [1, 4, 10, 11]
         assert list(result[COUNTS]) == [4, 2]
         assert list(result[EDGES]) == [2., 2.5, 3.]
+        assert result[FLT_STATS][N_KEPT] == 4
+        assert result[FLT_STATS][TOT] == 6
+        assert result[FLT_STATS][N_FILTERED_OUT] == 2
 
         varis = VariationsArrays()
         out_vars = VariationsArrays()
@@ -59,6 +63,9 @@ class FilterTest(unittest.TestCase):
         assert list(out_vars[POS_FIELD]) == [1, 4, 10, 11]
         assert list(result[COUNTS]) == [4, 2]
         assert list(result[EDGES]) == [2., 2.5, 3.]
+        assert result[FLT_STATS][N_KEPT] == 4
+        assert result[FLT_STATS][TOT] == 6
+        assert result[FLT_STATS][N_FILTERED_OUT] == 2
 
         varis = VariationsArrays()
         out_vars = VariationsArrays()
@@ -70,6 +77,9 @@ class FilterTest(unittest.TestCase):
         assert list(out_vars[POS_FIELD]) == [1, 4, 10, 11]
         assert list(result[COUNTS]) == [4, 2]
         assert list(result[EDGES]) == [2., 2.5, 3.]
+        assert result[FLT_STATS][N_KEPT] == 4
+        assert result[FLT_STATS][TOT] == 6
+        assert result[FLT_STATS][N_FILTERED_OUT] == 2
 
 
 class MinCalledGTTest(unittest.TestCase):
@@ -84,7 +94,10 @@ class MinCalledGTTest(unittest.TestCase):
         expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]])
         filter_gts = MinCalledGTsFilter(min_called=5, rates=False)
         filtered = filter_gts(variations)
-        assert numpy.all(filtered['flt_vars'][GT_FIELD] == expected)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == expected)
+        assert filtered[FLT_STATS][N_KEPT] == 1
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 3
 
         expected = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
                                [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
@@ -118,6 +131,10 @@ class MafFilterTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
         filtered = MafFilter(min_maf=0.6, min_num_genotypes=0)(chunk)
+        assert filtered[FLT_STATS][N_KEPT] == 182
+        assert filtered[FLT_STATS][TOT] == 200
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 18
+
         flt_chunk = filtered[FLT_VARS]
 
         path = first(chunk.keys())
@@ -158,9 +175,15 @@ class MafFilterTest(unittest.TestCase):
         variations[GT_FIELD] = gts
         filtered = MafFilter(min_num_genotypes=5)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
+        assert filtered[FLT_STATS][N_KEPT] == 4
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
 
         filtered = MafFilter(min_num_genotypes=5, min_maf=0)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[0, 1, 2]])
+        assert filtered[FLT_STATS][N_KEPT] == 3
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 1
 
         # without missing values
         variations = VariationsArrays()
@@ -206,9 +229,15 @@ class MafFilterTest(unittest.TestCase):
         variations[GT_FIELD] = gts
         filtered = MacFilter(min_num_genotypes=5)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
+        assert filtered[FLT_STATS][N_KEPT] == 4
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
 
         filtered = MacFilter(min_mac=0, min_num_genotypes=5)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[0, 1, 2]])
+        assert filtered[FLT_STATS][N_KEPT] == 3
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 1
 
         # without missing values
         variations = VariationsArrays()
@@ -258,9 +287,15 @@ class ObsHetFiltterTest(unittest.TestCase):
 
         filtered = ObsHetFilter(min_num_genotypes=0)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
+        assert filtered[FLT_STATS][N_KEPT] == 4
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
 
         filtered = ObsHetFilter(min_het=0.2, min_num_genotypes=0)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[0, 2, 3]])
+        assert filtered[FLT_STATS][N_KEPT] == 3
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 1
 
         filtered = ObsHetFilter(max_het=0.1, min_num_genotypes=0)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[1]])
@@ -312,9 +347,13 @@ class SNPQualFilterTest(unittest.TestCase):
         expected_gts = numpy.array([[[0, 0], [0, 0]],
                                     [[0, 1], [0, 0]]])
         exp_snp_quals = numpy.array([15, 20])
-        filtered = SNPQualFilter(min_qual=15)(variations)[FLT_VARS]
-        assert numpy.all(filtered['/variations/qual'] == exp_snp_quals)
-        assert numpy.all(filtered[GT_FIELD] == expected_gts)
+        filtered = SNPQualFilter(min_qual=15)(variations)
+        assert numpy.all(filtered[FLT_VARS]['/variations/qual'] ==
+                         exp_snp_quals)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == expected_gts)
+        assert filtered[FLT_STATS][N_KEPT] == 2
+        assert filtered[FLT_STATS][TOT] == 5
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 3
 
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         kept_fields = ['/variations/qual']
@@ -402,8 +441,11 @@ class MonoBiallelicFilterTest(unittest.TestCase):
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
 
-        flt_chunk = NonBiallelicFilter()(chunk)[FLT_VARS]
-        assert flt_chunk[GT_FIELD].shape == (174, 153, 2)
+        flt_chunk = NonBiallelicFilter()(chunk)
+        assert flt_chunk[FLT_VARS][GT_FIELD].shape == (174, 153, 2)
+        assert flt_chunk[FLT_STATS][N_KEPT] == 174
+        assert flt_chunk[FLT_STATS][TOT] == 200
+        assert flt_chunk[FLT_STATS][N_FILTERED_OUT] == 26
 
 
 class Chi2GtFilterTest(unittest.TestCase):
@@ -423,6 +465,9 @@ class Chi2GtFilterTest(unittest.TestCase):
         res = flt(variations)
         assert list(res[COUNTS]) == [2, 2]
         assert numpy.all(res[FLT_VARS][GT_FIELD] == gts[:2, ...])
+        assert res[FLT_STATS][N_KEPT] == 2
+        assert res[FLT_STATS][TOT] == 4
+        assert res[FLT_STATS][N_FILTERED_OUT] == 2
 
 
 class FieldFilterTest(unittest.TestCase):
@@ -444,8 +489,12 @@ class DepthFilterTest(unittest.TestCase):
         dps = numpy.array([[4, 2, 2, 0, 0], [2, 1, 1, 0, 1]])
         vars_['/calls/DP'] = dps
         vars2 = VariationsArrays()
-        std_depth_filter(vars_, max_std_dp=1.5, out_vars=vars2)
+        res = std_depth_filter(vars_, max_std_dp=1.5, out_vars=vars2)
         numpy.allclose(vars2['/calls/DP'], dps[0, :])
+
+        assert res[FLT_STATS][N_KEPT] == 1
+        assert res[FLT_STATS][TOT] == 2
+        assert res[FLT_STATS][N_FILTERED_OUT] == 1
 
         result = std_depth_filter(vars_, max_std_dp=None, n_bins=2)
         numpy.allclose(result[COUNTS], [1, 1])
@@ -456,14 +505,18 @@ class DepthFilterTest(unittest.TestCase):
         snps.put_chunks(hdf5.iterate_chunks())
         out1 = VariationsArrays()
         res1 = std_depth_filter(hdf5, max_std_dp=1.5, n_bins=2,
-                                out_vars=out1)
+                                out_vars=out1, chunk_size=50)
         out2 = VariationsArrays()
         res2 = std_depth_filter(snps, max_std_dp=1.5, n_bins=2,
-                                out_vars=out2)
+                                out_vars=out2, chunk_size=None)
 
         assert numpy.allclose(out1[DP_FIELD], out2[DP_FIELD])
         assert numpy.allclose(res1[EDGES], res2[EDGES])
         assert numpy.all(res1[COUNTS][:] == res2[COUNTS][:])
+        assert res1[FLT_STATS][N_KEPT] == res2[FLT_STATS][N_KEPT]
+        assert res1[FLT_STATS][TOT] == res2[FLT_STATS][TOT]
+        assert (res1[FLT_STATS][N_FILTERED_OUT] ==
+                res2[FLT_STATS][N_FILTERED_OUT])
 
 
 class FilterSamplesTest(unittest.TestCase):
@@ -519,5 +572,5 @@ class FilterSamplesTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'FilterSamplesTest']
+    # import sys;sys.argv = ['', 'SNPQualFilterTest']
     unittest.main()

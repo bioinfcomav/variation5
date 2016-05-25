@@ -562,7 +562,11 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
             flt_chunk = filter_samples(chunk)[FLT_VARS]
             out_vars.put_chunks([flt_chunk])
 
-    res = {EDGES: edges, COUNTS: counts} if do_histogram else {}
+    res = {}
+    if do_histogram:
+        res[EDGES] = edges
+        res[COUNTS] = counts
+    res['missing_rates'] = missing_rates
     return res
 
 

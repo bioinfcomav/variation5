@@ -557,7 +557,6 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
     else:
         chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
     for chunk in chunks:
-
         if do_filtering:
             flt_chunk = filter_samples(chunk)[FLT_VARS]
             out_vars.put_chunks([flt_chunk])
@@ -567,6 +566,7 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
         res[EDGES] = edges
         res[COUNTS] = counts
     res['missing_rates'] = missing_rates
+    res['selected_samples'] = idx_to_keep
     return res
 
 

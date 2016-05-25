@@ -511,6 +511,7 @@ class FilterSamplesTest(unittest.TestCase):
                                               do_histogram=True)
 
         assert res2['missing_rates'].shape[0] == len(variations.samples)
+        assert res2['selected_samples'].shape[0] == len(variations.samples)
         assert new_var.samples == new_var2.samples
         assert numpy.all(new_var[GT_FIELD] == new_var2[GT_FIELD])
         assert numpy.allclose(res[EDGES], res2[EDGES])

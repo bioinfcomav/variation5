@@ -725,6 +725,10 @@ class VariationsH5(_VariationMatrices):
         self._h5file.close()
 
     @property
+    def fpath(self):
+        return self._h5file.filename
+
+    @property
     def allele_count(self):
         counts = None
         for gt_chunk in select_dset_from_chunks(self.iterate_chunks(),

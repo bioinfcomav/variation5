@@ -829,6 +829,7 @@ class VariationsH5(_VariationMatrices):
 
     samples = property(get_samples, set_samples)
 
+
 def select_dset_from_chunks(chunks, dset_path):
     return (chunk[dset_path] for chunk in chunks)
 

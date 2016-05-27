@@ -64,7 +64,7 @@ MISSING_VALUES = _MissingValues()
 
 # Speed is related to chunksize, so if you change snps-per-chunk check the
 # performance
-SNPS_PER_CHUNK = 200
+SNPS_PER_CHUNK = 600
 
 DEF_DSET_PARAMS = {
                    # Not much slower than lzf but compresses much more

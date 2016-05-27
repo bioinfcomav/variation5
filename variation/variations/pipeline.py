@@ -1,5 +1,5 @@
 
-import functools
+from multiprocessing import Pool
 
 import numpy
 
@@ -21,10 +21,8 @@ class Pipeline():
         step = {'callable': callable_instance, 'id': id_, 'name': filter_name}
         self._pipeline.append(step)
 
-    def _pipeline_funct(self, slic3, vars_in, kept_fields=None,
-                        ignored_fields=None):
-        chunk = vars_in.get_chunk(slic3, kept_fields=kept_fields,
-                                  ignored_fields=ignored_fields)
+    def _pipeline_funct(self, chunk):
+
         results = []
         for step in self._pipeline:
             # This for should be more internal than the for for the HDF5
@@ -36,7 +34,6 @@ class Pipeline():
                 chunk = result[FLT_VARS]
                 del result[FLT_VARS]
             results.append(result)
-
         return results, chunk
 
     def _reduce_results(self, results, vars_out):
@@ -105,9 +102,9 @@ class Pipeline():
             mins.append(None)
             maxs.append(None)
 
-        for slic3 in vars_in._create_iterate_chunk_slices(chunk_size):
-            chunk = vars_in.get_chunk(slic3, kept_fields=kept_fields,
-                                      ignored_fields=ignored_fields)
+        for chunk in vars_in.iterate_chunks(kept_fields=kept_fields,
+                                            ignored_fields=ignored_fields,
+                                            chunk_size=chunk_size):
             for idx, callable_instance in enumerate(callables_to_check):
                 result = callable_instance(chunk)
                 min_, max_ = result[EDGES][0], result[EDGES][-1]
@@ -127,15 +124,11 @@ class Pipeline():
                                              kept_fields=kept_fields,
                                              ignored_fields=ignored_fields)
 
-        pipeline_funct = functools.partial(self._pipeline_funct,
-                                           vars_in=vars_in,
-                                           kept_fields=kept_fields,
-                                           ignored_fields=ignored_fields)
-        # To use the Single Writer Multiple Reader feature of HDF5 we have
-        # to spawn several readers, one per mapping process, but only one
-        # writer. So the results should go through a socket to the main
-        # process to be written
-        slices = vars_in._create_iterate_chunk_slices(chunk_size)
-        results_and_chunks = map(pipeline_funct, slices)
+
+        chunks = vars_in.iterate_chunks(kept_fields=kept_fields,
+                                        ignored_fields=ignored_fields,
+                                        chunk_size=chunk_size)
+
+        results_and_chunks = map(self._pipeline_funct, chunks)
 
         return self._reduce_results(results_and_chunks, vars_out)

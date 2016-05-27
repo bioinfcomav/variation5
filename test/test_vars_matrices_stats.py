@@ -694,5 +694,5 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(chrom == b'chr1')
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_std_depth_distribution']
+    import sys;sys.argv = ['', 'StatsTest.test_calc_depth_distribution']
     unittest.main()

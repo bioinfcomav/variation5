@@ -1077,7 +1077,7 @@ def calc_field_distribs_per_sample(variations, field, range_=None,
         mask_mat = variations[mask_field]
 
     if range_ is None:
-        min_, max_ = calc_min_max(mat)
+        min_, max_ = calc_min_max(mat, chunk_size=chunk_size)
         if issubclass(mat.dtype.type, numpy.integer) and min_ < 0:
             # we remove the missing data
             min_ = 0

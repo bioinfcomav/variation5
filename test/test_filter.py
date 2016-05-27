@@ -485,6 +485,7 @@ class FieldFilterTest(unittest.TestCase):
 class DepthFilterTest(unittest.TestCase):
 
     def test_filter_snp_by_std_depth(self):
+        # TODO sample
         vars_ = VariationsArrays()
         dps = numpy.array([[4, 2, 2, 0, 0], [2, 1, 1, 0, 1]])
         vars_['/calls/DP'] = dps
@@ -572,5 +573,5 @@ class FilterSamplesTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'SNPQualFilterTest']
+    # import sys;sys.argv = ['', 'DepthFilterTest']
     unittest.main()

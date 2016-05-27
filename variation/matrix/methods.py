@@ -137,13 +137,17 @@ def iterate_matrix_chunks(matrix, chunk_size=SNPS_PER_CHUNK):
         yield matrix[start:stop]
 
 
-def calc_min_max(matrix):
+def calc_min_max(matrix, chunk_size=SNPS_PER_CHUNK):
     if matrix.size == 0:
         return numpy.inf, -numpy.inf
     if is_dataset(matrix):
         max_ = None
         min_ = None
-        for chunk in iterate_matrix_chunks(matrix):
+        if chunk_size:
+            chunks = iterate_matrix_chunks(matrix, chunk_size=chunk_size)
+        else:
+            chunks = [matrix]
+        for chunk in chunks:
             chunk_max = numpy.nanmax(chunk)
             chunk_min = numpy.nanmin(chunk)
             if max_ is None or max_ < chunk_max:

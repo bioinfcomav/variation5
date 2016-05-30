@@ -591,7 +591,7 @@ def _estimate_percentiles_from_distrib(counts, edges,
 
 def plot_hists(counts, edges, bin_names=None, fhand=None, axes=None,
                no_interactive_win=False, figsize=None, mpl_params=None,
-               log_hist_axes=False, xlabels=None):
+               log_hist_axes=False, xlabels=None, plot_quartiles=False):
 
     min_grey = 0.3
     max_grey = 0.9
@@ -603,11 +603,6 @@ def plot_hists(counts, edges, bin_names=None, fhand=None, axes=None,
     if mpl_params is None:
         mpl_params = {}
 
-    median = 0.5
-    quart = [0.25, 0.75]
-    percent9 = [0.05, 0.95]
-    percentiles = list(sorted([median] + quart + percent9))
-
     # log_hist_axes
     if log_hist_axes:
         counts = numpy.log10(counts)
@@ -616,42 +611,49 @@ def plot_hists(counts, edges, bin_names=None, fhand=None, axes=None,
     max_per_sample = numpy.max(counts, axis=0)
     counts = counts / max_per_sample / 2 * sample_width
 
-    percent_vals = _estimate_percentiles_from_distrib(counts, edges,
-                                                      percentiles=percentiles,
-                                                      samples_in_rows=False)
-    assert not (len(percentiles) - 1) % 2
-    median_row_idx = len(percentiles) // 2
-    assert percentiles[median_row_idx] - 0.5 < 0.0001
-
     print_figure = False
     if axes is None:
         print_figure = True
     axes, canvas, fig = _get_mplot_axes(axes, fhand, figsize=figsize)
 
-    greys = cm.get_cmap('Greys')
-    # draw quartile lines
-    for sample_idx in range(counts.shape[1]):
-        sample_percents = percent_vals[:, sample_idx]
-        for percent_idx in range(median_row_idx):
-            color = percent_idx / median_row_idx * (max_grey - min_grey)
-            color += min_grey
-            color = greys(color)
+    if plot_quartiles:
+        median = 0.5
+        quart = [0.25, 0.75]
+        percent9 = [0.05, 0.95]
+        percentiles = list(sorted([median] + quart + percent9))
 
-            xmin = (sample_idx + 1) - quartile_with / 2
-            xmax = (sample_idx + 1) + quartile_with / 2
-            percent = sample_percents[percent_idx]
-            axes.hlines(percent, xmin, xmax, zorder=1, color=color,
-                        linewidth=quartile_line_width)
-            percent = sample_percents[-1 - percent_idx]
-            axes.hlines(percent, xmin, xmax, zorder=1, color=color,
-                        linewidth=quartile_line_width)
+        percent_vals = _estimate_percentiles_from_distrib(counts, edges,
+                                                          percentiles=percentiles,
+                                                          samples_in_rows=False)
+        assert not (len(percentiles) - 1) % 2
+        median_row_idx = len(percentiles) // 2
+        assert percentiles[median_row_idx] - 0.5 < 0.0001
 
-    # draw median lines
-    medians = percent_vals[median_row_idx, :]
-    for sample_idx, median in enumerate(medians):
-        axes.hlines(median, (sample_idx + 1) - quartile_with / 2,
-                    (sample_idx + 1) + quartile_with / 2, color='red',
-                    zorder=3, linewidth=quartile_line_width)
+
+        greys = cm.get_cmap('Greys')
+        # draw quartile lines
+        for sample_idx in range(counts.shape[1]):
+            sample_percents = percent_vals[:, sample_idx]
+            for percent_idx in range(median_row_idx):
+                color = percent_idx / median_row_idx * (max_grey - min_grey)
+                color += min_grey
+                color = greys(color)
+
+                xmin = (sample_idx + 1) - quartile_with / 2
+                xmax = (sample_idx + 1) + quartile_with / 2
+                percent = sample_percents[percent_idx]
+                axes.hlines(percent, xmin, xmax, zorder=1, color=color,
+                            linewidth=quartile_line_width)
+                percent = sample_percents[-1 - percent_idx]
+                axes.hlines(percent, xmin, xmax, zorder=1, color=color,
+                            linewidth=quartile_line_width)
+
+        # draw median lines
+        medians = percent_vals[median_row_idx, :]
+        for sample_idx, median in enumerate(medians):
+            axes.hlines(median, (sample_idx + 1) - quartile_with / 2,
+                        (sample_idx + 1) + quartile_with / 2, color='red',
+                        zorder=3, linewidth=quartile_line_width)
 
     # draw histograms
     hist_y0 = edges[:-1]

@@ -163,7 +163,7 @@ class BoxplotsTests(unittest.TestCase):
                                                  samples_in_rows=False)
         assert numpy.allclose(est, numpy.array(exp).T)
 
-    def xtest_plot_boxplot(self):
+    def test_plot_boxplot(self):
 
         counts = numpy.array([[1, 3, 6, 10, 7, 2, 1],
                               [10, 5, 4, 3, 1, 1, 1],
@@ -174,6 +174,10 @@ class BoxplotsTests(unittest.TestCase):
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_hists(counts, edges, fhand=fhand, log_hist_axes=True,
                        xlabels=['sample1', 'sample2', 'sample3'])
+            plot_hists(counts, edges, fhand=fhand, log_hist_axes=True,
+                       xlabels=['sample1', 'sample2', 'sample3'],
+                       plot_quartiles=True)
+
             # input(fhand.name)
 
 if __name__ == "__main__":

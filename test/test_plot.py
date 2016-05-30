@@ -173,7 +173,8 @@ class BoxplotsTests(unittest.TestCase):
 
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_hists(counts, edges, fhand=fhand, log_hist_axes=True,
-                       xlabels=['sample1', 'sample2', 'sample3'])
+                       xlabels=['sample1', 'sample2', 'sample3'],
+                       mpl_params={'set_ybound': {'kwargs': {'upper': 70}}})
             plot_hists(counts, edges, fhand=fhand, log_hist_axes=True,
                        xlabels=['sample1', 'sample2', 'sample3'],
                        plot_quartiles=True)

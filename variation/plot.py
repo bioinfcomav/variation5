@@ -37,7 +37,7 @@ def _get_mplot_axes(axes, fhand, figsize=None, plot_type=111):
     fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
 
     axes = fig.add_subplot(plot_type)
-    return axes, canvas
+    return axes, canvas, fig
 
 
 def _print_figure(canvas, fhand, no_interactive_win):
@@ -84,7 +84,7 @@ def calc_and_plot_boxplot(mat, by_row=True, fhand=None, axes=None,
     print_figure = False
     if axes is None:
         print_figure = True
-    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
 
     if by_row:
         mat = mat.transpose()
@@ -108,7 +108,7 @@ def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
     print_figure = False
     if axes is None:
         print_figure = True
-    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
 
     if not by_row:
         mat = mat.transpose()
@@ -134,15 +134,14 @@ def _set_box_color(bp, color):
 
 def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
                                       axes=None, no_interactive_win=False,
-                                      figsize=None, show_fliers=False,
-                                      mpl_params={}, colors=None, labels=None,
-                                      xticklabels=None):
+                                      figsize=None, mpl_params={}, colors=None,
+                                      labels=None, xticklabels=None):
     '''It assumes that there are as many bins in the distributions as integers
     in their range'''
     print_figure = False
     if axes is None:
         print_figure = True
-    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
 
     n_series = len(distribs_series)
     if colors is None:
@@ -190,7 +189,7 @@ def plot_distrib(distrib, bins, fhand=None, axes=None, vlines=None,
     print_figure = False
     if axes is None:
         print_figure = True
-    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
 
     width = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
     result = axes.bar(bins[:-1], distrib, width=width, **kwargs)
@@ -322,7 +321,7 @@ def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
     print_figure = False
     if axes is None:
         print_figure = True
-        axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+        axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
     result = probplot(x, dist=distrib, sparams=distrib_params, plot=axes)
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
@@ -433,7 +432,7 @@ def _manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
     print_figure = False
     if axes is None:
         print_figure = True
-        axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+        axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
 
     colors = cycle(colors)
 
@@ -493,7 +492,7 @@ def plot_lines(x, y, fhand=None, axes=None,
     print_figure = False
     if axes is None:
         print_figure = True
-    axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+    axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
     result = axes.plot(x, y, **kwargs)
 
     _set_mpl_params(axes, mpl_params)
@@ -543,3 +542,145 @@ def write_curlywhirly(fhand, labels, coords, dim_labels=None,
         line_items.append(label)
         line_items.extend(map(str, coord))
         _write_line(fhand, line_items, sep)
+
+
+def _estimate_percentiles_from_distrib(counts, edges,
+                                       percentiles=(0.25, 0.50, 0.75),
+                                       samples_in_rows=True):
+    if counts.ndim == 1:
+        assert counts.shape[0] == edges.shape[0] - 1
+        data_shape = 'vector'
+    else:
+        if samples_in_rows:
+            assert counts.shape[1] == edges.shape[0] - 1
+            data_shape = '2d_mat_samples_axis_0'
+        else:
+            assert counts.shape[0] == edges.shape[0] - 1
+            data_shape = '2d_mat_samples_axis_1'
+            counts = counts.T
+
+    if data_shape == 'vector':
+        sums = numpy.sum(counts)
+        freqs = numpy.divide(counts, sums)
+        run_tot = numpy.cumsum(freqs, axis=0)
+    elif data_shape.startswith('2d_mat_samples_axis_'):
+        sums = numpy.sum(counts, axis=1)
+        freqs = numpy.divide(counts, sums[:, None])
+        run_tot = numpy.cumsum(freqs, axis=1)
+    else:
+        raise RuntimeError('Fixme')
+
+    bins_middle_points = (edges[:-1] + edges[1:]) / 2
+
+    if data_shape == 'vector':
+        est_quartiles = numpy.interp(percentiles, run_tot, bins_middle_points)
+    elif data_shape.startswith('2d_mat_samples_axis_'):
+        est_quartiles = []
+        for idx in range(counts.shape[0]):
+            est_quartiles.append(numpy.interp(percentiles, run_tot[idx],
+                                              bins_middle_points))
+        est_quartiles = numpy.array(est_quartiles)
+    else:
+        raise RuntimeError('Fixme')
+
+    if data_shape == '2d_mat_samples_axis_1':
+        est_quartiles = est_quartiles.T
+
+    return est_quartiles
+
+
+def plot_hists(counts, edges, bin_names=None, fhand=None, axes=None,
+               no_interactive_win=False, figsize=None, mpl_params=None,
+               log_hist_axes=False, xlabels=None):
+
+    min_grey = 0.3
+    max_grey = 0.9
+    sample_width = 0.8
+    quartile_with = 0.9
+    bar_alpha = 0.9
+    quartile_line_width = 3
+
+    if mpl_params is None:
+        mpl_params = {}
+
+    median = 0.5
+    quart = [0.25, 0.75]
+    percent9 = [0.05, 0.95]
+    percentiles = list(sorted([median] + quart + percent9))
+
+    # log_hist_axes
+    if log_hist_axes:
+        counts = numpy.log10(counts)
+
+    # normalize counts
+    max_per_sample = numpy.max(counts, axis=0)
+    counts = counts / max_per_sample / 2 * sample_width
+
+    percent_vals = _estimate_percentiles_from_distrib(counts, edges,
+                                                      percentiles=percentiles,
+                                                      samples_in_rows=False)
+    assert not (len(percentiles) - 1) % 2
+    median_row_idx = len(percentiles) // 2
+    assert percentiles[median_row_idx] - 0.5 < 0.0001
+
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas, fig = _get_mplot_axes(axes, fhand, figsize=figsize)
+
+    greys = cm.get_cmap('Greys')
+    # draw quartile lines
+    for sample_idx in range(counts.shape[1]):
+        sample_percents = percent_vals[:, sample_idx]
+        for percent_idx in range(median_row_idx):
+            color = percent_idx / median_row_idx * (max_grey - min_grey)
+            color += min_grey
+            color = greys(color)
+
+            xmin = (sample_idx + 1) - quartile_with / 2
+            xmax = (sample_idx + 1) + quartile_with / 2
+            percent = sample_percents[percent_idx]
+            axes.hlines(percent, xmin, xmax, zorder=1, color=color,
+                        linewidth=quartile_line_width)
+            percent = sample_percents[-1 - percent_idx]
+            axes.hlines(percent, xmin, xmax, zorder=1, color=color,
+                        linewidth=quartile_line_width)
+
+    # draw median lines
+    medians = percent_vals[median_row_idx, :]
+    for sample_idx, median in enumerate(medians):
+        axes.hlines(median, (sample_idx + 1) - quartile_with / 2,
+                    (sample_idx + 1) + quartile_with / 2, color='red',
+                    zorder=3, linewidth=quartile_line_width)
+
+    # draw histograms
+    hist_y0 = edges[:-1]
+    height = edges[1] - edges[0]
+    for sample_idx in range(counts.shape[1]):
+        sample_counts = counts[:, sample_idx]
+
+        hist_vals = sample_counts
+
+        bottom = hist_y0
+        width = hist_vals
+        left = sample_idx + 1
+        axes.barh(bottom, width, height, left, zorder=10,
+                  alpha=bar_alpha, linewidth=0)
+        axes.barh(bottom, -width, height, left, zorder=10,
+                  alpha=bar_alpha, linewidth=0)
+
+    if xlabels:
+        n_samples = counts.shape[1]
+        x_vals = list(range(1, n_samples + 1))
+        axes.set_xticks(x_vals)
+        axes.set_xticklabels(xlabels, rotation='vertical')
+
+    axes.set_xbound(lower=0.5)
+    axes.grid(axis='y')
+
+    fig.tight_layout()
+
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+
+    return

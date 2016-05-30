@@ -8,7 +8,7 @@ def pairwise_ld(variations, axes=None, fhand=None, figsize=None,
     print_figure = False
     if axes is None:
         print_figure = True
-        axes, canvas = _get_mplot_axes(axes, fhand, figsize=figsize)
+        axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
 
     gts012 = variations.gts_as_mat012
 

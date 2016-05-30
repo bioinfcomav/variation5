@@ -16,7 +16,8 @@ import numpy
 from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             qqplot, manhattan_plot, plot_barplot, plot_distrib,
                             plot_hist2d, plot_boxplot_from_distribs_series,
-                            write_curlywhirly, _look_for_first_different)
+                            write_curlywhirly, _look_for_first_different,
+                            _estimate_percentiles_from_distrib, plot_hists)
 from variation.variations.plot import pairwise_ld
 from variation.variations import VariationsH5
 from test.test_utils import TEST_DATA_DIR
@@ -134,6 +135,47 @@ class PlotTest(unittest.TestCase):
         with NamedTemporaryFile(suffix='.png') as fhand:
             pairwise_ld(hdf5, fhand=fhand)
 
+
+class BoxplotsTests(unittest.TestCase):
+    def test_quartile_estimation(self):
+        counts = numpy.array([1, 3, 6, 10, 7, 2, 1])
+        edges = numpy.array(range(len(counts) + 1))
+        quartiles = [0, 0.25, 0.5, 0.75, 1]
+        est = _estimate_percentiles_from_distrib(counts, edges,
+                                                 percentiles=quartiles)
+        exp = [0.5, 2.08333333, 3., 3.85714286, 6.5]
+        assert numpy.allclose(est, exp)
+
+        counts = numpy.array([counts,
+                              [10, 5, 4, 3, 1, 1, 1],
+                              [1, 1, 1, 2, 3, 5, 10]])
+        # edges = numpy.arange(counts.shape[1])
+        est = _estimate_percentiles_from_distrib(counts, edges,
+                                                 percentiles=quartiles)
+        exp = [exp,
+               [0.5, 0.5, 1., 2.4375, 6.5],
+               [0.5, 3.75, 5.2, 5.925, 6.5]]
+        assert numpy.allclose(exp, est)
+
+        counts = counts.T
+        est = _estimate_percentiles_from_distrib(counts, edges,
+                                                 percentiles=quartiles,
+                                                 samples_in_rows=False)
+        assert numpy.allclose(est, numpy.array(exp).T)
+
+    def xtest_plot_boxplot(self):
+
+        counts = numpy.array([[1, 3, 6, 10, 7, 2, 1],
+                              [10, 5, 4, 3, 1, 1, 1],
+                              [1, 1, 1, 2, 3, 5, 10]])
+        counts = counts.T
+        edges = numpy.arange(counts.shape[0] + 1)
+
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_hists(counts, edges, fhand=fhand, log_hist_axes=True,
+                       xlabels=['sample1', 'sample2', 'sample3'])
+            # input(fhand.name)
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PlotTest.test_plot_hist2d']
+    # import sys;sys.argv = ['', 'BoxplotsTests.test_plot_boxplot']
     unittest.main()

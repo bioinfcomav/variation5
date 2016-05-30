@@ -629,7 +629,6 @@ def plot_hists(counts, edges, bin_names=None, fhand=None, axes=None,
         median_row_idx = len(percentiles) // 2
         assert percentiles[median_row_idx] - 0.5 < 0.0001
 
-
         greys = cm.get_cmap('Greys')
         # draw quartile lines
         for sample_idx in range(counts.shape[1]):
@@ -676,6 +675,8 @@ def plot_hists(counts, edges, bin_names=None, fhand=None, axes=None,
         x_vals = list(range(1, n_samples + 1))
         axes.set_xticks(x_vals)
         axes.set_xticklabels(xlabels, rotation='vertical')
+
+    _set_mpl_params(axes, mpl_params)
 
     axes.set_xbound(lower=0.5)
     axes.grid(axis='y')

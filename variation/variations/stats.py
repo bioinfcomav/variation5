@@ -1376,6 +1376,8 @@ def calc_call_dp_distrib_for_a_sample(variations, sample, range_=None,
                             weights=are_hom)
         are_het = numpy.logical_and(numpy.logical_not(are_hom),
                                     numpy.logical_not(are_missing))
+        are_het = are_het.astype(int)
+
         het_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
                             weights=numpy.logical_not(are_het))
         miss_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,

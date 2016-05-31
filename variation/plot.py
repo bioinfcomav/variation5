@@ -623,9 +623,9 @@ def _estimate_percentiles_from_distrib(counts, edges,
     return est_quartiles
 
 
-def plot_hists(counts, edges, bin_names=None, fhand=None, axes=None,
-               no_interactive_win=False, figsize=None, mpl_params=None,
-               log_hist_axes=False, xlabels=None, plot_quartiles=False):
+def plot_hists(counts, edges, fhand=None, axes=None, no_interactive_win=False,
+               figsize=None, mpl_params=None, log_hist_axes=False,
+               xlabels=None, plot_quartiles=False):
 
     min_grey = 0.3
     max_grey = 0.9

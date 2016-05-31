@@ -274,8 +274,12 @@ def _plot_bars(bar_values, bin_edges, axes, orientation, log_normed):
 
 
 def plot_hist2d(hist, xbins, ybins, fhand=None, no_interactive_win=False,
-                figsize=None, log_normed=False, hist1d=True, mpl_params={},
+                figsize=None, log_normed=False, hist1d=True, mpl_params=None,
                 **kwargs):
+
+    if mpl_params is None:
+        mpl_params = {}
+
     print_figure = True
 
     ratio = 4

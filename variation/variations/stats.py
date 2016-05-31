@@ -1370,6 +1370,8 @@ def calc_call_dp_distrib_for_a_sample(variations, sample, range_=None,
     miss_counts = None
     for dp_chunk, gt_chunk in zip(dp_chunks, gt_chunks):
         are_hom, are_missing = _call_is_hom_for_sample(gt_chunk)
+        are_hom = are_hom.astype(int)
+        are_missing = are_missing.astype(int)
         hom_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
                             weights=are_hom)
         are_het = numpy.logical_and(numpy.logical_not(are_hom),

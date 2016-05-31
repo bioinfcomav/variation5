@@ -35,7 +35,7 @@ REQUIRED_FIELDS_FOR_STAT = {'calc_maf': [GT_FIELD],
                             'calc_obs_het_by_sample': [GT_FIELD]}
 
 
-def _calc_histogram(vector, n_bins, range_):
+def _calc_histogram(vector, n_bins, range_, weights=None):
     try:
         dtype = vector.dtype
     except AttributeError:
@@ -43,22 +43,30 @@ def _calc_histogram(vector, n_bins, range_):
     missing_value = MISSING_VALUES[dtype]
 
     if math.isnan(missing_value):
-        vector = remove_nans(vector)
+        not_nan = ~numpy.isnan(vector)
     else:
-        vector = vector[vector != missing_value]
+        not_nan = ~numpy.isnan(vector)
+
+    vector = vector[not_nan]
+    if weights is not None:
+        weights = weights[not_nan]
     try:
-        result = numpy.histogram(vector, bins=n_bins, range=range_)
+        result = numpy.histogram(vector, bins=n_bins, range=range_,
+                                 weights=weights)
     except ValueError as error:
         if 'parameter must be finite' in str(error):
-            vector = vector[~numpy.isinf(vector)]
-            result = numpy.histogram(vector, bins=n_bins, range=range_)
+            isfinite = ~numpy.isinf(vector)
+            vector = vector[isfinite]
+            weights = weights[isfinite]
+            result = numpy.histogram(vector, bins=n_bins, range=range_,
+                                     weights=weights)
         else:
             raise
     return result
 
 
-def histogram(vector, n_bins=DEF_NUM_BINS, range_=None):
-    return _calc_histogram(vector, n_bins, range_)
+def histogram(vector, n_bins=DEF_NUM_BINS, range_=None, weights=None):
+    return _calc_histogram(vector, n_bins, range_, weights=weights)
 
 
 def calc_cum_distrib(distrib):
@@ -1311,3 +1319,81 @@ def calc_r2_windows(variations, window_size, step=None):
             window_r2.append(r2)
     return (numpy.array(window_chrom), numpy.array(window_pos),
             numpy.array(window_r2))
+
+
+def _call_is_hom_for_sample(gts):
+
+    if gts.shape[0] == 0:
+        return numpy.array([]), numpy.array([])
+
+    if is_dataset(gts):
+        gts = gts[:]
+
+    is_hom = numpy.full(gts.shape[:-1], True, dtype=numpy.bool)
+    is_missing = numpy.full(gts.shape[:-1], False, dtype=numpy.bool)
+    for idx in range(1, gts.shape[1]):
+        is_hom = numpy.logical_and(gts[:, idx] == gts[:, idx - 1], is_hom)
+
+    is_missing = numpy.sum(gts == MISSING_INT, axis=1) > 0
+    is_hom[is_missing] = False
+    return is_hom, is_missing
+
+
+def calc_call_dp_distrib_for_a_sample(variations, sample, range_=None,
+                                      n_bins=DEF_NUM_BINS,
+                                      chunk_size=SNPS_PER_CHUNK):
+
+    dps = variations['/calls/DP']
+    gts = variations[GT_FIELD]
+
+    sample_idx = variations.samples.index(sample) if sample else None
+
+    if range_ is None:
+        min_, max_ = calc_min_max(dps, chunk_size=chunk_size,
+                                  sample_idx=sample_idx)
+        if issubclass(dps.dtype.type, numpy.integer) and min_ < 0:
+            # we remove the missing data
+            min_ = 0
+        range_ = min_, max_ + 1
+
+    if chunk_size:
+        dp_chunks = iterate_matrix_chunks(dps, chunk_size=chunk_size,
+                                          sample_idx=sample_idx)
+        gt_chunks = iterate_matrix_chunks(gts, chunk_size=chunk_size,
+                                          sample_idx=sample_idx)
+    else:
+        dp_chunks = [dps[:, sample_idx]]
+        gt_chunks = [gts[:, sample_idx, :]]
+
+    hom_counts, edges = None, None
+    het_counts = None
+    miss_counts = None
+    for dp_chunk, gt_chunk in zip(dp_chunks, gt_chunks):
+        are_hom, are_missing = _call_is_hom_for_sample(gt_chunk)
+        hom_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
+                            weights=are_hom)
+        are_het = numpy.logical_and(numpy.logical_not(are_hom),
+                                    numpy.logical_not(are_missing))
+        het_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
+                            weights=numpy.logical_not(are_het))
+        miss_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
+                             weights=are_missing)
+        chunk_hom_counts, chunk_hom_edges = hom_res
+        chunk_het_counts, chunk_het_edges = het_res
+        chunk_miss_counts, chunk_miss_edges = miss_res
+
+        if hom_counts is None:
+            hom_counts = chunk_hom_counts
+            het_counts = chunk_het_counts
+            miss_counts = chunk_miss_counts
+            edges = chunk_hom_edges
+        else:
+            hom_counts += chunk_hom_counts
+            het_counts += chunk_het_counts
+            miss_counts += chunk_miss_counts
+            assert numpy.allclose(edges, chunk_hom_edges)
+            assert numpy.allclose(edges, chunk_miss_edges)
+        het_counts += chunk_het_counts
+        assert numpy.allclose(edges, chunk_het_edges)
+
+    return hom_counts, het_counts, miss_counts, edges

@@ -31,7 +31,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         calc_cum_distrib, _calc_r2,
                                         calc_r2_windows, GT_FIELD,
                                         hist2d_het_allele_freq,
-                                        calc_field_distrib_for_a_sample)
+                                        calc_field_distrib_for_a_sample,
+                                        calc_call_dp_distrib_for_a_sample)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -728,6 +729,31 @@ class StatsTest(unittest.TestCase):
                               equal_nan=True)
         assert numpy.all(chrom == b'chr1')
 
+    def test_calc_dp_for_sample(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks())
+        res = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                n_bins=15)
+        hom_distrib, het_distrib, miss_distrib, _ = res
+        assert hom_distrib.shape == (15,)
+        assert het_distrib.shape == (15,)
+        assert miss_distrib.shape == (15,)
+
+        res = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                n_bins=15, chunk_size=None)
+        hom_distrib2, het_distrib2, miss_distrib2, _ = res
+        assert numpy.all(hom_distrib == hom_distrib2)
+        assert numpy.all(het_distrib == het_distrib2)
+        assert numpy.all(miss_distrib == miss_distrib2)
+
+        res = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                n_bins=15, chunk_size=50)
+        hom_distrib3, het_distrib3, miss_distrib3, _ = res
+        assert numpy.all(hom_distrib == hom_distrib3)
+        assert numpy.all(het_distrib == het_distrib3)
+        assert numpy.all(miss_distrib == miss_distrib3)
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_distrib_for_sample']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_dp_for_sample']
     unittest.main()

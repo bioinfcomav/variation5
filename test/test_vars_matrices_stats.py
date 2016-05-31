@@ -733,26 +733,24 @@ class StatsTest(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
         snps.put_chunks(hdf5.iterate_chunks())
-        res = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
-                                                n_bins=15)
-        hom_distrib, het_distrib, miss_distrib, _ = res
-        assert hom_distrib.shape == (15,)
-        assert het_distrib.shape == (15,)
-        assert miss_distrib.shape == (15,)
+        cnts, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                    n_bins=15)
+        assert cnts['hom'].shape == (15,)
+        assert cnts['het'].shape == (15,)
+        assert cnts['miss'].shape == (15,)
 
-        res = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
-                                                n_bins=15, chunk_size=None)
-        hom_distrib2, het_distrib2, miss_distrib2, _ = res
-        assert numpy.all(hom_distrib == hom_distrib2)
-        assert numpy.all(het_distrib == het_distrib2)
-        assert numpy.all(miss_distrib == miss_distrib2)
+        cnts2, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                     n_bins=15,
+                                                     chunk_size=None)
+        assert numpy.all(cnts['hom'] == cnts2['hom'])
+        assert numpy.all(cnts['het'] == cnts2['het'])
+        assert numpy.all(cnts['miss'] == cnts2['miss'])
 
-        res = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
-                                                n_bins=15, chunk_size=50)
-        hom_distrib3, het_distrib3, miss_distrib3, _ = res
-        assert numpy.all(hom_distrib == hom_distrib3)
-        assert numpy.all(het_distrib == het_distrib3)
-        assert numpy.all(miss_distrib == miss_distrib3)
+        cnts3, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                     n_bins=15, chunk_size=50)
+        assert numpy.all(cnts['hom'] == cnts3['hom'])
+        assert numpy.all(cnts['het'] == cnts3['het'])
+        assert numpy.all(cnts['miss'] == cnts3['miss'])
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'StatsTest.test_calc_dp_for_sample']

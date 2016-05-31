@@ -1396,4 +1396,4 @@ def calc_call_dp_distrib_for_a_sample(variations, sample, range_=None,
         het_counts += chunk_het_counts
         assert numpy.allclose(edges, chunk_het_edges)
 
-    return hom_counts, het_counts, miss_counts, edges
+    return {'hom': hom_counts, 'het': het_counts, 'miss': miss_counts}, edges

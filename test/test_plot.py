@@ -14,8 +14,9 @@ from io import StringIO
 import numpy
 
 from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
-                            qqplot, manhattan_plot, plot_barplot, plot_distrib,
-                            plot_hist2d, plot_boxplot_from_distribs_series,
+                            qqplot, manhattan_plot, plot_barplot,
+                            plot_histogram, plot_hist2d,
+                            plot_boxplot_from_distribs_series,
                             write_curlywhirly, _look_for_first_different,
                             _estimate_percentiles_from_distrib, plot_hists)
 from variation.variations.plot import pairwise_ld
@@ -62,10 +63,10 @@ class PlotTest(unittest.TestCase):
         x = numpy.array(list(range(1, 11)))
         distrib, bins = numpy.histogram(x)
         with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_distrib(distrib, bins, fhand=fhand)
+            plot_histogram(distrib, bins, fhand=fhand, bin_labels=list(x))
 
         with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_distrib(distrib, bins, fhand=fhand, vlines=[3, 7])
+            plot_histogram(distrib, bins, fhand=fhand, vlines=[3, 7])
 
     def test_plot_barplot(self):
         matrix = numpy.array([[1, 2, 3, 4],

@@ -193,9 +193,9 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
     return result
 
 
-def plot_distrib(distrib, bins, fhand=None, axes=None, vlines=None,
-                 no_interactive_win=False, figsize=None,
-                 mpl_params=None, n_ticks=10, **kwargs):
+def plot_histogram(counts, edges, fhand=None, axes=None, vlines=None,
+                   no_interactive_win=False, figsize=None,
+                   mpl_params=None, bin_labels=None, **kwargs):
     '''Plots the histogram of an already calculated distribution'''
     if mpl_params is None:
         mpl_params = {}
@@ -203,15 +203,17 @@ def plot_distrib(distrib, bins, fhand=None, axes=None, vlines=None,
     print_figure = False
     if axes is None:
         print_figure = True
-    axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
+    axes, canvas, fig = _get_mplot_axes(axes, fhand, figsize=figsize)
 
-    width = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
-    result = axes.bar(bins[:-1], distrib, width=width, **kwargs)
+    width = edges[1:] - edges[:-1]
+    result = axes.bar(edges[:-1], counts, width=width, **kwargs)
 
-    ticks = numpy.arange(0, bins.shape[0], int(bins.shape[0] / n_ticks))
-    axes.set_xticks(bins[ticks])
-    xticklabels = [str(x)[:len(str(x).split('.')[0]) + 4] for x in bins[ticks]]
-    axes.set_xticklabels(xticklabels)
+    if bin_labels is not None:
+        assert len(bin_labels) == len(list(edges)) - 1
+        ticks = edges[:-1] + width / 2
+        axes.set_xticks(ticks)
+        xticklabels = list(map(str, bin_labels))
+        axes.set_xticklabels(xticklabels, rotation='vertical')
 
     if vlines is not None:
         ymin, ymax = axes.get_ylim()
@@ -220,8 +222,12 @@ def plot_distrib(distrib, bins, fhand=None, axes=None, vlines=None,
     for function_name, params in mpl_params.items():
         function = getattr(axes, function_name)
         function(*params.get('args', []), **params.get('kwargs', {}))
+
+    fig.tight_layout()
+
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+
     return result
 
 

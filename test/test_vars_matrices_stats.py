@@ -31,7 +31,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         calc_cum_distrib, _calc_r2,
                                         calc_r2_windows, GT_FIELD,
                                         hist2d_het_allele_freq,
-                                        calc_standarized_by_sample_depth)
+                                        calc_standarized_by_sample_depth,
+                                        calc_field_distrib_for_a_sample)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -627,6 +628,61 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(expec == distrib)
         assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
 
+    def test_calc_distrib_for_sample(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks())
+        distrib, _ = calc_field_distrib_for_a_sample(hdf5, field='/calls/DP',
+                                                     sample='1_17_1_gbs',
+                                                     n_bins=15)
+        assert distrib.shape == (15,)
+
+        distrib2, _ = calc_field_distrib_for_a_sample(snps, field='/calls/DP',
+                                                      n_bins=15,
+                                                      sample='1_17_1_gbs',
+                                                      chunk_size=None)
+        assert numpy.all(distrib == distrib2)
+
+        distrib3, _ = calc_field_distrib_for_a_sample(snps, field='/calls/DP',
+                                                      n_bins=15,
+                                                      sample='1_17_1_gbs',
+                                                      chunk_size=50)
+        assert numpy.all(distrib3 == distrib2)
+
+        vars_ = VariationsArrays()
+        vars_['/calls/DP'] = numpy.array([[10, 5, 15],
+                                          [0, 15, 10]])
+        vars_['/calls/GT'] = numpy.array([[[0, 0], [0, 1], [1, 1]],
+                                          [[0, 0], [0, 1], [1, 1]]])
+        vars_.samples = list(range(3))
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16)
+        expec = [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
+        assert numpy.all(expec == distrib)
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16,
+                                                    mask_field='/calls/GT',
+                                                    mask_func=call_is_het)
+        expec = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+        assert numpy.all(expec == distrib)
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16,
+                                                    mask_field='/calls/GT',
+                                                    mask_func=call_is_hom)
+        expec = [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
+        assert numpy.all(expec == distrib)
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+
     def test_to_positional_stats(self):
         chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3', 'chr4'])
         pos = numpy.array([10, 5, 20, 30, 40, 50])
@@ -694,5 +750,5 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(chrom == b'chr1')
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'StatsTest.test_calc_depth_distribution']
+    import sys;sys.argv = ['', 'StatsTest.test_calc_distrib_for_sample']
     unittest.main()

@@ -13,7 +13,9 @@ from posixpath import join
 import numpy
 
 from variation.matrix.methods import (append_matrix, extend_matrix,
-                                      append_different_size)
+                                      append_different_size,
+                                      iterate_matrix_chunks,
+                                      calc_min_max)
 from variation.variations.vars_matrices import VariationsH5
 from test.test_utils import TEST_DATA_DIR
 
@@ -83,6 +85,26 @@ class ArrayTest(unittest.TestCase):
         assert numpy.all(matrix == numpy.array([[1, 1, 1, -1],
                                                 [2, 2, 2, -1],
                                                 [1, 1, 1, 1]]))
+
+    def test_itereate_chunks(self):
+        mat = numpy.array([[1, 2, 3], [4, 5, 6]])
+        exp = [[[1, 2, 3]], [[4, 5, 6]]]
+        res = list(iterate_matrix_chunks(mat, chunk_size=1))
+        assert numpy.all(res[0] == exp[0])
+        assert numpy.all(res[1] == exp[1])
+
+        exp = [[2], [5]]
+        res = list(iterate_matrix_chunks(mat, chunk_size=1, sample_idx=1))
+        assert numpy.all(res[0] == exp[0])
+        assert numpy.all(res[1] == exp[1])
+
+    def test_min_max(self):
+        mat = numpy.array([[1, 2, 3], [4, 5, 6]])
+        assert calc_min_max(mat) == (1, 6)
+        assert calc_min_max(mat, chunk_size=1) == (1, 6)
+        assert calc_min_max(mat, chunk_size=None) == (1, 6)
+        assert calc_min_max(mat, sample_idx=1) == (2, 5)
+        assert calc_min_max(mat, sample_idx=1, chunk_size=None) == (2, 5)
 
 
 if __name__ == "__main__":

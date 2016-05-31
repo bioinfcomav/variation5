@@ -128,25 +128,33 @@ def num_variations(matrix):
     return matrix.shape[0]
 
 
-def iterate_matrix_chunks(matrix, chunk_size=SNPS_PER_CHUNK):
+def iterate_matrix_chunks(matrix, chunk_size=SNPS_PER_CHUNK, sample_idx=None):
     nsnps = num_variations(matrix)
     for start in range(0, nsnps, chunk_size):
         stop = start + chunk_size
         if stop > nsnps:
             stop = nsnps
-        yield matrix[start:stop]
+        if sample_idx is not None:
+            mat = matrix[start:stop, sample_idx]
+        else:
+            mat = matrix[start:stop]
+        yield mat
 
 
-def calc_min_max(matrix, chunk_size=SNPS_PER_CHUNK):
+def calc_min_max(matrix, chunk_size=SNPS_PER_CHUNK, sample_idx=None):
     if matrix.size == 0:
         return numpy.inf, -numpy.inf
     if is_dataset(matrix):
         max_ = None
         min_ = None
         if chunk_size:
-            chunks = iterate_matrix_chunks(matrix, chunk_size=chunk_size)
+            chunks = iterate_matrix_chunks(matrix, chunk_size=chunk_size,
+                                           sample_idx=sample_idx)
         else:
-            chunks = [matrix]
+            if sample_idx:
+                chunks = [matrix[:, sample_idx]]
+            else:
+                chunks = [matrix]
         for chunk in chunks:
             chunk_max = numpy.nanmax(chunk)
             chunk_min = numpy.nanmin(chunk)
@@ -155,6 +163,8 @@ def calc_min_max(matrix, chunk_size=SNPS_PER_CHUNK):
             if min_ is None or min_ > chunk_min:
                 min_ = chunk_min
     else:
+        if sample_idx:
+            matrix = matrix[:, sample_idx]
         max_ = numpy.nanmax(matrix)
         min_ = numpy.nanmin(matrix)
     return min_, max_

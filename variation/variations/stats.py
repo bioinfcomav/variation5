@@ -1067,6 +1067,41 @@ def hist2d_het_allele_freq(variations, n_bins=DEF_NUM_BINS,
     return hist, xedges, yedges
 
 
+def calc_field_distrib_for_a_sample(variations, field, sample, range_=None,
+                                    n_bins=DEF_NUM_BINS,
+                                    chunk_size=SNPS_PER_CHUNK):
+
+    mat = variations[field]
+
+    sample_idx = variations.samples.index(sample) if sample else None
+
+    if range_ is None:
+        min_, max_ = calc_min_max(mat, chunk_size=chunk_size,
+                                  sample_idx=sample_idx)
+        if issubclass(mat.dtype.type, numpy.integer) and min_ < 0:
+            # we remove the missing data
+            min_ = 0
+        range_ = min_, max_ + 1
+
+    if chunk_size:
+        chunks = iterate_matrix_chunks(mat, chunk_size=chunk_size,
+                                       sample_idx=sample_idx)
+    else:
+        chunks = [mat[:, sample_idx]]
+
+    counts, edges = None, None
+    for chunk in chunks:
+        chunk_counts, chunk_edges = histogram(chunk, n_bins=n_bins,
+                                              range_=range_)
+        if counts is None:
+            counts = chunk_counts
+            edges = chunk_edges
+        else:
+            counts += chunk_counts
+            assert numpy.allclose(edges, chunk_edges)
+    return counts, edges
+
+
 def calc_field_distribs_per_sample(variations, field, range_=None,
                                    n_bins=DEF_NUM_BINS,
                                    chunk_size=SNPS_PER_CHUNK,

@@ -10,9 +10,7 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_called_gt, GQ_FIELD, DP_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT,
                                         calc_mac, calc_snp_density,
-                                        calc_standarized_by_sample_depth,
-                                        histogram, DEF_NUM_BINS,
-                                        calc_depth_modes_by_sample)
+                                        histogram, DEF_NUM_BINS)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT)
 from variation.matrix.methods import is_dataset
@@ -661,67 +659,6 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
 
         if do_histogram:
             this_counts, this_edges = histogram(stats_for_chunk, n_bins=n_bins,
-                                                range_=range_)
-            if edges is None:
-                edges = this_edges
-                counts = this_counts
-            else:
-                counts += this_counts
-                if not numpy.allclose(edges, this_edges):
-                    msg = 'Bin edges do not match in a chunk iteration'
-                    raise RuntimeError(msg)
-
-    res = {}
-    if do_filtering:
-        res[FLT_STATS] = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out,
-                          TOT: tot}
-
-    if do_histogram:
-        res[EDGES] = edges
-        res[COUNTS] = counts
-
-    return res
-
-
-def std_depth_filter(in_vars, max_std_dp, out_vars=None,
-                     chunk_size=SNPS_PER_CHUNK, n_bins=DEF_NUM_BINS,
-                     range_=None, do_histogram=None):
-
-    do_histogram = _check_if_histogram_is_required(do_histogram, n_bins,
-                                                   range_)
-    res = _get_result_if_empty_vars(in_vars, do_histogram)
-    if res is not None:
-        return None
-
-    do_filtering = False if out_vars is None else True
-
-    depth_modes = calc_depth_modes_by_sample(in_vars)
-    depths = calc_standarized_by_sample_depth(in_vars, chunk_size=chunk_size,
-                                              depth_modes=depth_modes)
-
-    if do_histogram and range_ is None:
-        range_ = min(depths), max(depths)
-
-    edges, counts = None, None
-    if chunk_size is None:
-        chunks = in_vars.iterate_chunks(chunk_size=chunk_size)
-    else:
-        chunks = [in_vars]
-    n_kept, tot, n_filtered_out = 0, 0, 0
-    for chunk in chunks:
-        stats = calc_standarized_by_sample_depth(chunk, chunk_size=None,
-                                                 depth_modes=depth_modes)
-
-        if do_filtering:
-            selected_rows = stats <= max_std_dp
-            out_vars.put_chunks([chunk.get_chunk(selected_rows)])
-
-            n_kept += numpy.count_nonzero(selected_rows)
-            tot += selected_rows.shape[0]
-            n_filtered_out += tot - n_kept
-
-        if do_histogram:
-            this_counts, this_edges = histogram(stats, n_bins=n_bins,
                                                 range_=range_)
             if edges is None:
                 edges = this_edges

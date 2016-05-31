@@ -20,7 +20,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           ObsHetFilter, SNPQualFilter, TOT,
                                           LowDPGTsToMissingSetter, FLT_STATS,
                                           LowQualGTsToMissingSetter, N_KEPT,
-                                          NonBiallelicFilter, std_depth_filter,
+                                          NonBiallelicFilter,
                                           Chi2GtFreqs2SampleSetsFilter,
                                           SampleFilter, FieldFilter,
                                           filter_samples_by_missing_rate,
@@ -480,44 +480,6 @@ class FieldFilterTest(unittest.TestCase):
 
         varis = FieldFilter(ignored_fields=[GT_FIELD])(hdf5)[FLT_VARS]
         assert set(orig_keys).difference(varis.keys()) == set([GT_FIELD])
-
-
-class DepthFilterTest(unittest.TestCase):
-
-    def test_filter_snp_by_std_depth(self):
-        # TODO sample
-        vars_ = VariationsArrays()
-        dps = numpy.array([[4, 2, 2, 0, 0], [2, 1, 1, 0, 1]])
-        vars_['/calls/DP'] = dps
-        vars2 = VariationsArrays()
-        res = std_depth_filter(vars_, max_std_dp=1.5, out_vars=vars2)
-        numpy.allclose(vars2['/calls/DP'], dps[0, :])
-
-        assert res[FLT_STATS][N_KEPT] == 1
-        assert res[FLT_STATS][TOT] == 2
-        assert res[FLT_STATS][N_FILTERED_OUT] == 1
-
-        result = std_depth_filter(vars_, max_std_dp=None, n_bins=2)
-        numpy.allclose(result[COUNTS], [1, 1])
-        numpy.allclose(result[EDGES], [1, 1.5, 2])
-
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks())
-        out1 = VariationsArrays()
-        res1 = std_depth_filter(hdf5, max_std_dp=1.5, n_bins=2,
-                                out_vars=out1, chunk_size=50)
-        out2 = VariationsArrays()
-        res2 = std_depth_filter(snps, max_std_dp=1.5, n_bins=2,
-                                out_vars=out2, chunk_size=None)
-
-        assert numpy.allclose(out1[DP_FIELD], out2[DP_FIELD])
-        assert numpy.allclose(res1[EDGES], res2[EDGES])
-        assert numpy.all(res1[COUNTS][:] == res2[COUNTS][:])
-        assert res1[FLT_STATS][N_KEPT] == res2[FLT_STATS][N_KEPT]
-        assert res1[FLT_STATS][TOT] == res2[FLT_STATS][TOT]
-        assert (res1[FLT_STATS][N_FILTERED_OUT] ==
-                res2[FLT_STATS][N_FILTERED_OUT])
 
 
 class FilterSamplesTest(unittest.TestCase):

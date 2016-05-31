@@ -273,9 +273,9 @@ def _plot_bars(bar_values, bin_edges, axes, orientation, log_normed):
             axes.set_xscale('log')
 
 
-def plot_hist2d(hist, xbins, ybins, fhand=None,
-                no_interactive_win=False, figsize=None, log_normed=False,
-                hist1d=True, mpl_params={}, colorbar_label='', **kwargs):
+def plot_hist2d(hist, xbins, ybins, fhand=None, no_interactive_win=False,
+                figsize=None, log_normed=False, hist1d=True, mpl_params={},
+                **kwargs):
     print_figure = True
 
     ratio = 4

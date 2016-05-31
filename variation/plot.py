@@ -80,7 +80,11 @@ def _calc_boxplot_stats(distribs, whis=1.5, show_fliers=False):
 
 def calc_and_plot_boxplot(mat, by_row=True, fhand=None, axes=None,
                           no_interactive_win=False, figsize=None,
-                          show_fliers=False, mpl_params={}):
+                          show_fliers=False, mpl_params=None):
+
+    if mpl_params is None:
+        mpl_params = {}
+
     print_figure = False
     if axes is None:
         print_figure = True
@@ -100,9 +104,12 @@ def calc_and_plot_boxplot(mat, by_row=True, fhand=None, axes=None,
 
 def plot_boxplot_from_distribs(distribs, by_row=True, fhand=None, axes=None,
                                no_interactive_win=False, figsize=None,
-                               show_fliers=False, mpl_params={}, color=None):
+                               mpl_params=None, color=None):
     '''It assumes that there are as many bins in the distributions as integers
     in their range'''
+
+    if mpl_params is None:
+        mpl_params = {}
 
     mat = distribs
     print_figure = False
@@ -134,10 +141,15 @@ def _set_box_color(bp, color):
 
 def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
                                       axes=None, no_interactive_win=False,
-                                      figsize=None, mpl_params={}, colors=None,
-                                      labels=None, xticklabels=None):
+                                      figsize=None, mpl_params=None,
+                                      colors=None, labels=None,
+                                      xticklabels=None):
     '''It assumes that there are as many bins in the distributions as integers
     in their range'''
+
+    if mpl_params is None:
+        mpl_params = {}
+
     print_figure = False
     if axes is None:
         print_figure = True
@@ -183,8 +195,10 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
 
 def plot_distrib(distrib, bins, fhand=None, axes=None, vlines=None,
                  no_interactive_win=False, figsize=None,
-                 mpl_params={}, n_ticks=10, **kwargs):
+                 mpl_params=None, n_ticks=10, **kwargs):
     '''Plots the histogram of an already calculated distribution'''
+    if mpl_params is None:
+        mpl_params = {}
 
     print_figure = False
     if axes is None:
@@ -211,8 +225,11 @@ def plot_distrib(distrib, bins, fhand=None, axes=None, vlines=None,
     return result
 
 
-def plot_barplot(matrix, columns, fpath=None, stacked=True, mpl_params={},
+def plot_barplot(matrix, columns, fpath=None, stacked=True, mpl_params=None,
                  axes=None, color=None, figsize=(70, 10), **kwargs):
+    if mpl_params is None:
+        mpl_params = {}
+
     df = DataFrame(matrix, columns=columns)
     axes = df.plot(kind='bar', stacked=stacked, figsize=figsize, axes=axes,
                    color=color, **kwargs)
@@ -320,8 +337,11 @@ def plot_hist2d(hist, xbins, ybins, fhand=None, no_interactive_win=False,
     return result
 
 
-def qqplot(x, distrib, distrib_params, axes=None, mpl_params={},
+def qqplot(x, distrib, distrib_params, axes=None, mpl_params=None,
            no_interactive_win=False, figsize=None, fhand=None):
+    if mpl_params is None:
+        mpl_params = {}
+
     print_figure = False
     if axes is None:
         print_figure = True
@@ -346,10 +366,13 @@ def _look_for_first_different(items, index):
 CHROM_COLORS = ['darkorchid', 'darkturquoise']
 
 
-def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
+def manhattan_plot(chrom, pos, values, axes=None, mpl_params=None,
                    no_interactive_win=False, figsize=None, fhand=None,
                    colors=CHROM_COLORS, show_chroms=True,
                    split_by_chrom=False):
+    if mpl_params is None:
+        mpl_params = {}
+
     if split_by_chrom:
         if axes is not None:
             msg = 'axes is incompatible with split_by_chrom'
@@ -367,10 +390,12 @@ def manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
                                colors=colors, show_chroms=show_chroms)
 
 
-def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params={},
+def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params=None,
                              no_interactive_win=False, figsize=None,
                              fhand=None, colors=CHROM_COLORS):
     # We collect the start and end indexes for each chromosome
+    if mpl_params is None:
+        mpl_params = {}
 
     start = 0
     chroms = OrderedDict()
@@ -429,9 +454,11 @@ def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params={},
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
 
-def _manhattan_plot(chrom, pos, values, axes=None, mpl_params={},
+def _manhattan_plot(chrom, pos, values, axes=None, mpl_params=None,
                     no_interactive_win=False, figsize=None, fhand=None,
                     colors=CHROM_COLORS, show_chroms=True):
+    if mpl_params is None:
+        mpl_params = {}
 
     print_figure = False
     if axes is None:
@@ -492,7 +519,10 @@ def _set_mpl_params(axes, mpl_params):
 
 def plot_lines(x, y, fhand=None, axes=None,
                no_interactive_win=False, figsize=None,
-               mpl_params={}, **kwargs):
+               mpl_params=None, **kwargs):
+    if mpl_params is None:
+        mpl_params = {}
+
     print_figure = False
     if axes is None:
         print_figure = True

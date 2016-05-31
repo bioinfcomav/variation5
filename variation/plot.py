@@ -196,7 +196,18 @@ def plot_boxplot_from_distribs_series(distribs_series, by_row=True, fhand=None,
 def plot_histogram(counts, edges, fhand=None, axes=None, vlines=None,
                    no_interactive_win=False, figsize=None,
                    mpl_params=None, bin_labels=None, **kwargs):
-    '''Plots the histogram of an already calculated distribution'''
+    counts = {'': counts}
+    plot_stacked_histograms(counts, edges, fhand=fhand, axes=axes,
+                            vlines=vlines,
+                            no_interactive_win=no_interactive_win,
+                            figsize=figsize, mpl_params=mpl_params,
+                            bin_labels=bin_labels, **kwargs)
+
+
+def plot_stacked_histograms(counts, edges, fhand=None, axes=None, vlines=None,
+                            no_interactive_win=False, figsize=None,
+                            mpl_params=None, bin_labels=None, **kwargs):
+    'counts should be a dictionary'
     if mpl_params is None:
         mpl_params = {}
 
@@ -206,7 +217,15 @@ def plot_histogram(counts, edges, fhand=None, axes=None, vlines=None,
     axes, canvas, fig = _get_mplot_axes(axes, fhand, figsize=figsize)
 
     width = edges[1:] - edges[:-1]
-    result = axes.bar(edges[:-1], counts, width=width, **kwargs)
+    bottom = None
+    for idx, (label, this_counts) in enumerate(counts.items()):
+        color = cm.Paired(1. * idx / len(counts))
+        axes.bar(edges[:-1], this_counts, width=width, bottom=bottom,
+                 color=color, label=label, **kwargs)
+        if bottom is None:
+            bottom = this_counts
+        else:
+            bottom += this_counts
 
     if bin_labels is not None:
         assert len(bin_labels) == len(list(edges)) - 1
@@ -223,12 +242,15 @@ def plot_histogram(counts, edges, fhand=None, axes=None, vlines=None,
         function = getattr(axes, function_name)
         function(*params.get('args', []), **params.get('kwargs', {}))
 
+    if len(counts) > 1:
+        axes.legend()
+
     fig.tight_layout()
 
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
-    return result
+    return
 
 
 def plot_barplot(matrix, columns, fpath=None, stacked=True, mpl_params=None,

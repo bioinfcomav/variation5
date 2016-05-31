@@ -18,7 +18,8 @@ from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             plot_histogram, plot_hist2d,
                             plot_boxplot_from_distribs_series,
                             write_curlywhirly, _look_for_first_different,
-                            _estimate_percentiles_from_distrib, plot_hists)
+                            _estimate_percentiles_from_distrib, plot_hists,
+                            plot_stacked_histograms)
 from variation.variations.plot import pairwise_ld
 from variation.variations import VariationsH5
 from test.test_utils import TEST_DATA_DIR
@@ -67,6 +68,16 @@ class PlotTest(unittest.TestCase):
 
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_histogram(distrib, bins, fhand=fhand, vlines=[3, 7])
+
+    def test_plot_stacked_hists(self):
+        vals1 = numpy.random.normal(loc=1, scale=0.5, size=500)
+        vals2 = numpy.random.normal(loc=2, scale=0.5, size=500)
+        counts, edges = numpy.histogram(vals1, range=(0, 3), bins=20)
+        counts = {'vals1': counts}
+        counts['vals2'], _ = numpy.histogram(vals2, range=(0, 3), bins=20)
+
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_stacked_histograms(counts, edges, fhand=fhand)
 
     def test_plot_barplot(self):
         matrix = numpy.array([[1, 2, 3, 4],

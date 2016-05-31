@@ -42,14 +42,13 @@ def _calc_histogram(vector, n_bins, range_, weights=None):
         dtype = type(vector[0])
     missing_value = MISSING_VALUES[dtype]
 
-    if math.isnan(missing_value):
-        not_nan = ~numpy.isnan(vector)
-    else:
-        not_nan = ~numpy.isnan(vector)
+    if weights is None:
+        if math.isnan(missing_value):
+            not_nan = ~numpy.isnan(vector)
+        else:
+            not_nan = vector != missing_value
 
-    vector = vector[not_nan]
-    if weights is not None:
-        weights = weights[not_nan]
+        vector = vector[not_nan]
     try:
         result = numpy.histogram(vector, bins=n_bins, range=range_,
                                  weights=weights)
@@ -57,7 +56,8 @@ def _calc_histogram(vector, n_bins, range_, weights=None):
         if 'parameter must be finite' in str(error):
             isfinite = ~numpy.isinf(vector)
             vector = vector[isfinite]
-            weights = weights[isfinite]
+            if weights is not None:
+                weights = weights[isfinite]
             result = numpy.histogram(vector, bins=n_bins, range=range_,
                                      weights=weights)
         else:
@@ -66,7 +66,7 @@ def _calc_histogram(vector, n_bins, range_, weights=None):
 
 
 def histogram(vector, n_bins=DEF_NUM_BINS, range_=None, weights=None):
-    return _calc_histogram(vector, n_bins, range_, weights=weights)
+    return _calc_histogram(vector, n_bins, range_=range_, weights=weights)
 
 
 def calc_cum_distrib(distrib):
@@ -1367,37 +1367,29 @@ def calc_call_dp_distrib_for_a_sample(variations, sample, range_=None,
 
     hom_counts, edges = None, None
     het_counts = None
-    miss_counts = None
     for dp_chunk, gt_chunk in zip(dp_chunks, gt_chunks):
         are_hom, are_missing = _call_is_hom_for_sample(gt_chunk)
-        are_hom = are_hom.astype(int)
-        are_missing = are_missing.astype(int)
-        hom_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
-                            weights=are_hom)
         are_het = numpy.logical_and(numpy.logical_not(are_hom),
                                     numpy.logical_not(are_missing))
+        are_hom = are_hom.astype(int)
         are_het = are_het.astype(int)
 
+        hom_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
+                            weights=are_hom)
         het_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
-                            weights=numpy.logical_not(are_het))
-        miss_res = histogram(dp_chunk, n_bins=n_bins, range_=range_,
-                             weights=are_missing)
+                            weights=are_het)
         chunk_hom_counts, chunk_hom_edges = hom_res
         chunk_het_counts, chunk_het_edges = het_res
-        chunk_miss_counts, chunk_miss_edges = miss_res
 
         if hom_counts is None:
             hom_counts = chunk_hom_counts
             het_counts = chunk_het_counts
-            miss_counts = chunk_miss_counts
             edges = chunk_hom_edges
         else:
             hom_counts += chunk_hom_counts
             het_counts += chunk_het_counts
-            miss_counts += chunk_miss_counts
             assert numpy.allclose(edges, chunk_hom_edges)
-            assert numpy.allclose(edges, chunk_miss_edges)
         het_counts += chunk_het_counts
         assert numpy.allclose(edges, chunk_het_edges)
 
-    return {'hom': hom_counts, 'het': het_counts, 'miss': miss_counts}, edges
+    return {'hom': hom_counts, 'het': het_counts}, edges

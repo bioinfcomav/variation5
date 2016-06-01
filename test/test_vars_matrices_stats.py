@@ -219,7 +219,7 @@ class StatsTest(unittest.TestCase):
         gts = numpy.array([[[0, 0], [0, 1], [0, -1], [-1, -1]],
                            [[0, 0], [0, 0], [0, -1], [-1, -1]]])
 
-        dps = numpy.array([[5, 10, 10, 10],
+        dps = numpy.array([[5, 12, 10, 10],
                            [10, 10, 10, 10]])
 
         varis = {'/calls/GT': gts, '/calls/DP': dps}
@@ -231,6 +231,9 @@ class StatsTest(unittest.TestCase):
 
         het = calc_obs_het(varis, min_num_genotypes=0, min_call_dp=10)
         assert numpy.allclose(het, [1, 0])
+
+        het = calc_obs_het(varis, min_num_genotypes=0, max_call_dp=11)
+        assert numpy.allclose(het, [0, 0])
 
         het = calc_obs_het(varis, min_num_genotypes=0, min_call_dp=5)
         assert numpy.allclose(het, [0.5, 0])
@@ -255,6 +258,13 @@ class StatsTest(unittest.TestCase):
         varis = {'/calls/GT': gts}
         het = calc_obs_het_by_sample(varis, chunk_size=None)
         assert het.shape[0] == 0
+
+        snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        calc_obs_het_by_sample(snps, min_call_dp=3)
+        calc_obs_het_by_sample(snps, min_call_dp=3, max_call_dp=20)
+        het_0 = calc_obs_het_by_sample(snps)
+        het = calc_obs_het_by_sample(snps, chunk_size=None)
+        assert numpy.allclose(het_0, het)
 
     def test_calc_gt_type_stats(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -759,5 +769,5 @@ class StatsTest(unittest.TestCase):
         assert numpy.allclose(means, means2)
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_dp_means']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_obs_het_sample']
     unittest.main()

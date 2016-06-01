@@ -18,7 +18,6 @@ from variation.matrix.stats import (counts_by_row, counts_and_allels_by_row,
                                     row_value_counter_fact)
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
-from variation.utils.misc import remove_nans
 
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10

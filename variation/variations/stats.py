@@ -6,7 +6,7 @@ import math
 from functools import lru_cache
 
 import numpy
-from scipy.stats.stats import chisquare, mode
+from scipy.stats.stats import chisquare
 
 from allel.stats.ld import rogers_huff_r
 from allel.model.ndarray import GenotypeArray
@@ -211,17 +211,6 @@ def calc_depth(variations):
     if is_dataset(mat):
         mat = mat[:]
     return mat.reshape(shape[0] * shape[1])
-
-
-def calc_depth_modes_by_sample(variations):
-    mat = variations[DP_FIELD]
-    if is_dataset(mat):
-        mat = mat[:]
-    mat = mat.astype(numpy.float)
-    mat[mat == 0] = numpy.nan
-
-    smpl_mode = mode(mat, axis=0)[0][0]
-    return smpl_mode
 
 
 def calc_genotype_qual(variations):
@@ -1391,3 +1380,32 @@ def calc_call_dp_distrib_for_a_sample(variations, sample, range_=None,
         assert numpy.allclose(edges, chunk_het_edges)
 
     return {'hom': hom_counts, 'het': het_counts}, edges
+
+
+def _calc_depth_mean_by_sample(variations):
+    mat = variations[DP_FIELD]
+    if is_dataset(mat):
+        mat = mat[:]
+    mat = mat.astype(numpy.float)
+    mat[mat == 0] = numpy.nan
+
+    smpl_mean = numpy.mean(mat, axis=0)
+    return smpl_mean
+
+
+def calc_depth_mean_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
+    dps = variations['/calls/DP']
+    if chunk_size:
+        chunks = iterate_matrix_chunks(dps, chunk_size=chunk_size)
+    else:
+        chunks = [dps]
+
+    sums = None
+    for chunk in chunks:
+        chunk_sums = numpy.sum(chunk, axis=0)
+        if sums is None:
+            sums = chunk_sums
+        else:
+            sums += chunk_sums
+    means = sums / dps.shape[0]
+    return means

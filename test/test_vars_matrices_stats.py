@@ -32,7 +32,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         calc_r2_windows, GT_FIELD,
                                         hist2d_het_allele_freq,
                                         calc_field_distrib_for_a_sample,
-                                        calc_call_dp_distrib_for_a_sample)
+                                        calc_call_dp_distrib_for_a_sample,
+                                        calc_depth_mean_by_sample)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -749,6 +750,14 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(cnts['hom'] == cnts3['hom'])
         assert numpy.all(cnts['het'] == cnts3['het'])
 
+    def test_calc_dp_means(self):
+        snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        means = calc_depth_mean_by_sample(snps)
+
+        means2 = calc_depth_mean_by_sample(snps, chunk_size=None)
+        assert means.shape[0] == 153
+        assert numpy.allclose(means, means2)
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_dp_for_sample']
+    # import sys;sys.argv = ['', 'StatsTest.test_calc_dp_means']
     unittest.main()

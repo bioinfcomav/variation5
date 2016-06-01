@@ -1330,13 +1330,12 @@ def _call_is_hom_for_sample(gts):
         gts = gts[:]
 
     is_hom = numpy.full(gts.shape[:-1], True, dtype=numpy.bool)
-    is_missing = numpy.full(gts.shape[:-1], False, dtype=numpy.bool)
     for idx in range(1, gts.shape[1]):
         is_hom = numpy.logical_and(gts[:, idx] == gts[:, idx - 1], is_hom)
 
-    is_missing = numpy.sum(gts == MISSING_INT, axis=1) > 0
-    is_hom[is_missing] = False
-    return is_hom, is_missing
+    are_missing = numpy.sum(gts == MISSING_INT, axis=1) > 0
+    is_hom[are_missing] = False
+    return is_hom, are_missing
 
 
 def calc_call_dp_distrib_for_a_sample(variations, sample, range_=None,

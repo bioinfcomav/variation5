@@ -13,7 +13,7 @@ import allel
 
 from variation.variations.stats import GT_FIELD
 from variation.variations import VariationsArrays
-from variation.variations.filters import keep_biallelic
+from variation.variations.filters import NonBiallelicFilter
 from variation import MISSING_INT
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import is_dataset
@@ -110,8 +110,7 @@ def do_pcax(variations, n_components=10):
 
     # keep biallelic snps
     # TODO: We should select only the GT matrix
-    snps = VariationsArrays(variations)
-    keep_biallelic(variations, snps)
+    snps = NonBiallelicFilter()(variations)
 
     genotypes = allel.GenotypeArray(snps[GT_FIELD])
     # print(genotypes.shape)

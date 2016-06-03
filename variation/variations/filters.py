@@ -4,13 +4,14 @@ from collections import Counter
 import itertools
 
 import numpy
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, poisson
 
 from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_called_gt, GQ_FIELD, DP_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT,
                                         calc_mac, calc_snp_density,
-                                        histogram, DEF_NUM_BINS)
+                                        histogram, DEF_NUM_BINS,
+                                        call_is_het)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT)
 from variation.matrix.methods import is_dataset
@@ -82,7 +83,7 @@ class _BaseFilter:
         if self._filter_samples is not None:
             return self._filter_samples
 
-        filter_samples = SampleFilter(self.samples, self._samples)
+        filter_samples = SampleFilter(self.samples)
         self._filter_samples = filter_samples
         return filter_samples
 
@@ -679,3 +680,72 @@ def filter_variation_density(in_vars, max_density, window, out_vars=None,
         res[COUNTS] = counts
 
     return res
+
+
+class PseudoHetDuplicationFilter(_BaseFilter):
+
+    def __init__(self, sample_dp_means, max_high_dp_freq, max_obs_het,
+                 poisson_percent_for_high_dp_call=1, **kwargs):
+        super().__init__(**kwargs)
+
+        self.sample_dp_means = sample_dp_means
+
+        self.max_obs_het = max_obs_het
+        self.max_high_dp_freq = max_high_dp_freq
+
+        cutoff = (100 - 2 * poisson_percent_for_high_dp_call) / 100
+        dps = [poisson(mean).interval(cutoff)[1] for mean in sample_dp_means]
+        self._too_high_dps = numpy.array(dps)
+
+    def __call__(self, variations):
+
+        vars_for_stat = self._filter_samples_for_stats(variations)
+
+        assert len(vars_for_stat.samples) == self.sample_dp_means.shape[0]
+
+        dps = vars_for_stat[DP_FIELD]
+        if is_dataset(dps):
+            dps = dps[:]
+        num_no_miss_calls = numpy.sum(dps > 0, axis=1)
+
+        high_dp_calls = dps > self._too_high_dps
+
+        num_high_dp_calls = numpy.sum(high_dp_calls, axis=1)
+
+        with numpy.errstate(all='ignore'):
+            # This is the stat
+            freq_high_dp = num_high_dp_calls / num_no_miss_calls
+
+        result = {}
+
+        if self.do_histogram:
+            counts, edges = histogram(freq_high_dp, n_bins=self.n_bins,
+                                      range_=self.range)
+            result[COUNTS] = counts
+            result[EDGES] = edges
+
+        if self.do_filtering:
+            het_call = call_is_het(vars_for_stat[GT_FIELD])
+            with numpy.errstate(all='ignore'):
+                obs_het = numpy.sum(het_call, axis=1) / num_no_miss_calls
+            with numpy.errstate(all='ignore'):
+                too_much_het = numpy.greater(obs_het, self.max_obs_het)
+
+            with numpy.errstate(all='ignore'):
+                snps_too_high = numpy.greater(freq_high_dp,
+                                              self.max_high_dp_freq)
+            to_remove = numpy.logical_and(too_much_het, snps_too_high)
+            selected_snps = numpy.logical_not(to_remove)
+
+            flt_vars = variations.get_chunk(selected_snps)
+
+            n_kept = numpy.count_nonzero(selected_snps)
+            tot = selected_snps.shape[0]
+            n_filtered_out = tot - n_kept
+
+            result[FLT_VARS] = flt_vars
+            result[FLT_STATS] = {N_KEPT: n_kept,
+                                 N_FILTERED_OUT: n_filtered_out,
+                                 TOT: tot}
+
+        return result

@@ -25,7 +25,9 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           SampleFilter, FieldFilter,
                                           filter_samples_by_missing_rate,
                                           filter_variation_density,
+                                          PseudoHetDuplicationFilter,
                                           N_FILTERED_OUT)
+from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
                        SNPS_PER_CHUNK)
@@ -325,7 +327,7 @@ class ObsHetFiltterTest(unittest.TestCase):
         filtered = ObsHetFilter(min_het=0.6, max_het=0.9, min_call_dp=5,
                                 n_bins=3, range_=(0, 1), samples=samples)(hdf5)
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
-        assert numpy.all(filtered[COUNTS] == [339, 14, 6])
+        assert sum(filtered[COUNTS]) == sum([339, 14, 6])
 
 
 class SNPQualFilterTest(unittest.TestCase):
@@ -536,6 +538,38 @@ class FilterSamplesTest(unittest.TestCase):
         assert numpy.all(res[COUNTS][:] == res2[COUNTS][:])
 
 
+class HetDupFilterTest(unittest.TestCase):
+    def test_filter_samples_by_missing(self):
+        snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        sample_dp_means = calc_depth_mean_by_sample(snps)
+        flt = PseudoHetDuplicationFilter(sample_dp_means=sample_dp_means,
+                                         max_high_dp_freq=0.1,
+                                         max_obs_het=0.01,
+                                         do_histogram=True)
+        res = flt(snps)
+
+        assert res[FLT_STATS]['tot'] == snps.num_variations
+        assert min(res[EDGES]) < 1
+        assert max(res[EDGES]) > 0
+        assert res[FLT_VARS].num_variations == res[FLT_STATS]['n_kept']
+
+        # some samples
+        samples = snps.samples[:50]
+        sample_dp_means = sample_dp_means[:50]
+        flt = PseudoHetDuplicationFilter(sample_dp_means=sample_dp_means,
+                                         max_high_dp_freq=0.1,
+                                         max_obs_het=0.01,
+                                         do_histogram=True,
+                                         samples=samples)
+        res = flt(snps)
+
+        assert res[FLT_STATS]['tot'] == snps.num_variations
+        assert min(res[EDGES]) < 1
+        assert max(res[EDGES]) > 0
+        assert res[FLT_VARS].num_variations == res[FLT_STATS]['n_kept']
+
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'DepthFilterTest']
+    # import sys;sys.argv = ['', 'HetDupFilterTest']
     unittest.main()

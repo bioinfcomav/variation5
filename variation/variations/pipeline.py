@@ -1,6 +1,4 @@
 
-from multiprocessing import Pool
-
 import numpy
 
 from variation import SNPS_PER_CHUNK
@@ -123,7 +121,6 @@ class Pipeline():
         self._check_and_fix_histogram_ranges(vars_in, chunk_size,
                                              kept_fields=kept_fields,
                                              ignored_fields=ignored_fields)
-
 
         chunks = vars_in.iterate_chunks(kept_fields=kept_fields,
                                         ignored_fields=ignored_fields,

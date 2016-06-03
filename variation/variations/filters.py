@@ -37,7 +37,7 @@ def _filter_no_row(chunk):
 class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=None, samples=None):
+                 do_histogram=None, samples=None, keep_missing=False):
         if do_histogram is None:
             if range_ is not None or n_bins != DEF_NUM_BINS:
                 do_histogram = True
@@ -45,6 +45,14 @@ class _BaseFilter:
                 do_histogram = False
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
+
+        self._keep_nan = False
+        self._keep_missing_int = False
+        if keep_missing:
+            if self._missing_is_nan:
+                self._keep_nan = True
+            if self._missing_is_int:
+                self._keep_missing_int = True
 
         self.n_bins = n_bins
         self.range = range_
@@ -67,6 +75,12 @@ class _BaseFilter:
             selected_rows = selector_min & selector_max
         else:
             selected_rows = _filter_no_row(variations)
+
+        if self._keep_nan:
+            selected_rows = numpy.logical_or(selected_rows, numpy.isnan(stat))
+        if self._keep_missing_int:
+            selected_rows = numpy.logical_or(selected_rows,
+                                             stat == MISSING_INT)
 
         n_kept = numpy.count_nonzero(selected_rows)
         tot = selected_rows.shape[0]
@@ -161,6 +175,9 @@ class ObsHetFilter(_BaseFilter):
         self.max = max_het
         self.min_num_genotypes = min_num_genotypes
         self.min_call_dp = min_call_dp
+
+        self._missing_is_nan = True
+        self._missing_is_int = False
 
         super().__init__(**kwargs)
 

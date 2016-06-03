@@ -300,6 +300,18 @@ class ObsHetFiltterTest(unittest.TestCase):
         assert filtered[FLT_STATS][TOT] == 4
         assert filtered[FLT_STATS][N_FILTERED_OUT] == 1
 
+        filtered = ObsHetFilter(min_het=0.2, min_num_genotypes=10)(variations)
+        assert filtered[FLT_STATS][N_KEPT] == 0
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 4
+
+        filtered = ObsHetFilter(min_het=0.2, min_num_genotypes=10,
+                                keep_missing=True)(variations)
+        assert filtered[FLT_STATS][N_KEPT] == 4
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
+
+        return
         filtered = ObsHetFilter(max_het=0.1, min_num_genotypes=0)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[1]])
 

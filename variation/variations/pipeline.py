@@ -4,6 +4,7 @@ import numpy
 from variation import SNPS_PER_CHUNK
 from variation.variations.filters import (COUNTS, EDGES, FLT_VARS, FLT_STATS,
                                           N_KEPT, TOT, N_FILTERED_OUT)
+from collections import OrderedDict
 
 
 class Pipeline():
@@ -16,7 +17,8 @@ class Pipeline():
             id_ = str(len(self._pipeline))
         filter_name = callable_instance.__class__.__name__
 
-        step = {'callable': callable_instance, 'id': id_, 'name': filter_name}
+        step = {'callable': callable_instance, 'id': id_, 'name': filter_name,
+                'order': len(self._pipeline)}
         self._pipeline.append(step)
 
     def _pipeline_funct(self, chunk):
@@ -35,7 +37,7 @@ class Pipeline():
         return results, chunk
 
     def _reduce_results(self, results, vars_out):
-        result = {}
+        result = OrderedDict()
         for slice_result, chunk in results:
             if vars_out is not None:
                 vars_out.put_chunks([chunk])
@@ -44,7 +46,8 @@ class Pipeline():
                 callable_instance = step['callable']
 
                 if step_id not in result:
-                    result[step_id] = {'name': step['name']}
+                    result[step_id] = {'name': step['name'],
+                                       'order': step['order']}
 
                 if not hasattr(callable_instance, 'do_histogram'):
                     do_hist = False

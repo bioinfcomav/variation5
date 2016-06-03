@@ -70,6 +70,7 @@ class PipelineTest(unittest.TestCase):
         result = pipeline.run(hdf5, vars_out)
 
         result2 = flt(hdf5)
+        assert result['filter1']['order'] == 0
         assert numpy.allclose(result['filter1']['counts'], result2['counts'])
         assert numpy.allclose(result['filter1']['edges'], result2['edges'])
         assert numpy.allclose(vars_out['/calls/GT'],

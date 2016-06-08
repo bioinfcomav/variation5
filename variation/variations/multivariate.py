@@ -1,10 +1,7 @@
 
-from collections import Counter
-
 from numpy.linalg import eigh, svd
 from numpy import newaxis, add, transpose, sqrt, argsort, array, dot
 from numpy import sum as nsum
-import numpy
 
 from sklearn.manifold import MDS, Isomap
 from scipy.spatial.distance import squareform
@@ -12,11 +9,7 @@ from scipy.spatial.distance import squareform
 import allel
 
 from variation.variations.stats import GT_FIELD
-from variation.variations import VariationsArrays
 from variation.variations.filters import NonBiallelicFilter
-from variation import MISSING_INT
-from variation.matrix.stats import counts_by_row
-from variation.matrix.methods import is_dataset
 
 
 def non_param_multi_dim_scaling(dists, n_dims=3, n_threads=None, metric=True):

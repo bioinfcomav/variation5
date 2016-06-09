@@ -26,7 +26,8 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           filter_samples_by_missing_rate,
                                           filter_variation_density,
                                           PseudoHetDuplicationFilter,
-                                          N_FILTERED_OUT)
+                                          N_FILTERED_OUT, SELECTED_VARS,
+                                          OrFilter)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
@@ -122,10 +123,12 @@ class MinCalledGTTest(unittest.TestCase):
 
         # With hdf5 file
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        filter_gts = MinCalledGTsFilter(min_called=0.4, rates=True)
+        filter_gts = MinCalledGTsFilter(min_called=0.4, rates=True,
+                                        report_selection=True)
         filtered = filter_gts(hdf5)
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert counts == {0: 89936, 1: 50473, -1: 40972, 2: 378, 3: 5}
+        assert filtered[SELECTED_VARS].shape
 
 
 class MafFilterTest(unittest.TestCase):
@@ -133,10 +136,12 @@ class MafFilterTest(unittest.TestCase):
     def test_filter_mafs(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         chunk = first(hdf5.iterate_chunks())
-        filtered = MafFilter(min_maf=0.6, min_num_genotypes=0)(chunk)
+        filtered = MafFilter(min_maf=0.6, min_num_genotypes=0,
+                             report_selection=True)(chunk)
         tot = filtered[FLT_STATS][N_KEPT] + filtered[FLT_STATS][N_FILTERED_OUT]
-        assert  tot == SNPS_PER_CHUNK
+        assert tot == SNPS_PER_CHUNK
         assert filtered[FLT_STATS][TOT] == SNPS_PER_CHUNK
+        assert filtered[SELECTED_VARS].shape
 
         flt_chunk = filtered[FLT_VARS]
 
@@ -230,11 +235,13 @@ class MafFilterTest(unittest.TestCase):
                            [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
                            [[0, 0], [-1, -1], [0, 1], [0, 0], [1, 1]]])
         variations[GT_FIELD] = gts
-        filtered = MacFilter(min_num_genotypes=5)(variations)
+        filtered = MacFilter(min_num_genotypes=5,
+                             report_selection=True)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
         assert filtered[FLT_STATS][N_KEPT] == 4
         assert filtered[FLT_STATS][TOT] == 4
         assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
+        assert filtered[SELECTED_VARS].shape
 
         filtered = MacFilter(min_mac=0, min_num_genotypes=5)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[0, 1, 2]])
@@ -288,11 +295,13 @@ class ObsHetFiltterTest(unittest.TestCase):
         variations[GT_FIELD] = gts
         variations.samples = [1, 2, 3, 4, 5]
 
-        filtered = ObsHetFilter(min_num_genotypes=0)(variations)
+        filtered = ObsHetFilter(min_num_genotypes=0,
+                                report_selection=True)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
         assert filtered[FLT_STATS][N_KEPT] == 4
         assert filtered[FLT_STATS][TOT] == 4
         assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
+        assert filtered[SELECTED_VARS].shape
 
         filtered = ObsHetFilter(min_het=0.2, min_num_genotypes=0)(variations)
         assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts[[0, 2, 3]])
@@ -353,11 +362,12 @@ class SNPQualFilterTest(unittest.TestCase):
         variations[GT_FIELD] = gts
         variations['/variations/qual'] = snp_quals
 
-        filtered = SNPQualFilter()(variations)[FLT_VARS]
-        filtered_qual = filtered['/variations/qual']
-        filtered_gts = filtered[GT_FIELD]
+        filtered = SNPQualFilter(report_selection=True)(variations)
+        filtered_qual = filtered[FLT_VARS]['/variations/qual']
+        filtered_gts = filtered[FLT_VARS][GT_FIELD]
         assert numpy.all(variations['/variations/qual'] == filtered_qual)
         assert numpy.all(variations[GT_FIELD] == filtered_gts)
+        assert filtered[SELECTED_VARS].shape
 
         expected_gts = numpy.array([[[0, 0], [0, 0]],
                                     [[0, 1], [0, 0]]])
@@ -456,12 +466,13 @@ class MonoBiallelicFilterTest(unittest.TestCase):
         snps = hdf5.iterate_chunks(kept_fields=kept_fields)
         chunk = first(snps)
 
-        flt_chunk = NonBiallelicFilter()(chunk)
+        flt_chunk = NonBiallelicFilter(report_selection=True)(chunk)
         kept = flt_chunk[FLT_VARS][GT_FIELD].shape[0]
         assert flt_chunk[FLT_VARS][GT_FIELD].shape[1:] == (153, 2)
         assert flt_chunk[FLT_STATS][N_KEPT] == kept
         assert flt_chunk[FLT_STATS][TOT] == SNPS_PER_CHUNK
         assert flt_chunk[FLT_STATS][N_FILTERED_OUT] == SNPS_PER_CHUNK - kept
+        assert flt_chunk[SELECTED_VARS].shape
 
 
 class Chi2GtFilterTest(unittest.TestCase):
@@ -477,13 +488,14 @@ class Chi2GtFilterTest(unittest.TestCase):
         samples1 = [1, 2, 3]
         samples2 = [4, 5, 6]
         flt = Chi2GtFreqs2SampleSetsFilter(samples1, samples2, min_pval=0.05,
-                                           n_bins=2)
+                                           n_bins=2, report_selection=True)
         res = flt(variations)
         assert list(res[COUNTS]) == [2, 2]
         assert numpy.all(res[FLT_VARS][GT_FIELD] == gts[:2, ...])
         assert res[FLT_STATS][N_KEPT] == 2
         assert res[FLT_STATS][TOT] == 4
         assert res[FLT_STATS][N_FILTERED_OUT] == 2
+        assert res[SELECTED_VARS].shape
 
 
 class FieldFilterTest(unittest.TestCase):
@@ -558,13 +570,15 @@ class HetDupFilterTest(unittest.TestCase):
         flt = PseudoHetDuplicationFilter(sample_dp_means=sample_dp_means,
                                          max_high_dp_freq=0.1,
                                          max_obs_het=0.01,
-                                         do_histogram=True)
+                                         do_histogram=True,
+                                         report_selection=True)
         res = flt(snps)
 
         assert res[FLT_STATS]['tot'] == snps.num_variations
         assert min(res[EDGES]) < 1
         assert max(res[EDGES]) > 0
         assert res[FLT_VARS].num_variations == res[FLT_STATS]['n_kept']
+        assert res[SELECTED_VARS].shape
 
         # some samples
         samples = snps.samples[:50]
@@ -580,6 +594,28 @@ class HetDupFilterTest(unittest.TestCase):
         assert min(res[EDGES]) < 1
         assert max(res[EDGES]) > 0
         assert res[FLT_VARS].num_variations == res[FLT_STATS]['n_kept']
+
+
+class OrFiltterTest(unittest.TestCase):
+
+    def test_filter_or(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        variations[GT_FIELD] = gts
+        variations.samples = [1, 2, 3, 4, 5]
+
+        filter1 = ObsHetFilter(min_num_genotypes=0)
+        filter2 = ObsHetFilter(min_het=0.2, min_num_genotypes=0)
+
+        filtered = OrFilter([filter1, filter2])(variations)
+
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == gts)
+        assert filtered[FLT_STATS][N_KEPT] == 4
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
 
 
 if __name__ == "__main__":

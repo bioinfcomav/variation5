@@ -26,6 +26,7 @@ N_KEPT = 'n_kept'
 N_FILTERED_OUT = 'n_filtered_out'
 TOT = 'tot'
 FLT_STATS = 'flt_stats'
+SELECTED_VARS = 'selected_vars'
 
 
 def _filter_no_row(chunk):
@@ -37,7 +38,8 @@ def _filter_no_row(chunk):
 class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
-                 do_histogram=None, samples=None, keep_missing=False):
+                 do_histogram=None, samples=None, keep_missing=False,
+                 report_selection=False):
         if do_histogram is None:
             if range_ is not None or n_bins != DEF_NUM_BINS:
                 do_histogram = True
@@ -45,6 +47,7 @@ class _BaseFilter:
                 do_histogram = False
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
+        self.report_selection = report_selection
 
         self._keep_nan = False
         self._keep_missing_int = False
@@ -59,7 +62,7 @@ class _BaseFilter:
         self._samples = samples
         self._filter_samples = None
 
-    def _filter(self, variations, stat):
+    def _select_rows(self, variations, stat):
         min_ = getattr(self, 'min', None)
         max_ = getattr(self, 'max', None)
 
@@ -87,7 +90,7 @@ class _BaseFilter:
         n_filtered_out = tot - n_kept
         stats = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out, TOT: tot}
 
-        return variations.get_chunk(selected_rows), stats
+        return selected_rows, stats
 
     @property
     def samples(self):
@@ -122,8 +125,15 @@ class _BaseFilter:
             result[COUNTS] = counts
             result[EDGES] = edges
 
+        if self.report_selection or self.do_filtering:
+            selected_rows, flt_stats = self._select_rows(variations, stats)
+
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
+
         if self.do_filtering:
-            flt_vars, flt_stats = self._filter(variations, stats)
+            # flt_vars, flt_stats = self._filter(variations, stats)
+            flt_vars = variations.get_chunk(selected_rows)
             result[FLT_VARS] = flt_vars
             result[FLT_STATS] = flt_stats
 
@@ -262,9 +272,10 @@ class LowQualGTsToMissingSetter(_GTsToMissingSetter):
 
 class NonBiallelicFilter(_BaseFilter):
 
-    def __init__(self, samples=None):
+    def __init__(self, samples=None, report_selection=False):
         self.keep_monomorphic = False
         self._samples = samples
+        self.report_selection = report_selection
 
     @property
     def do_filtering(self):
@@ -318,6 +329,9 @@ class NonBiallelicFilter(_BaseFilter):
         result[FLT_STATS] = {N_KEPT: n_kept,
                              N_FILTERED_OUT: n_filtered_out,
                              TOT: tot}
+
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
 
         if self.do_filtering:
             result[FLT_VARS] = variations.get_chunk(selected_rows)
@@ -741,7 +755,7 @@ class PseudoHetDuplicationFilter(_BaseFilter):
             result[COUNTS] = counts
             result[EDGES] = edges
 
-        if self.do_filtering:
+        if self.do_filtering or self.report_selection:
             het_call = call_is_het(vars_for_stat[GT_FIELD])
             with numpy.errstate(all='ignore'):
                 obs_het = numpy.sum(het_call, axis=1) / num_no_miss_calls
@@ -754,6 +768,10 @@ class PseudoHetDuplicationFilter(_BaseFilter):
             to_remove = numpy.logical_and(too_much_het, snps_too_high)
             selected_snps = numpy.logical_not(to_remove)
 
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_snps
+
+        if self.do_filtering:
             flt_vars = variations.get_chunk(selected_snps)
 
             n_kept = numpy.count_nonzero(selected_snps)
@@ -765,4 +783,35 @@ class PseudoHetDuplicationFilter(_BaseFilter):
                                  N_FILTERED_OUT: n_filtered_out,
                                  TOT: tot}
 
+        return result
+
+
+class OrFilter:
+    def __init__(self, filters):
+        self.filters = filters
+        for flt in filters:
+            flt.report_selection = True
+            flt.do_filtering = False
+            flt.do_histogram = False
+
+    def __call__(self, variations):
+        selected_vars = None
+        for flt in self.filters:
+            res = flt(variations)
+            flt_sel = res[SELECTED_VARS]
+            if selected_vars is None:
+                selected_vars = flt_sel
+            else:
+                selected_vars = numpy.logical_or(flt_sel, selected_vars)
+
+        n_kept = numpy.count_nonzero(selected_vars)
+        tot = selected_vars.shape[0]
+        n_filtered_out = tot - n_kept
+
+        result = {}
+        flt_vars = variations.get_chunk(selected_vars)
+        result[FLT_VARS] = flt_vars
+        result[FLT_STATS] = {N_KEPT: n_kept,
+                             N_FILTERED_OUT: n_filtered_out,
+                             TOT: tot}
         return result

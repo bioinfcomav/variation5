@@ -810,7 +810,6 @@ class OrFilter:
             selected_vars = numpy.full((variations.num_variations,),
                                        False, dtype=numpy.bool_)
 
-
         n_kept = numpy.count_nonzero(selected_vars)
         tot = selected_vars.shape[0]
         n_filtered_out = tot - n_kept

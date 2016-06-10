@@ -472,7 +472,6 @@ def calc_gt_type_stats(variations, chunk_size=None):
 
 
 def _snps_close(chrom1, pos1, chrom2, pos2, dist):
-    # print(chrom1, pos1, chrom2, pos2)
     if chrom1 != chrom2:
         return None
     if pos1 == pos2:

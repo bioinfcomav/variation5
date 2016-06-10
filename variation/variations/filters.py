@@ -161,7 +161,8 @@ class MafFilter(_BaseFilter):
         super().__init__(**kwargs)
 
     def _calc_stat(self, variations):
-        return calc_maf(variations, min_num_genotypes=self.min_num_genotypes)
+        return calc_maf(variations, min_num_genotypes=self.min_num_genotypes,
+                        chunk_size=None)
 
 
 class MacFilter(_BaseFilter):
@@ -799,10 +800,16 @@ class OrFilter:
         for flt in self.filters:
             res = flt(variations)
             flt_sel = res[SELECTED_VARS]
+            if flt_sel.shape[0] == 0:
+                continue
             if selected_vars is None:
                 selected_vars = flt_sel
             else:
                 selected_vars = numpy.logical_or(flt_sel, selected_vars)
+        if selected_vars is None:
+            selected_vars = numpy.full((variations.num_variations,),
+                                       False, dtype=numpy.bool_)
+
 
         n_kept = numpy.count_nonzero(selected_vars)
         tot = selected_vars.shape[0]

@@ -22,7 +22,6 @@ class Pipeline():
         self._pipeline.append(step)
 
     def _pipeline_funct(self, chunk):
-
         results = []
         for step in self._pipeline:
             # This for should be more internal than the for for the HDF5

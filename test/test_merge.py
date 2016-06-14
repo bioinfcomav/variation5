@@ -28,7 +28,8 @@ class MockList(list):
 
 
 class MockMerger(dict):
-    def __init__(self, gt_shape, ignore_malformed_vars=False, merge_only_snps=False):
+    def __init__(self, gt_shape, ignore_malformed_vars=False,
+                 merge_only_snps=False):
         self._gt_shape = gt_shape
         self._gt_dtype = numpy.int32
         self.max_field_lens = {'alt': 3}

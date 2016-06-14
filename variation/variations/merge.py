@@ -17,52 +17,51 @@ from variation.matrix.methods import is_dataset
 
 
 def _iterate_vars(variations):
-    kept_fields = [CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD, GT_FIELD]
+    kept_fields = [CHROM_FIELD, POS_FIELD]
 
-    if QUAL_FIELD in variations.keys():
-        kept_fields.append(QUAL_FIELD)
-    if DP_FIELD in variations.keys():
-        kept_fields.append(DP_FIELD)
+    optional_fields = [REF_FIELD, ALT_FIELD, GT_FIELD, QUAL_FIELD, DP_FIELD]
+    for field in optional_fields:
+        if field in variations.keys():
+            kept_fields.append(field)
 
     for chunk in variations.iterate_chunks(kept_fields=kept_fields):
+        chunk_keys = chunk.keys()
         vars_chrom = chunk[CHROM_FIELD]
         vars_pos = chunk[POS_FIELD]
-        vars_ref = chunk[REF_FIELD]
-        vars_alt = chunk[ALT_FIELD]
-        if QUAL_FIELD in chunk.keys():
-            vars_qual = chunk[QUAL_FIELD]
-        else:
-            vars_qual = None
-        if DP_FIELD in chunk.keys():
-            vars_dp = chunk[DP_FIELD]
-        else:
-            vars_dp = None
-        vars_gts = chunk[GT_FIELD]
+        vars_ref = chunk[REF_FIELD] if REF_FIELD in chunk_keys else None
+        vars_alt = chunk[ALT_FIELD] if ALT_FIELD in chunk_keys else None
+        vars_qual = chunk[QUAL_FIELD] if QUAL_FIELD in chunk_keys else None
+        vars_dp = chunk[DP_FIELD] if DP_FIELD in chunk_keys else None
+        vars_gts = chunk[GT_FIELD] if GT_FIELD in chunk_keys else None
+
         if is_dataset(vars_chrom):
             vars_chrom = vars_chrom[:]
             vars_pos = vars_pos[:]
-            vars_ref = vars_ref[:]
-            vars_alt = vars_alt[:]
+            if vars_ref is not None:
+                vars_ref = vars_ref[:]
+            if vars_alt is not None:
+                vars_alt = vars_alt[:]
             if vars_qual is not None:
                 vars_qual = vars_qual[:]
             if vars_dp is not None:
                 vars_dp = vars_dp[:]
-            vars_gts = vars_gts[:]
+            if vars_gts is not None:
+                vars_gts = vars_gts[:]
 
         for var_idx in range(chunk.num_variations):
             chrom = vars_chrom[var_idx]
             pos = vars_pos[var_idx]
-            ref = vars_ref[var_idx]
-            alts = vars_alt[var_idx]
-            alts = [alt for alt in alts if alt != MISSING_BYTE]
-            if not alts:
+            ref = None if vars_ref is None else vars_ref[var_idx]
+            if vars_alt is None:
                 alts = None
-            if vars_qual is None:
-                qual = None
             else:
-                qual = vars_qual[var_idx]
+                alts = vars_alt[var_idx]
+                alts = [alt for alt in alts if alt != MISSING_BYTE]
+                if not alts:
+                    alts = None
+            qual = None if vars_qual is None else vars_qual[var_idx]
+            gts = None if vars_gts is None else vars_gts[var_idx]
 
-            gts = vars_gts[var_idx]
             var_ = {'chrom': chrom, 'pos': pos, 'ref': ref, 'alt': alts,
                     'qual': qual, 'gts': gts}
             if vars_dp is not None:
@@ -147,6 +146,8 @@ def _sort_iterators(iter1, iter2):
 
 
 def _var_len(var):
+    if var['ref'] is None:
+        return 1
     max_len = len(var['ref'])
     if not var['alt']:
         return max_len

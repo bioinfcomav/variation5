@@ -264,7 +264,8 @@ class VarMerger():
     def __init__(self, variations1, variations2, suffix_for_sample2=None,
                  ignore_complex_overlaps=False, ignore_malformed_vars=False,
                  allow_non_std_var_creation=False, check_ref_matches=True,
-                 max_field_lens=None, ignore_non_matching=False, merge_only_snps=False):
+                 max_field_lens=None, ignore_non_matching=False,
+                 merge_only_snps=False):
         '''It merges two variation matrices.
 
         suffix for sample2 is only added to samples in variations2 also

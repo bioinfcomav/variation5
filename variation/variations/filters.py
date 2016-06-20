@@ -118,6 +118,8 @@ class _BaseFilter:
 
     def __call__(self, variations):
         stats = self._calc_stat_for_filtered_samples(variations)
+        if stats is None:
+            return {}
         result = {}
         if self.do_histogram:
             counts, edges = histogram(stats, n_bins=self.n_bins,
@@ -345,6 +347,8 @@ def _calc_fisher_for_gts(variations, samples1, samples2):
     snps2 = SampleFilter(samples2)(variations)[FLT_VARS]
     gt_counts1 = _count_gts(snps1)
     gt_counts2 = _count_gts(snps2)
+    if not snps1.num_variations or not snps2.num_variations:
+        return None, None, None
 
     genotypes = list(sorted(set(gt_counts1.keys()).union(gt_counts2.keys())))
     counts1 = {}

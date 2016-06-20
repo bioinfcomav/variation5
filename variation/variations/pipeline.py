@@ -52,6 +52,8 @@ class Pipeline():
                     do_hist = False
                 else:
                     do_hist = callable_instance.do_histogram
+                if not step_result:
+                    continue
                 if do_hist:
                     if COUNTS not in result[step_id]:
                         result[step_id][COUNTS] = step_result[COUNTS]

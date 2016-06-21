@@ -3,7 +3,8 @@ import numpy
 
 from variation import SNPS_PER_CHUNK
 from variation.variations.filters import (COUNTS, EDGES, FLT_VARS, FLT_STATS,
-                                          N_KEPT, TOT, N_FILTERED_OUT)
+                                          N_KEPT, TOT, N_FILTERED_OUT,
+                                          SELECTED_VARS)
 from collections import OrderedDict
 
 
@@ -68,6 +69,8 @@ class Pipeline():
                             raise RuntimeError(msg)
                         result[step_id][COUNTS] += step_result[COUNTS]
 
+                if SELECTED_VARS in step_result:
+                    result[step_id][SELECTED_VARS] = step_result[SELECTED_VARS]
                 if FLT_STATS in step_result:
                     if FLT_STATS not in result[step_id]:
                         result[step_id][FLT_STATS] = step_result[FLT_STATS]

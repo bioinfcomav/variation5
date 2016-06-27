@@ -808,54 +808,6 @@ def hist2d_gq_allele_observations(variations, n_bins=DEF_NUM_BINS, range_=None,
     return hist, xbins, ybins
 
 
-def _calc_geno_counts(variations, allow_redundant_gts=False):
-    gts = variations[GT_FIELD]
-
-    # get rid of genotypes with missing alleles
-    missing_alleles = gts == MISSING_INT
-    miss_gts = numpy.any(missing_alleles, axis=2)
-
-    # We pack the genotype of a sample that is in third axes as two
-    # integers as one integer: 1, 1 -> 11 0, 1 -> 01, 0, 0-> 0
-    gts_per_haplo = [gts[:, :, idx] * 10 ** idx for idx in range(gts.shape[2])]
-    packed_gts = None
-    for gts_ in gts_per_haplo:
-        if packed_gts is None:
-            packed_gts = gts_
-        else:
-            packed_gts += gts_
-    packed_gts[miss_gts] = -1
-
-    gt_counts, different_gts = counts_and_allels_by_row(packed_gts,
-                                                        missing_value=MISSING_INT)
-    different_gts = [_packed_gt_to_tuple(gt) for gt in different_gts]
-
-    if allow_redundant_gts:
-        return gt_counts, different_gts
-
-    same_gts = {}
-    for idx, gt_ in enumerate(different_gts):
-        if gt_ in same_gts:
-            same_gts[gt_].append(idx)
-        else:
-            same_gts[gt_] = [idx]
-
-    # We have to sum the columns with the one gts
-    if not all([len(val) < 2 for val in same_gts.values()]):
-        collapsed_gt_counts = []
-        collapsed_gts = []
-        for gt_, idxs in same_gts.items():
-            if len(idxs) > 1:
-                gt_count = numpy.sum(gt_counts[:, idxs], axis=1)
-            else:
-                gt_count = gt_counts[:, idxs][:, 0]
-            collapsed_gt_counts.append(gt_count)
-            collapsed_gts.append(gt_)
-        gt_counts = numpy.array(collapsed_gt_counts)
-        different_gts = collapsed_gts
-    return gt_counts, different_gts
-
-
 def _packed_gt_to_tuple(gt, ploidy):
     gt_len = ploidy * 2
     gt_fmt = '%0' + str(gt_len) + 'd'

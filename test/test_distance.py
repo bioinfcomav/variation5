@@ -12,7 +12,8 @@ import numpy
 
 from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            calc_pairwise_distance,
-                                           sel_samples_from_dist_mat)
+                                           sel_samples_from_dist_mat,
+                                           _matching)
 from variation.variations.vars_matrices import VariationsArrays
 from variation.variations.stats import GT_FIELD
 
@@ -78,7 +79,7 @@ class IndividualDistTest(unittest.TestCase):
         distance = calc_pairwise_distance(variations, chunk_size=None)
         assert numpy.allclose(distance, expected)
 
-        distance = calc_pairwise_distance(variations, chunk_size=None)
+        distance = calc_pairwise_distance(variations, chunk_size=2)
         assert numpy.allclose(distance, expected)
 
         # With all missing
@@ -105,6 +106,65 @@ class IndividualDistTest(unittest.TestCase):
                                                        sel_samples)
         assert numpy.all(selected_distances == expected)
 
+    def test_matching_2_indis(self):
+        a = numpy.array([[-1, -1], [0, 0], [0, 1],
+                         [0, 0], [0, 0], [0, 1], [0, 1],
+                         [0, 1], [0, 0], [0, 0], [0, 1]])
+        b = numpy.array([[1, 1], [-1, -1], [0, 0],
+                         [0, 0], [1, 1], [0, 1], [1, 0],
+                         [1, 0], [1, 0], [0, 1], [1, 1]])
+        gts = numpy.stack((a, b), axis=1)
+        distance = _matching(gts, 0, 1, {})
+        assert distance == 1 - 4 / 9
+
+        f = numpy.array([[0, 0], [0, 1], [0, 0], [0, 0]])
+        g = numpy.array([[0, 0], [1, 0], [1, 1], [1, 0]])
+        gts = numpy.stack((f, g), axis=1)
+        distance = _matching(gts, 0, 1, {})
+        assert distance == 0.5
+
+        c = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
+        d = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
+        gts = numpy.stack((c, d), axis=1)
+        distance = _matching(gts, 0, 1, {})
+        assert distance == 0
+
+        e = numpy.full(shape=(11, 2), fill_value=0, dtype=numpy.int16)
+        gts = numpy.stack((c, e), axis=1)
+        distance = _matching(gts, 0, 1, {})
+        assert distance == 1
+
+    def test_matching_pairwise_by_chunk(self):
+        a = numpy.array([[-1, -1], [0, 0], [0, 1],
+                         [0, 0], [0, 0], [0, 1], [0, 1],
+                         [0, 1], [0, 0], [0, 0], [0, 1]])
+        b = numpy.array([[1, 1], [-1, -1], [0, 0],
+                         [0, 0], [1, 1], [0, 1], [1, 0],
+                         [1, 0], [1, 0], [0, 1], [1, 1]])
+        c = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
+        d = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
+        gts = numpy.stack((a, b, c, d), axis=0)
+        gts = numpy.transpose(gts, axes=(1, 0, 2)).astype(numpy.int16)
+        variations = VariationsArrays()
+        variations['/calls/GT'] = gts
+        expected = [0.444444, 0, 0, 0.3, 0.3, 1]
+        distance = calc_pairwise_distance(variations, chunk_size=None,
+                                          method='matching')
+        assert numpy.allclose(distance, expected)
+
+        distance = calc_pairwise_distance(variations, chunk_size=2,
+                                          method='matching')
+        assert numpy.allclose(distance, expected)
+
+        # With all missing
+        a = numpy.full(shape=(10, 2), fill_value=-1, dtype=numpy.int16)
+        b = numpy.full(shape=(10, 2), fill_value=-1, dtype=numpy.int16)
+        gts = numpy.stack((a, b), axis=0)
+        gts = numpy.transpose(gts, axes=(1, 0, 2)).astype(numpy.int16)
+        variations = VariationsArrays()
+        variations['/calls/GT'] = gts
+        distance = calc_pairwise_distance(variations, method='matching')
+        assert numpy.isnan(distance[0])
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise']

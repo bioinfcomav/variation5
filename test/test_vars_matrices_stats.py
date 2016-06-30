@@ -142,31 +142,6 @@ class StatsTest(unittest.TestCase):
         assert numpy.allclose(_calc_maf_depth(variations), expected,
                               equal_nan=True)
 
-    def test_calc_maf_depth_distribs_per_sample(self):
-        variations = VariationsArrays()
-        variations['/calls/AO'] = numpy.array([])
-        variations['/calls/RO'] = numpy.array([])
-        distribs, bins = calc_maf_depth_distribs_per_sample(variations,
-                                                            chunk_size=None)
-        assert distribs is None
-        assert bins is None
-
-        variations = VariationsArrays()
-        variations['/calls/AO'] = numpy.array([[[0, 0], [0, 0], [15, -1]]])
-        variations['/calls/RO'] = numpy.array([[10, 5, 15]])
-        variations.samples = list(range(3))
-        distribs, _ = calc_maf_depth_distribs_per_sample(variations, n_bins=4,
-                                                         min_depth=6,
-                                                         chunk_size=None)
-        expected = [[0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 1, 0]]
-        assert numpy.all(distribs == expected)
-
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        distribs1, _ = calc_maf_depth_distribs_per_sample(hdf5, min_depth=6,
-                                                          chunk_size=None)
-        distribs2, _ = calc_maf_depth_distribs_per_sample(hdf5, min_depth=6)
-        assert numpy.all(distribs1 == distribs2)
-
     def test_calc_missing_gt_rates(self):
         gts = numpy.array([])
         varis = {'/calls/GT': gts}
@@ -237,34 +212,6 @@ class StatsTest(unittest.TestCase):
 
         het = calc_obs_het(varis, min_num_genotypes=0, min_call_dp=5)
         assert numpy.allclose(het, [0.5, 0])
-
-    def test_calc_obs_het_sample(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
-        het_h5 = calc_obs_het_by_sample(hdf5)
-        het_array = calc_obs_het_by_sample(snps)
-        assert numpy.all(het_array == het_h5)
-
-        gts = numpy.array([[[0, 0], [0, 1], [0, -1], [-1, -1]],
-                           [[0, 0], [0, 0], [0, -1], [-1, -1]],
-                           [[0, 0], [0, 0], [0, 0], [-1, -1]]])
-
-        varis = {'/calls/GT': gts}
-        het = calc_obs_het_by_sample(varis, chunk_size=None)
-        assert numpy.allclose(het, [0, 1 / 3, 0, numpy.NaN], equal_nan=True)
-
-        gts = numpy.array([])
-        varis = {'/calls/GT': gts}
-        het = calc_obs_het_by_sample(varis, chunk_size=None)
-        assert het.shape[0] == 0
-
-        snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        calc_obs_het_by_sample(snps, min_call_dp=3)
-        calc_obs_het_by_sample(snps, min_call_dp=3, max_call_dp=20)
-        het_0 = calc_obs_het_by_sample(snps)
-        het = calc_obs_het_by_sample(snps, chunk_size=None)
-        assert numpy.allclose(het_0, het)
 
     def test_calc_gt_type_stats(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -550,6 +497,202 @@ class StatsTest(unittest.TestCase):
                     [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
         assert numpy.all(dist == expected)
 
+    def test_to_positional_stats(self):
+        chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3', 'chr4'])
+        pos = numpy.array([10, 5, 20, 30, 40, 50])
+        stat = numpy.array([1, 2, 3, 4, 5, numpy.nan])
+        pos_stats = PositionalStatsCalculator(chrom, pos, stat)
+        line1 = 'track type=wiggle_0 name="track1" description="description"'
+        wiglines = [line1,
+                    'variableStep chrom=chr1', '10 1.0',
+                    'variableStep chrom=chr2', '5 2.0', '20 3.0',
+                    'variableStep chrom=chr3', '30 4.0', '40 5.0']
+        for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
+            assert line.strip() == exp
+
+        line1 = 'track type=bedGraph name="track1" description="description"'
+        bg_lines = [line1,
+                    'chr1 10 11 1.0', 'chr2 5 6 2.0', 'chr2 20 21 3.0',
+                    'chr3 30 31 4.0', 'chr3 40 41 5.0']
+        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
+            assert line.strip() == exp
+
+        # Taking windows
+        chrom = numpy.repeat('chr1', 5)
+        pos = numpy.array([10, 20, 30, 40, 50])
+        stat = numpy.array([1, 2, 3, 4, 5])
+        pos_stats = PositionalStatsCalculator(chrom, pos, stat, window_size=25,
+                                              step=25)
+        line1 = 'track type=wiggle_0 name="track1" description="description"'
+        wiglines = [line1,
+                    'fixedStep chrom=chr1 start=10 span=25 step=25',
+                    str(6 / 25), str(9 / 25)]
+        for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
+            assert line.strip() == exp
+
+        line1 = 'track type=bedGraph name="track1" description="description"'
+        bg_lines = [line1, 'chr1 10 35 {}'.format(6 / 25),
+                    'chr1 35 60 {}'.format(9 / 25)]
+        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
+            assert line.strip() == exp
+
+        # Pre-calculating the windows
+        pos_stats = pos_stats.calc_window_stat()
+        line1 = 'track type=bedGraph name="track1" description="description"'
+        bg_lines = [line1, 'chr1 10 35 {}'.format(6 / 25),
+                    'chr1 35 60 {}'.format(9 / 25)]
+        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
+            assert line.strip() == exp
+
+    def test_calc_r2_windows(self):
+        variations = VariationsArrays()
+        chrom = numpy.array([b'chr1'] * 4)
+        pos = numpy.array([1, 4, 6, 20])
+        gts = numpy.array([[[0, 0], [1, 1], [0, 0]],
+                           [[0, 0], [1, 1], [0, 0]],
+                           [[1, 1], [0, 0], [1, 1]],
+                           [[0, 0], [0, 1], [-1, -1]]])
+        variations['/variations/chrom'] = chrom
+        variations['/variations/pos'] = pos
+        variations['/calls/GT'] = gts
+        expected = [1.0, 1.0000002, 1.0, 1.0000002, 1.0, 1.0]
+        assert numpy.allclose(_calc_r2(gts), expected)
+
+        chrom, pos, r2 = calc_r2_windows(variations, 10)
+        assert numpy.allclose(r2, [1.0000002384185933, numpy.nan],
+                              equal_nan=True)
+        assert numpy.all(chrom == b'chr1')
+
+
+class SampleStatsTest(unittest.TestCase):
+    def test_calc_maf_depth_distribs_per_sample(self):
+        variations = VariationsArrays()
+        variations['/calls/AO'] = numpy.array([])
+        variations['/calls/RO'] = numpy.array([])
+        distribs, bins = calc_maf_depth_distribs_per_sample(variations,
+                                                            chunk_size=None)
+        assert distribs is None
+        assert bins is None
+
+        variations = VariationsArrays()
+        variations['/calls/AO'] = numpy.array([[[0, 0], [0, 0], [15, -1]]])
+        variations['/calls/RO'] = numpy.array([[10, 5, 15]])
+        variations.samples = list(range(3))
+        distribs, _ = calc_maf_depth_distribs_per_sample(variations, n_bins=4,
+                                                         min_depth=6,
+                                                         chunk_size=None)
+        expected = [[0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 1, 0]]
+        assert numpy.all(distribs == expected)
+
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        distribs1, _ = calc_maf_depth_distribs_per_sample(hdf5, min_depth=6,
+                                                          chunk_size=None)
+        distribs2, _ = calc_maf_depth_distribs_per_sample(hdf5, min_depth=6)
+        assert numpy.all(distribs1 == distribs2)
+
+    def test_calc_distrib_for_sample(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks())
+        distrib, _ = calc_field_distrib_for_a_sample(hdf5, field='/calls/DP',
+                                                     sample='1_17_1_gbs',
+                                                     n_bins=15)
+        assert distrib.shape == (15,)
+
+        distrib2, _ = calc_field_distrib_for_a_sample(snps, field='/calls/DP',
+                                                      n_bins=15,
+                                                      sample='1_17_1_gbs',
+                                                      chunk_size=None)
+        assert numpy.all(distrib == distrib2)
+
+        distrib3, _ = calc_field_distrib_for_a_sample(snps, field='/calls/DP',
+                                                      n_bins=15,
+                                                      sample='1_17_1_gbs',
+                                                      chunk_size=50)
+        assert numpy.all(distrib3 == distrib2)
+
+        vars_ = VariationsArrays()
+        vars_['/calls/DP'] = numpy.array([[10, 5, 15],
+                                          [0, 15, 10]])
+        vars_['/calls/GT'] = numpy.array([[[0, 0], [0, 1], [1, 1]],
+                                          [[0, 0], [0, 1], [1, 1]]])
+        vars_.samples = list(range(3))
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16)
+        expec = [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
+        assert numpy.all(expec == distrib)
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16,
+                                                    mask_field='/calls/GT',
+                                                    mask_func=call_is_het)
+        expec = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+        assert numpy.all(expec == distrib)
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+
+        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
+                                                    n_bins=16,
+                                                    mask_field='/calls/GT',
+                                                    mask_func=call_is_hom)
+        expec = [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
+        assert numpy.all(expec == distrib)
+        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
+
+    def test_calc_dp_for_sample(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks())
+        cnts, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                    n_bins=15)
+        assert cnts['hom'].shape == (15,)
+        assert cnts['het'].shape == (15,)
+        return
+        cnts2, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                     n_bins=15,
+                                                     chunk_size=None)
+        assert numpy.all(cnts['hom'] == cnts2['hom'])
+        assert numpy.all(cnts['het'] == cnts2['het'])
+
+        cnts3, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
+                                                     n_bins=15, chunk_size=50)
+        assert numpy.all(cnts['hom'] == cnts3['hom'])
+        assert numpy.all(cnts['het'] == cnts3['het'])
+
+    def test_calc_obs_het_sample(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        snps = VariationsArrays()
+        snps.put_chunks(hdf5.iterate_chunks(kept_fields=['/calls/GT']))
+        het_h5 = calc_obs_het_by_sample(hdf5)
+        het_array = calc_obs_het_by_sample(snps)
+        assert numpy.all(het_array == het_h5)
+
+        gts = numpy.array([[[0, 0], [0, 1], [0, -1], [-1, -1]],
+                           [[0, 0], [0, 0], [0, -1], [-1, -1]],
+                           [[0, 0], [0, 0], [0, 0], [-1, -1]]])
+
+        varis = {'/calls/GT': gts}
+        het = calc_obs_het_by_sample(varis, chunk_size=None)
+        assert numpy.allclose(het, [0, 1 / 3, 0, numpy.NaN], equal_nan=True)
+
+        gts = numpy.array([])
+        varis = {'/calls/GT': gts}
+        het = calc_obs_het_by_sample(varis, chunk_size=None)
+        assert het.shape[0] == 0
+
+        snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        calc_obs_het_by_sample(snps, min_call_dp=3)
+        calc_obs_het_by_sample(snps, min_call_dp=3, max_call_dp=20)
+        het_0 = calc_obs_het_by_sample(snps)
+        het = calc_obs_het_by_sample(snps, chunk_size=None)
+        assert numpy.allclose(het_0, het)
+
     def test_calc_depth_distribution(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         snps = VariationsArrays()
@@ -619,147 +762,6 @@ class StatsTest(unittest.TestCase):
         assert numpy.all(expec == distrib)
         assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
 
-    def test_calc_distrib_for_sample(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks())
-        distrib, _ = calc_field_distrib_for_a_sample(hdf5, field='/calls/DP',
-                                                     sample='1_17_1_gbs',
-                                                     n_bins=15)
-        assert distrib.shape == (15,)
-
-        distrib2, _ = calc_field_distrib_for_a_sample(snps, field='/calls/DP',
-                                                      n_bins=15,
-                                                      sample='1_17_1_gbs',
-                                                      chunk_size=None)
-        assert numpy.all(distrib == distrib2)
-
-        distrib3, _ = calc_field_distrib_for_a_sample(snps, field='/calls/DP',
-                                                      n_bins=15,
-                                                      sample='1_17_1_gbs',
-                                                      chunk_size=50)
-        assert numpy.all(distrib3 == distrib2)
-
-        vars_ = VariationsArrays()
-        vars_['/calls/DP'] = numpy.array([[10, 5, 15],
-                                          [0, 15, 10]])
-        vars_['/calls/GT'] = numpy.array([[[0, 0], [0, 1], [1, 1]],
-                                          [[0, 0], [0, 1], [1, 1]]])
-        vars_.samples = list(range(3))
-        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
-                                                    n_bins=16)
-        expec = [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                 [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
-        assert numpy.all(expec == distrib)
-        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
-
-        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
-                                                    n_bins=16,
-                                                    mask_field='/calls/GT',
-                                                    mask_func=call_is_het)
-        expec = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                 [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
-        assert numpy.all(expec == distrib)
-        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
-
-        distrib, _ = calc_field_distribs_per_sample(vars_, field='/calls/DP',
-                                                    n_bins=16,
-                                                    mask_field='/calls/GT',
-                                                    mask_func=call_is_hom)
-        expec = [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]
-        assert numpy.all(expec == distrib)
-        assert numpy.all(calc_depth(vars_) == [10, 5, 15, 0, 15, 10])
-
-    def test_to_positional_stats(self):
-        chrom = numpy.array(['chr1', 'chr2', 'chr2', 'chr3', 'chr3', 'chr4'])
-        pos = numpy.array([10, 5, 20, 30, 40, 50])
-        stat = numpy.array([1, 2, 3, 4, 5, numpy.nan])
-        pos_stats = PositionalStatsCalculator(chrom, pos, stat)
-        line1 = 'track type=wiggle_0 name="track1" description="description"'
-        wiglines = [line1,
-                    'variableStep chrom=chr1', '10 1.0',
-                    'variableStep chrom=chr2', '5 2.0', '20 3.0',
-                    'variableStep chrom=chr3', '30 4.0', '40 5.0']
-        for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
-            assert line.strip() == exp
-
-        line1 = 'track type=bedGraph name="track1" description="description"'
-        bg_lines = [line1,
-                    'chr1 10 11 1.0', 'chr2 5 6 2.0', 'chr2 20 21 3.0',
-                    'chr3 30 31 4.0', 'chr3 40 41 5.0']
-        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
-            assert line.strip() == exp
-
-        # Taking windows
-        chrom = numpy.repeat('chr1', 5)
-        pos = numpy.array([10, 20, 30, 40, 50])
-        stat = numpy.array([1, 2, 3, 4, 5])
-        pos_stats = PositionalStatsCalculator(chrom, pos, stat, window_size=25,
-                                              step=25)
-        line1 = 'track type=wiggle_0 name="track1" description="description"'
-        wiglines = [line1,
-                    'fixedStep chrom=chr1 start=10 span=25 step=25',
-                    str(6 / 25), str(9 / 25)]
-        for line, exp in zip(pos_stats.to_wig(), wiglines[1:]):
-            assert line.strip() == exp
-
-        line1 = 'track type=bedGraph name="track1" description="description"'
-        bg_lines = [line1, 'chr1 10 35 {}'.format(6 / 25),
-                    'chr1 35 60 {}'.format(9 / 25)]
-        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
-            assert line.strip() == exp
-
-        # Pre-calculating the windows
-        pos_stats = pos_stats.calc_window_stat()
-        line1 = 'track type=bedGraph name="track1" description="description"'
-        bg_lines = [line1, 'chr1 10 35 {}'.format(6 / 25),
-                    'chr1 35 60 {}'.format(9 / 25)]
-        for line, exp in zip(pos_stats.to_bedGraph(), bg_lines[1:]):
-            assert line.strip() == exp
-
-    def test_calc_r2_windows(self):
-        variations = VariationsArrays()
-        chrom = numpy.array([b'chr1'] * 4)
-        pos = numpy.array([1, 4, 6, 20])
-        gts = numpy.array([[[0, 0], [1, 1], [0, 0]],
-                           [[0, 0], [1, 1], [0, 0]],
-                           [[1, 1], [0, 0], [1, 1]],
-                           [[0, 0], [0, 1], [-1, -1]]])
-        variations['/variations/chrom'] = chrom
-        variations['/variations/pos'] = pos
-        variations['/calls/GT'] = gts
-        expected = [1.0, 1.0000002, 1.0, 1.0000002, 1.0, 1.0]
-        assert numpy.allclose(_calc_r2(gts), expected)
-
-        chrom, pos, r2 = calc_r2_windows(variations, 10)
-        assert numpy.allclose(r2, [1.0000002384185933, numpy.nan],
-                              equal_nan=True)
-        assert numpy.all(chrom == b'chr1')
-
-    def test_calc_dp_for_sample(self):
-        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        snps = VariationsArrays()
-        snps.put_chunks(hdf5.iterate_chunks())
-        cnts, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
-                                                    n_bins=15)
-        assert cnts['hom'].shape == (15,)
-        assert cnts['het'].shape == (15,)
-        return
-        cnts2, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
-                                                     n_bins=15,
-                                                     chunk_size=None)
-        assert numpy.all(cnts['hom'] == cnts2['hom'])
-        assert numpy.all(cnts['het'] == cnts2['het'])
-
-        cnts3, _ = calc_call_dp_distrib_for_a_sample(hdf5, sample='1_17_1_gbs',
-                                                     n_bins=15, chunk_size=50)
-        assert numpy.all(cnts['hom'] == cnts3['hom'])
-        assert numpy.all(cnts['het'] == cnts3['het'])
-
     def test_calc_dp_means(self):
         snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         means = calc_depth_mean_by_sample(snps)
@@ -767,6 +769,9 @@ class StatsTest(unittest.TestCase):
         means2 = calc_depth_mean_by_sample(snps, chunk_size=None)
         assert means.shape[0] == 153
         assert numpy.allclose(means, means2)
+
+    # depth distribution, depth distrib vs obs het
+    # obs het, hom ref, missing
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'StatsTest.test_calc_obs_het_sample']

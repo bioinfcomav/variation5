@@ -33,7 +33,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         hist2d_het_allele_freq,
                                         calc_field_distrib_for_a_sample,
                                         calc_call_dp_distrib_for_a_sample,
-                                        calc_depth_mean_by_sample)
+                                        calc_depth_mean_by_sample,
+                                        calc_stats_by_sample)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -770,9 +771,51 @@ class SampleStatsTest(unittest.TestCase):
         assert means.shape[0] == 153
         assert numpy.allclose(means, means2)
 
-    # depth distribution, depth distrib vs obs het
-    # obs het, hom ref, missing
+    def test_stasts_per_sample(self):
+        gts = numpy.array([[[0, 0], [0, 1], [0, -1], [-1, -1]],
+                           [[0, 0], [0, 0], [0, -1], [-1, -1]],
+                           [[1, 1], [0, 0], [0, 0], [-1, -1]]])
+
+        dps = numpy.array([[4, 5, 1, 0],
+                           [4, 5, 1, 0],
+                           [3, 3, 1, 0]])
+        varis = {'/calls/GT': gts, DP_FIELD: dps}
+        res = calc_stats_by_sample(varis, chunk_size=None, dp_n_bins=5)
+
+        assert numpy.allclose(res['homozygosity'][:3], [1, 2 / 3, 1])
+        assert numpy.isnan(res['homozygosity'][3])
+        assert numpy.allclose(res['obs_het'][:3], [0, 1 / 3, 0])
+        assert numpy.isnan(res['obs_het'][3])
+        assert numpy.allclose(res['hom_ref_rate'][:3], [2 / 3, 2 / 3, 1])
+        assert numpy.isnan(res['hom_ref_rate'][3])
+        assert numpy.allclose(res['called_gt_rate'], [1, 1, 1 / 3, 0])
+
+        dp_hists = res['dp_hists']
+        assert numpy.allclose(dp_hists['bin_edges'], [0, 1, 2, 3, 4, 5])
+        assert numpy.allclose(dp_hists['dp_counts'], [3, 3, 0, 2, 4])
+        assert numpy.allclose(dp_hists['dp_no_missing_counts'],
+                              [0, 1, 0, 2, 4])
+        assert numpy.allclose(dp_hists['dp_het_counts'], [0, 0, 0, 0, 1])
+        assert numpy.allclose(dp_hists['dp_hom_counts'], [0, 1, 0, 2, 3])
+
+        varis = {'/calls/GT': gts}
+        res = calc_stats_by_sample(varis, chunk_size=None, dp_n_bins=5)
+        assert 'dp_hists' not in res
+        expected_keys = ['homozygosity', 'obs_het', 'hom_ref_rate',
+                         'called_gt_rate']
+        assert not set(res.keys()).difference(expected_keys)
+
+        varis = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        res1 = calc_stats_by_sample(varis, chunk_size=None)
+        res2 = calc_stats_by_sample(varis, chunk_size=100)
+        for key in ['homozygosity', 'obs_het', 'hom_ref_rate',
+                    'called_gt_rate']:
+            assert numpy.allclose(res1[key], res2[key])
+
+        for key in ['bin_edges', 'dp_counts', 'dp_no_missing_counts',
+                    'dp_het_counts', 'dp_hom_counts']:
+            assert numpy.allclose(res1['dp_hists'][key], res2['dp_hists'][key])
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_calc_obs_het_sample']
+    # import sys;sys.argv = ['', 'SampleStatsTest.test_stasts_per_sample']
     unittest.main()

@@ -41,6 +41,9 @@ def _calc_histogram(vector, n_bins, range_, weights=None):
         dtype = type(vector[0])
     missing_value = MISSING_VALUES[dtype]
 
+    if is_dataset(vector):
+        vector = vector[:]
+
     if weights is None:
         if math.isnan(missing_value):
             not_nan = ~numpy.isnan(vector)
@@ -442,6 +445,127 @@ def calc_obs_het_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
     with numpy.errstate(invalid='ignore'):
         obs_het_by_sample = obs_het_by_sample / called_gts
     return obs_het_by_sample
+
+
+def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
+                         min_call_dp=0, max_call_dp=None, dp_range=None,
+                         dp_n_bins=DEF_NUM_BINS):
+
+    do_depth = True if DP_FIELD in variations.keys() else False
+
+    if not chunk_size:
+        chunks = [variations]
+    else:
+        kept_fields = [GT_FIELD]
+        if do_depth:
+            kept_fields.append(DP_FIELD)
+        chunks = variations.iterate_chunks(kept_fields=kept_fields,
+                                           chunk_size=chunk_size)
+
+    if dp_range is None and do_depth:
+        dp_range = calc_min_max(variations[DP_FIELD],
+                                chunk_size=chunk_size)
+    if dp_range is not None and dp_range[0] < 0:
+        dp_range = [0, dp_range[1]]
+
+    het_counts = None
+    call_gt_counts = None
+    hom_counts = None
+    hom_ref_counts = None
+    dp_hist_cnts = None
+    dp_hist_no_missing_cnts = None
+    dp_het_hist_cnts = None
+    for chunk in chunks:
+        is_hom, is_missing = _call_is_hom(chunk, min_call_dp, max_call_dp)
+        gts = chunk[GT_FIELD]
+        is_hom_ref = numpy.logical_and(call_is_hom(gts), gts[:, :, 0] == 0)
+        is_het = numpy.logical_not(is_hom)
+        is_het[is_missing] = False
+
+        chunk_het_counts = numpy.sum(is_het, axis=0)
+        if het_counts is None:
+            het_counts = chunk_het_counts
+        else:
+            het_counts += chunk_het_counts
+
+        chunk_hom_ref_counts = numpy.sum(is_hom, axis=0)
+        if hom_counts is None:
+            hom_counts = chunk_hom_ref_counts
+        else:
+            hom_counts += chunk_hom_ref_counts
+
+        chunk_hom_ref_counts = numpy.sum(is_hom_ref, axis=0)
+        if hom_ref_counts is None:
+            hom_ref_counts = chunk_hom_ref_counts
+        else:
+            hom_ref_counts += chunk_hom_ref_counts
+
+        chunk_called_gts = numpy.sum(numpy.logical_not(is_missing), axis=0)
+        if call_gt_counts is None:
+            call_gt_counts = chunk_called_gts
+        else:
+            call_gt_counts += chunk_called_gts
+
+        if do_depth:
+            dps = chunk[DP_FIELD]
+            chunk_dp_hist = histogram(dps, n_bins=dp_n_bins,
+                                      range_=dp_range)
+            if dp_hist_cnts is None:
+                dp_hist_cnts = chunk_dp_hist[0]
+                dp_bin_edges = chunk_dp_hist[1]
+            else:
+                dp_hist_cnts += chunk_dp_hist[0]
+
+            dps_no_missing = numpy.copy(dps)
+            dps_no_missing[is_missing] = MISSING_INT
+            chunk_dp_hist_no_missing = histogram(dps_no_missing,
+                                                 n_bins=dp_n_bins,
+                                                 range_=dp_range)
+            if dp_hist_no_missing_cnts is None:
+                dp_hist_no_missing_cnts = chunk_dp_hist_no_missing[0]
+            else:
+                dp_hist_no_missing_cnts += chunk_dp_hist_no_missing[0]
+
+            dps_het = numpy.copy(dps)
+            dps_het[numpy.logical_not(is_het)] = MISSING_INT
+            chunk_dp_het_hist = histogram(dps_het, n_bins=dp_n_bins,
+                                          range_=dp_range)
+            if dp_het_hist_cnts is None:
+                dp_het_hist_cnts = chunk_dp_het_hist[0]
+            else:
+                dp_het_hist_cnts += chunk_dp_het_hist[0]
+    if do_depth:
+        dp_hom_hist_cnts = dp_hist_no_missing_cnts - dp_het_hist_cnts
+
+    with numpy.errstate(invalid='ignore'):
+        het_rate = het_counts / call_gt_counts
+
+    with numpy.errstate(invalid='ignore'):
+        hom_rate = hom_counts / call_gt_counts
+
+    with numpy.errstate(invalid='ignore'):
+        hom_ref_rate = hom_ref_counts / call_gt_counts
+
+    with numpy.errstate(invalid='ignore'):
+        if isinstance(variations, dict):
+            # just for the test
+            num_vars = variations[GT_FIELD].shape[0]
+        else:
+            num_vars = variations.num_variations
+        call_gt_rate = call_gt_counts / num_vars
+
+    res = {'called_gt_rate': call_gt_rate,
+           'obs_het': het_rate,
+           'homozygosity': hom_rate,
+           'hom_ref_rate': hom_ref_rate}
+    if do_depth:
+        dp_hists = {'bin_edges': dp_bin_edges,
+                    'dp_counts': dp_hist_cnts,
+                    'dp_no_missing_counts': dp_hist_no_missing_cnts,
+                    'dp_het_counts': dp_het_hist_cnts,
+                    'dp_hom_counts': dp_hom_hist_cnts}
+        res['dp_hists'] = dp_hists
+    return res
 
 
 def _calc_gt_type_stats(variations):

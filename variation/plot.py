@@ -651,7 +651,7 @@ def _estimate_percentiles_from_distrib(counts, edges,
     return est_quartiles
 
 
-def plot_hists(counts, edges, fhand=None, axes=None, no_interactive_win=False,
+def plot_hists_old(counts, edges, fhand=None, axes=None, no_interactive_win=False,
                figsize=None, mpl_params=None, log_hist_axes=False,
                xlabels=None, plot_quartiles=False):
 
@@ -749,3 +749,137 @@ def plot_hists(counts, edges, fhand=None, axes=None, no_interactive_win=False,
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
     return
+
+
+def plot_hists(counts1, edges, counts2=None, fhand=None, axes=None,
+               no_interactive_win=False, figsize=None, mpl_params=None,
+               log_hist_axes=False, xlabels=None, plot_quartiles=False):
+
+    min_grey = 0.3
+    max_grey = 0.9
+    sample_width = 0.8
+    quartile_with = 0.9
+    bar_alpha = 0.9
+    quartile_line_width = 3
+
+    if mpl_params is None:
+        mpl_params = {}
+
+    # log_hist_axes
+    if log_hist_axes:
+        counts1 = numpy.log10(counts1)
+        if counts2 is not None:
+            counts2 = numpy.log10(counts2)
+
+    # normalize counts
+    max_per_sample = numpy.max(counts1, axis=0)
+    if counts2 is not None:
+        max_per_sample = numpy.maximum(max_per_sample,
+                                       numpy.max(counts2, axis=0))
+    counts1 = counts1 / max_per_sample / 2 * sample_width
+    if counts2 is not None:
+        counts2 = counts2 / max_per_sample / 2 * sample_width
+
+    print_figure = False
+    if axes is None:
+        print_figure = True
+    axes, canvas, fig = _get_mplot_axes(axes, fhand, figsize=figsize)
+
+    if plot_quartiles:
+        median = 0.5
+        quart = [0.25, 0.75]
+        percent9 = [0.05, 0.95]
+        percentiles = list(sorted([median] + quart + percent9))
+
+        for cnt_idx, counts in enumerate([counts1, counts2]):
+            if counts is None:
+                continue
+
+            kwargs = {'percentiles': percentiles, 'samples_in_rows': False}
+            percent_vals = _estimate_percentiles_from_distrib(counts,
+                                                              edges,
+                                                              **kwargs)
+            assert not (len(percentiles) - 1) % 2
+            median_row_idx = len(percentiles) // 2
+            assert percentiles[median_row_idx] - 0.5 < 0.0001
+
+            greys = cm.get_cmap('Greys')
+            # draw quartile lines
+            for sample_idx in range(counts.shape[1]):
+                sample_percents = percent_vals[:, sample_idx]
+                for percent_idx in range(median_row_idx):
+                    color = percent_idx / median_row_idx * (max_grey - min_grey)
+                    color += min_grey
+                    color = greys(color)
+
+                    if cnt_idx == 0:
+                        xmin = (sample_idx + 1) - quartile_with / 2
+                        if counts2 is None:
+                            xmax = (sample_idx + 1) + quartile_with / 2
+                        else:
+                            xmax = (sample_idx + 1)
+                    else:
+                        xmin = (sample_idx + 1)
+                        xmax = (sample_idx + 1) + quartile_with / 2
+                    percent = sample_percents[percent_idx]
+                    axes.hlines(percent, xmin, xmax, zorder=1, color=color,
+                                linewidth=quartile_line_width)
+                    percent = sample_percents[-1 - percent_idx]
+                    axes.hlines(percent, xmin, xmax, zorder=1, color=color,
+                                linewidth=quartile_line_width)
+
+            # draw median lines
+            medians = percent_vals[median_row_idx, :]
+            for sample_idx, median in enumerate(medians):
+                if cnt_idx == 0:
+                    xmin = (sample_idx + 1) - quartile_with / 2
+                    xmax = (sample_idx + 1)
+                else:
+                    xmin = (sample_idx + 1)
+                    xmax = (sample_idx + 1) + quartile_with / 2
+                axes.hlines(median, xmin, xmax, color='red',
+                            zorder=3, linewidth=quartile_line_width)
+
+    # draw histograms
+    hist_y0 = edges[:-1]
+    height = edges[1] - edges[0]
+    for sample_idx in range(counts1.shape[1]):
+        sample_counts = counts1[:, sample_idx]
+
+        hist_vals = sample_counts
+
+        bottom = hist_y0
+        width = hist_vals
+        left = sample_idx + 1
+        axes.barh(bottom, width, height, left, zorder=10,
+                  alpha=bar_alpha, linewidth=0)
+        if counts2 is None:
+            axes.barh(bottom, -width, height, left, zorder=10,
+                      alpha=bar_alpha, linewidth=0)
+    if counts2 is not None:
+        for sample_idx in range(counts2.shape[1]):
+            sample_counts = counts2[:, sample_idx]
+
+            hist_vals = sample_counts
+
+            bottom = hist_y0
+            width = hist_vals
+            left = sample_idx + 1
+            axes.barh(bottom, -width, height, left, zorder=10,
+                      alpha=bar_alpha, linewidth=0)
+
+    if xlabels:
+        n_samples = counts1.shape[1]
+        x_vals = list(range(1, n_samples + 1))
+        axes.set_xticks(x_vals)
+        axes.set_xticklabels(xlabels, rotation='vertical')
+
+    _set_mpl_params(axes, mpl_params)
+
+    axes.set_xbound(lower=0.5)
+    axes.grid(axis='y')
+
+    fig.tight_layout()
+
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)

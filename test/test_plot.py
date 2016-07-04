@@ -177,9 +177,9 @@ class BoxplotsTests(unittest.TestCase):
 
     def test_plot_boxplot(self):
 
-        counts = numpy.array([[1, 3, 6, 10, 7, 2, 1],
-                              [10, 5, 4, 3, 1, 1, 1],
-                              [1, 1, 1, 2, 3, 5, 10]])
+        counts = numpy.array([[2, 3, 6, 10, 7, 2, 0],
+                              [10, 5, 4, 3, 2, 2, 0],
+                              [0, 2, 3, 2, 3, 5, 10]])
         counts = counts.T
         edges = numpy.arange(counts.shape[0] + 1)
 
@@ -187,11 +187,24 @@ class BoxplotsTests(unittest.TestCase):
             plot_hists(counts, edges, fhand=fhand, log_hist_axes=True,
                        xlabels=['sample1', 'sample2', 'sample3'],
                        mpl_params={'set_ybound': {'kwargs': {'upper': 70}}})
-            plot_hists(counts, edges, fhand=fhand, log_hist_axes=True,
+            plot_hists(counts, edges, fhand=fhand, log_hist_axes=False,
                        xlabels=['sample1', 'sample2', 'sample3'],
                        plot_quartiles=True)
 
-            # input(fhand.name)
+        # with two counts
+        counts2 = numpy.array([[0, 2, 5, 10, 8, 3, 2],
+                              [0, 9, 3, 2, 3, 5, 3],
+                              [3, 4, 2, 2, 3, 9, 0]])
+        counts2 = counts2.T
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_hists(counts, edges, counts2=counts2, fhand=fhand,
+                       log_hist_axes=True,
+                       xlabels=['sample1', 'sample2', 'sample3'],
+                       mpl_params={'set_ybound': {'kwargs': {'upper': 70}}})
+            plot_hists(counts, edges, fhand=fhand, counts2=counts2,
+                       log_hist_axes=False,
+                       xlabels=['sample1', 'sample2', 'sample3'],
+                       plot_quartiles=True)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'BoxplotsTests.test_plot_boxplot']

@@ -847,7 +847,7 @@ def plot_sample_dp_hits(stats, samples=None, fhand=None,
 
     fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
 
-    num_items = _get_len(stats['bin_edges']) - 2
+    num_items = stats['dp_counts'].shape[1]
 
     xmin = 0.5
     xmax = num_items + 0.5

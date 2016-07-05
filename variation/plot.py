@@ -767,7 +767,7 @@ def plot_hists(counts1, edges, counts2=None, fhand=None, axes=None,
             width = hist_vals
             left = sample_idx + 1
             axes.barh(bottom, -width, height, left, zorder=10,
-                      alpha=bar_alpha, linewidth=0)
+                      alpha=bar_alpha, linewidth=0, color='green')
 
     if xlabels:
         n_samples = counts1.shape[1]

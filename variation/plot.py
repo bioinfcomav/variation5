@@ -814,8 +814,8 @@ def _set_xaxis(axes, xmin, xmax):
     axes.set_xlim(xmin, xmax)
 
 
-def plot_sample_missing_het_stats(stats, samples=None, fhand=None,
-                                  no_interactive_win=False, figsize=None):
+def plot_sample_missing_het_stats(stats, fhand=None, no_interactive_win=False,
+                                  figsize=None):
     bar_width = 0.8
     fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
 
@@ -836,14 +836,13 @@ def plot_sample_missing_het_stats(stats, samples=None, fhand=None,
 
     axis = axes2.get_xaxis()
     axis.set_ticks(_get_centers(num_items))
-    axis.set_ticklabels(samples, rotation=45)
+    axis.set_ticklabels(stats['samples'], rotation=45)
 
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
 
-def plot_sample_dp_hits(stats, samples=None, fhand=None,
-                        no_interactive_win=False, figsize=None,
-                        log_axis_for_hists=False):
+def plot_sample_dp_hits(stats, samples, fhand=None, no_interactive_win=False,
+                        figsize=None, log_axis_for_hists=False):
 
     fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
 

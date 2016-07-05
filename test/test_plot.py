@@ -234,6 +234,7 @@ class BoxplotsTests(unittest.TestCase):
 
         sample_stats = {'called_gt_rate': call_gt,
                         'obs_het': obs_het,
+                        'samples': ['s1', 's2', 's3', 's4'],
                         'dp_hists': {'bin_edges': numpy.array(bin_edges),
                                      'dp_counts': numpy.array(dp_counts),
                                      'dp_no_missing_counts': dp_no_missing,
@@ -241,11 +242,10 @@ class BoxplotsTests(unittest.TestCase):
                                      'dp_hom_counts': dp_hom_counts}}
 
         with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_sample_missing_het_stats(sample_stats, fhand=fhand,
-                                          samples=['s1', 's2', 's3', 's4'])
+            plot_sample_missing_het_stats(sample_stats, fhand=fhand)
         with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_sample_dp_hits(sample_stats['dp_hists'], fhand=fhand,
-                                samples=['s1', 's2', 's3', 's4'],
+            plot_sample_dp_hits(sample_stats['dp_hists'],
+                                sample_stats['samples'], fhand=fhand,
                                 log_axis_for_hists=True)
 
 if __name__ == "__main__":

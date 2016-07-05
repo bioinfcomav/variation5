@@ -873,3 +873,33 @@ def plot_sample_dp_hits(stats, samples, fhand=None, no_interactive_win=False,
     axis.set_ticklabels(samples, rotation=45)
 
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+
+
+def plot_sample_dp_het_hom(stats, samples, min_dp=5, fhand=None, axes=None,
+                           no_interactive_win=False, figsize=None,
+                           plot_legend=True):
+    dp_ratio = stats['dp_het_counts'] / stats['dp_hom_counts']
+    dp_ratio[stats['dp_hom_counts'] < min_dp] = float('nan')
+
+    edges = stats['bin_edges']
+    x_vals = (edges[:-1] + edges[1:]) / 2
+
+    print_figure = False
+    if axes is None:
+        print_figure = True
+        axes, canvas, _ = _get_mplot_axes(axes, fhand, figsize=figsize)
+
+    for sample_idx in range(len(samples)):
+        sample_ratios = dp_ratio[:, sample_idx]
+        axes.plot(x_vals, sample_ratios, label=samples[sample_idx])
+
+    axes.set_xlim(left=min_dp)
+    axes.set_xlabel('depth')
+    axes.set_ylabel('dp het / dp hom if dp hom > ' + str(min_dp))
+
+    if plot_legend:
+        axes.legend()
+
+    if print_figure:
+        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+    return axes

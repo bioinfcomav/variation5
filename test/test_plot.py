@@ -20,7 +20,8 @@ from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             write_curlywhirly, _look_for_first_different,
                             _estimate_percentiles_from_distrib, plot_hists,
                             plot_stacked_histograms, plot_sample_dp_hits,
-                            plot_sample_missing_het_stats)
+                            plot_sample_missing_het_stats,
+                            plot_sample_dp_het_hom)
 from variation.variations.plot import pairwise_ld
 from variation.variations import VariationsH5
 from test.test_utils import TEST_DATA_DIR
@@ -247,6 +248,10 @@ class BoxplotsTests(unittest.TestCase):
             plot_sample_dp_hits(sample_stats['dp_hists'],
                                 sample_stats['samples'], fhand=fhand,
                                 log_axis_for_hists=True)
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_sample_dp_het_hom(sample_stats['dp_hists'],
+                                   sample_stats['samples'], min_dp=5,
+                                   fhand=fhand)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'BoxplotsTests.test_plot_sample_stats']

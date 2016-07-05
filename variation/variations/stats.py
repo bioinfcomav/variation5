@@ -497,8 +497,6 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
     dp_het_hist_cnts = None
     for chunk in chunks:
         is_hom, is_missing = _call_is_hom(chunk, min_call_dp, max_call_dp)
-        gts = chunk[GT_FIELD]
-        is_hom_ref = numpy.logical_and(call_is_hom(gts), gts[:, :, 0] == 0)
         is_het = numpy.logical_not(is_hom)
         is_het[is_missing] = False
 

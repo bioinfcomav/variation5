@@ -833,6 +833,8 @@ class SampleStatsTest(unittest.TestCase):
                     'dp_het_counts', 'dp_hom_counts']:
             assert numpy.allclose(res1['dp_hists'][key], res2['dp_hists'][key])
 
+
+
     def test_hist_for_cols(self):
         data = [[1, 1, 1, 1],
                 [2, 2, 1, 1],

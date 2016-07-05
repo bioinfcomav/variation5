@@ -492,7 +492,6 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
     het_counts = None
     call_gt_counts = None
     hom_counts = None
-    hom_ref_counts = None
     dp_hist_cnts = None
     dp_hist_no_missing_cnts = None
     dp_het_hist_cnts = None

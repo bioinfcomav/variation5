@@ -833,6 +833,13 @@ class SampleStatsTest(unittest.TestCase):
                     'dp_het_counts', 'dp_hom_counts']:
             assert numpy.allclose(res1['dp_hists'][key], res2['dp_hists'][key])
 
+        varis = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        from variation.variations.filters import SamplesFilterByIndex
+        varis = SamplesFilterByIndex([1, 2, 3, 4])(varis)['flt_vars']
+        res1 = calc_stats_by_sample(varis, chunk_size=None, dp_n_bins=5)
+        print(res1)
+
+
     def test_hist_for_cols(self):
         data = [[1, 1, 1, 1],
                 [2, 2, 1, 1],

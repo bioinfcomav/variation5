@@ -19,7 +19,8 @@ from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             plot_boxplot_from_distribs_series,
                             write_curlywhirly, _look_for_first_different,
                             _estimate_percentiles_from_distrib, plot_hists,
-                            plot_stacked_histograms)
+                            plot_stacked_histograms, plot_sample_dp_hits,
+                            plot_sample_missing_het_stats)
 from variation.variations.plot import pairwise_ld
 from variation.variations import VariationsH5
 from test.test_utils import TEST_DATA_DIR
@@ -206,6 +207,47 @@ class BoxplotsTests(unittest.TestCase):
                        xlabels=['sample1', 'sample2', 'sample3'],
                        plot_quartiles=True)
 
+    def test_plot_sample_stats(self):
+        call_gt = numpy.array([0.61505832, 0.55779427, 0.60233298, 0.65641569])
+        obs_het = numpy.array([0.04827586, 0.02281369, 0.0334507, 0.04846527])
+        bin_edges = [0, 90, 180, 270, 360, 450]
+        dp_counts = numpy.array([[569, 514, 548, 591],
+                                 [6, 9, 18, 15],
+                                 [5, 2, 0, 10],
+                                 [0, 1, 2, 1],
+                                 [0, 0, 0, 2]])
+        dp_no_missing = numpy.array([[569, 514, 548, 591],
+                                     [6, 9, 18, 15],
+                                     [5, 2, 0, 10],
+                                     [0, 1, 2, 1],
+                                     [0, 0, 0, 2]])
+        dp_het_counts = numpy.array([[26, 11, 18, 30],
+                                     [0, 0, 0, 0],
+                                     [2, 1, 0, 0],
+                                     [0, 0, 1, 0],
+                                     [0, 0, 0, 0]])
+        dp_hom_counts = numpy.array([[543, 503, 530, 561],
+                                     [6, 9, 18, 15],
+                                     [3, 1, 0, 10],
+                                     [0, 1, 1, 1],
+                                     [0, 0, 0, 2]])
+
+        sample_stats = {'called_gt_rate': call_gt,
+                        'obs_het': obs_het,
+                        'dp_hists': {'bin_edges': numpy.array(bin_edges),
+                                     'dp_counts': numpy.array(dp_counts),
+                                     'dp_no_missing_counts': dp_no_missing,
+                                     'dp_het_counts': dp_het_counts,
+                                     'dp_hom_counts': dp_hom_counts}}
+
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_sample_missing_het_stats(sample_stats, fhand=fhand,
+                                          samples=['s1', 's2', 's3', 's4'])
+        with NamedTemporaryFile(suffix='.png') as fhand:
+            plot_sample_dp_hits(sample_stats['dp_hists'], fhand=fhand,
+                                samples=['s1', 's2', 's3', 's4'],
+                                log_axis_for_hists=True)
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'BoxplotsTests.test_plot_boxplot']
+    # import sys;sys.argv = ['', 'BoxplotsTests.test_plot_sample_stats']
     unittest.main()

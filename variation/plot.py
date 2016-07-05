@@ -11,6 +11,7 @@ import matplotlib.colors as mcolors
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from pandas.core.frame import DataFrame
 
@@ -32,7 +33,7 @@ def _get_mplot_fig_and_canvas(fhand, figsize=None):
 
 def _get_mplot_axes(axes, fhand, figsize=None, plot_type=111):
     if axes is not None:
-        return axes, None
+        return axes, None, None
 
     fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
 
@@ -651,106 +652,6 @@ def _estimate_percentiles_from_distrib(counts, edges,
     return est_quartiles
 
 
-def plot_hists_old(counts, edges, fhand=None, axes=None, no_interactive_win=False,
-               figsize=None, mpl_params=None, log_hist_axes=False,
-               xlabels=None, plot_quartiles=False):
-
-    min_grey = 0.3
-    max_grey = 0.9
-    sample_width = 0.8
-    quartile_with = 0.9
-    bar_alpha = 0.9
-    quartile_line_width = 3
-
-    if mpl_params is None:
-        mpl_params = {}
-
-    # log_hist_axes
-    if log_hist_axes:
-        counts = numpy.log10(counts)
-
-    # normalize counts
-    max_per_sample = numpy.max(counts, axis=0)
-    counts = counts / max_per_sample / 2 * sample_width
-
-    print_figure = False
-    if axes is None:
-        print_figure = True
-    axes, canvas, fig = _get_mplot_axes(axes, fhand, figsize=figsize)
-
-    if plot_quartiles:
-        median = 0.5
-        quart = [0.25, 0.75]
-        percent9 = [0.05, 0.95]
-        percentiles = list(sorted([median] + quart + percent9))
-
-        percent_vals = _estimate_percentiles_from_distrib(counts, edges,
-                                                          percentiles=percentiles,
-                                                          samples_in_rows=False)
-        assert not (len(percentiles) - 1) % 2
-        median_row_idx = len(percentiles) // 2
-        assert percentiles[median_row_idx] - 0.5 < 0.0001
-
-        greys = cm.get_cmap('Greys')
-        # draw quartile lines
-        for sample_idx in range(counts.shape[1]):
-            sample_percents = percent_vals[:, sample_idx]
-            for percent_idx in range(median_row_idx):
-                color = percent_idx / median_row_idx * (max_grey - min_grey)
-                color += min_grey
-                color = greys(color)
-
-                xmin = (sample_idx + 1) - quartile_with / 2
-                xmax = (sample_idx + 1) + quartile_with / 2
-                percent = sample_percents[percent_idx]
-                axes.hlines(percent, xmin, xmax, zorder=1, color=color,
-                            linewidth=quartile_line_width)
-                percent = sample_percents[-1 - percent_idx]
-                axes.hlines(percent, xmin, xmax, zorder=1, color=color,
-                            linewidth=quartile_line_width)
-
-        # draw median lines
-        medians = percent_vals[median_row_idx, :]
-        for sample_idx, median in enumerate(medians):
-            axes.hlines(median, (sample_idx + 1) - quartile_with / 2,
-                        (sample_idx + 1) + quartile_with / 2, color='red',
-                        zorder=3, linewidth=quartile_line_width)
-
-    # draw histograms
-    hist_y0 = edges[:-1]
-    height = edges[1] - edges[0]
-    for sample_idx in range(counts.shape[1]):
-        sample_counts = counts[:, sample_idx]
-
-        hist_vals = sample_counts
-
-        bottom = hist_y0
-        width = hist_vals
-        left = sample_idx + 1
-        axes.barh(bottom, width, height, left, zorder=10,
-                  alpha=bar_alpha, linewidth=0)
-        axes.barh(bottom, -width, height, left, zorder=10,
-                  alpha=bar_alpha, linewidth=0)
-
-    if xlabels:
-        n_samples = counts.shape[1]
-        x_vals = list(range(1, n_samples + 1))
-        axes.set_xticks(x_vals)
-        axes.set_xticklabels(xlabels, rotation='vertical')
-
-    _set_mpl_params(axes, mpl_params)
-
-    axes.set_xbound(lower=0.5)
-    axes.grid(axis='y')
-
-    fig.tight_layout()
-
-    if print_figure:
-        _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
-
-    return
-
-
 def plot_hists(counts1, edges, counts2=None, fhand=None, axes=None,
                no_interactive_win=False, figsize=None, mpl_params=None,
                log_hist_axes=False, xlabels=None, plot_quartiles=False):
@@ -879,7 +780,97 @@ def plot_hists(counts1, edges, counts2=None, fhand=None, axes=None,
     axes.set_xbound(lower=0.5)
     axes.grid(axis='y')
 
-    fig.tight_layout()
+    if fig is not None:
+        fig.tight_layout()
 
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+
+
+def _get_len(vector):
+    try:
+        return vector.shape[0]
+    except AttributeError:
+        return len(vector)
+
+
+def _get_centers(num_items):
+    return numpy.arange(num_items) + 1
+
+
+def _get_lefts(num_items, bar_width):
+    centers = _get_centers(num_items)
+    return centers - bar_width / 2
+
+
+def _plot_barplot(heights, axes, bar_width):
+    left = _get_lefts(_get_len(heights), bar_width)
+    axes.bar(left, heights, bar_width)
+
+
+def _set_xaxis(axes, xmin, xmax):
+    axes.tick_params(axis='x', which='both', bottom='off', top='off')
+    axes.get_xaxis().set_ticklabels([])
+    axes.set_xlim(xmin, xmax)
+
+
+def plot_sample_missing_het_stats(stats, samples=None, fhand=None,
+                                  no_interactive_win=False, figsize=None):
+    bar_width = 0.8
+    fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
+
+    num_items = _get_len(stats['called_gt_rate'])
+
+    xmin = 0.5
+    xmax = num_items + 0.5
+
+    axes1 = fig.add_subplot(2, 1, 1)
+    _plot_barplot(stats['called_gt_rate'], axes1, bar_width)
+    axes1.set_ylabel('Called GT rate')
+    _set_xaxis(axes1, xmin, xmax)
+
+    axes2 = fig.add_subplot(2, 1, 2)
+    _plot_barplot(stats['obs_het'], axes2, bar_width)
+    axes2.set_ylabel('Heterozigosity\n')
+    _set_xaxis(axes2, xmin, xmax)
+
+    axis = axes2.get_xaxis()
+    axis.set_ticks(_get_centers(num_items))
+    axis.set_ticklabels(samples, rotation=45)
+
+    _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
+
+
+def plot_sample_dp_hits(stats, samples=None, fhand=None,
+                        no_interactive_win=False, figsize=None,
+                        log_axis_for_hists=False):
+
+    fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
+
+    num_items = _get_len(stats['bin_edges']) - 2
+
+    xmin = 0.5
+    xmax = num_items + 0.5
+
+    axes3 = fig.add_subplot(2, 1, 1)
+
+    ylabel = 'DP|DP non missing GTs'
+    plot_hists(stats['dp_no_missing_counts'], stats['bin_edges'],
+               axes=axes3, counts2=stats['dp_counts'],
+               log_hist_axes=log_axis_for_hists)
+
+    axes3.set_ylabel(ylabel)
+    _set_xaxis(axes3, xmin, xmax)
+
+    axes4 = fig.add_subplot(2, 1, 2)
+    plot_hists(stats['dp_het_counts'], stats['bin_edges'],
+               counts2=stats['dp_hom_counts'], axes=axes4,
+               log_hist_axes=log_axis_for_hists)
+
+    axes4.set_ylabel('DP homs|DP hets\n')
+    axes4.set_xlim(xmin, xmax)
+    axis = axes4.get_xaxis()
+    axis.set_ticks(_get_centers(num_items))
+    axis.set_ticklabels(samples, rotation=45)
+
+    _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)

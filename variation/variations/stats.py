@@ -78,6 +78,27 @@ def calc_cum_distrib(distrib):
         return numpy.fliplr(numpy.cumsum(numpy.fliplr(distrib), axis=1))
 
 
+def histograms_for_columns(matrix2d, n_bins=DEF_NUM_BINS, range_=None):
+
+    if range_ is None:
+        range_ = calc_min_max(matrix2d, chunk_size=None)
+
+    hists = None
+    edges = None
+    n_cols = matrix2d.shape[1]
+    for col_idx in range(n_cols):
+        column = matrix2d[:, col_idx]
+        counts, col_edges = _calc_histogram(column, n_bins, range_=range_)
+        if hists is None:
+            # hists = numpy.zeros((n_cols, counts.shape[0]))
+            hists = numpy.zeros((counts.shape[0], n_cols))
+            edges = col_edges
+        assert numpy.allclose(edges, col_edges)
+        # hists[col_idx, :] += counts
+        hists[:, col_idx] += counts
+    return hists, edges
+
+
 def _guess_stat_funct_called(calc_funct):
     if 'func' in dir(calc_funct):
         funct_name = calc_funct.func.__name__
@@ -494,12 +515,6 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
         else:
             hom_counts += chunk_hom_ref_counts
 
-        chunk_hom_ref_counts = numpy.sum(is_hom_ref, axis=0)
-        if hom_ref_counts is None:
-            hom_ref_counts = chunk_hom_ref_counts
-        else:
-            hom_ref_counts += chunk_hom_ref_counts
-
         chunk_called_gts = numpy.sum(numpy.logical_not(is_missing), axis=0)
         if call_gt_counts is None:
             call_gt_counts = chunk_called_gts
@@ -508,8 +523,8 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
 
         if do_depth:
             dps = chunk[DP_FIELD]
-            chunk_dp_hist = histogram(dps, n_bins=dp_n_bins,
-                                      range_=dp_range)
+            chunk_dp_hist = histograms_for_columns(dps, n_bins=dp_n_bins,
+                                                   range_=dp_range)
             if dp_hist_cnts is None:
                 dp_hist_cnts = chunk_dp_hist[0]
                 dp_bin_edges = chunk_dp_hist[1]
@@ -518,9 +533,9 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
 
             dps_no_missing = numpy.copy(dps)
             dps_no_missing[is_missing] = MISSING_INT
-            chunk_dp_hist_no_missing = histogram(dps_no_missing,
-                                                 n_bins=dp_n_bins,
-                                                 range_=dp_range)
+            chunk_dp_hist_no_missing = histograms_for_columns(dps_no_missing,
+                                                              n_bins=dp_n_bins,
+                                                              range_=dp_range)
             if dp_hist_no_missing_cnts is None:
                 dp_hist_no_missing_cnts = chunk_dp_hist_no_missing[0]
             else:
@@ -528,8 +543,9 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
 
             dps_het = numpy.copy(dps)
             dps_het[numpy.logical_not(is_het)] = MISSING_INT
-            chunk_dp_het_hist = histogram(dps_het, n_bins=dp_n_bins,
-                                          range_=dp_range)
+            chunk_dp_het_hist = histograms_for_columns(dps_het,
+                                                       n_bins=dp_n_bins,
+                                                       range_=dp_range)
             if dp_het_hist_cnts is None:
                 dp_het_hist_cnts = chunk_dp_het_hist[0]
             else:
@@ -544,9 +560,6 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
         hom_rate = hom_counts / call_gt_counts
 
     with numpy.errstate(invalid='ignore'):
-        hom_ref_rate = hom_ref_counts / call_gt_counts
-
-    with numpy.errstate(invalid='ignore'):
         if isinstance(variations, dict):
             # just for the test
             num_vars = variations[GT_FIELD].shape[0]
@@ -556,8 +569,7 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
 
     res = {'called_gt_rate': call_gt_rate,
            'obs_het': het_rate,
-           'homozygosity': hom_rate,
-           'hom_ref_rate': hom_ref_rate}
+           'homozygosity': hom_rate}
     if do_depth:
         dp_hists = {'bin_edges': dp_bin_edges,
                     'dp_counts': dp_hist_cnts,

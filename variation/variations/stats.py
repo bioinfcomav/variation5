@@ -18,6 +18,7 @@ from variation.matrix.stats import (counts_by_row, counts_and_allels_by_row,
                                     row_value_counter_fact)
 from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
+from variation.plot import _estimate_percentiles_from_distrib
 
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
@@ -564,9 +565,13 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
             num_vars = variations.num_variations
         call_gt_rate = call_gt_counts / num_vars
 
+
+    # for the test
+    samples = {} if isinstance(variations, dict) else variations.samples[:]
     res = {'called_gt_rate': call_gt_rate,
            'obs_het': het_rate,
-           'homozygosity': hom_rate}
+           'homozygosity': hom_rate,
+           'samples': samples}
     if do_depth:
         dp_hists = {'bin_edges': dp_bin_edges,
                     'dp_counts': dp_hist_cnts,
@@ -575,6 +580,25 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
                     'dp_hom_counts': dp_hom_hist_cnts}
         res['dp_hists'] = dp_hists
     return res
+
+
+def write_stats_by_sample(stats, fhand):
+    sep = '\t'
+    fields = ['sample', 'call_rate', 'heterozygosity', 'mean_dp']
+    fhand.write(sep.join(fields))
+    fhand.write('\n')
+    samples = stats['samples']
+    means = _estimate_percentiles_from_distrib(stats['dp_hists']['dp_counts'],
+                                               stats['dp_hists']['bin_edges'],
+                                               percentiles=(0.5,),
+                                               samples_in_rows=False)
+    means = means[0, :]
+    assert len(samples) == means.shape[0]
+    call_rate = stats['called_gt_rate']
+    hets = stats['obs_het']
+    for values in zip(samples, call_rate, hets, means):
+        fhand.write(sep.join(map(str, values)))
+        fhand.write('\n')
 
 
 def _calc_gt_type_stats(variations):

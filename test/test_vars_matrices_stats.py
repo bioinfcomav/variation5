@@ -8,6 +8,7 @@
 import unittest
 from os.path import join
 from functools import partial
+from io import StringIO
 
 import numpy
 
@@ -35,7 +36,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         calc_call_dp_distrib_for_a_sample,
                                         calc_depth_mean_by_sample,
                                         calc_stats_by_sample,
-                                        histograms_for_columns)
+                                        histograms_for_columns,
+                                        write_stats_by_sample)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -820,7 +822,7 @@ class SampleStatsTest(unittest.TestCase):
         res = calc_stats_by_sample(varis, chunk_size=None, dp_n_bins=5)
         assert 'dp_hists' not in res
         expected_keys = ['homozygosity', 'obs_het', 'hom_ref_rate',
-                         'called_gt_rate']
+                         'called_gt_rate', 'samples']
         assert not set(res.keys()).difference(expected_keys)
 
         varis = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
@@ -833,7 +835,10 @@ class SampleStatsTest(unittest.TestCase):
                     'dp_het_counts', 'dp_hom_counts']:
             assert numpy.allclose(res1['dp_hists'][key], res2['dp_hists'][key])
 
-
+        fhand = StringIO()
+        write_stats_by_sample(res1, fhand)
+        lines = fhand.getvalue().splitlines()
+        assert 'sample\tcall_rate\theterozygosity\tmean_dp' in lines[0]
 
     def test_hist_for_cols(self):
         data = [[1, 1, 1, 1],

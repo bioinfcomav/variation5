@@ -841,8 +841,10 @@ def plot_sample_missing_het_stats(stats, fhand=None, no_interactive_win=False,
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
 
-def plot_sample_dp_hits(stats, samples, fhand=None, no_interactive_win=False,
+def plot_sample_dp_hits(stats, fhand=None, no_interactive_win=False,
                         figsize=None, log_axis_for_hists=False):
+    samples = stats['samples']
+    stats = stats['dp_hists']
 
     fig, canvas = _get_mplot_fig_and_canvas(fhand, figsize=figsize)
 
@@ -875,9 +877,12 @@ def plot_sample_dp_hits(stats, samples, fhand=None, no_interactive_win=False,
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
 
-def plot_sample_dp_het_hom(stats, samples, min_dp=5, fhand=None, axes=None,
+def plot_sample_dp_het_hom(stats, min_dp=5, fhand=None, axes=None,
                            no_interactive_win=False, figsize=None,
                            plot_legend=True):
+    samples = stats['samples']
+    stats = stats['dp_hists']
+
     dp_ratio = stats['dp_het_counts'] / stats['dp_hom_counts']
     dp_ratio[stats['dp_hom_counts'] < min_dp] = float('nan')
 

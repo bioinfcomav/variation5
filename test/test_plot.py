@@ -245,13 +245,10 @@ class BoxplotsTests(unittest.TestCase):
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_sample_missing_het_stats(sample_stats, fhand=fhand)
         with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_sample_dp_hits(sample_stats['dp_hists'],
-                                sample_stats['samples'], fhand=fhand,
+            plot_sample_dp_hits(sample_stats, fhand=fhand,
                                 log_axis_for_hists=True)
         with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_sample_dp_het_hom(sample_stats['dp_hists'],
-                                   sample_stats['samples'], min_dp=5,
-                                   fhand=fhand)
+            plot_sample_dp_het_hom(sample_stats, min_dp=5, fhand=fhand)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'BoxplotsTests.test_plot_sample_stats']

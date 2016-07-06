@@ -26,6 +26,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           filter_samples_by_missing_rate,
                                           filter_variation_density,
                                           PseudoHetDuplicationFilter,
+                                          PseudoHetDuplicationFilter2,
                                           N_FILTERED_OUT, SELECTED_VARS,
                                           OrFilter)
 from variation.variations.stats import calc_depth_mean_by_sample
@@ -588,6 +589,36 @@ class HetDupFilterTest(unittest.TestCase):
                                          max_obs_het=0.01,
                                          do_histogram=True,
                                          samples=samples)
+        res = flt(snps)
+
+        assert res[FLT_STATS]['tot'] == snps.num_variations
+        assert min(res[EDGES]) < 1
+        assert max(res[EDGES]) > 0
+        assert res[FLT_VARS].num_variations == res[FLT_STATS]['n_kept']
+
+    def test_filter_samples_by_pseudohet(self):
+        snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+
+        sample_dp_means = calc_depth_mean_by_sample(snps)
+        flt = PseudoHetDuplicationFilter2(sample_dp_means=sample_dp_means,
+                                          max_high_dp_freq=0.01,
+                                          do_histogram=True,
+                                          report_selection=True)
+        res = flt(snps)
+
+        assert res[FLT_STATS]['tot'] == snps.num_variations
+        assert min(res[EDGES]) < 1
+        assert max(res[EDGES]) > 0
+        assert res[FLT_VARS].num_variations == res[FLT_STATS]['n_kept']
+        assert res[SELECTED_VARS].shape
+
+        # some samples
+        samples = snps.samples[:50]
+        sample_dp_means = sample_dp_means[:50]
+        flt = PseudoHetDuplicationFilter2(sample_dp_means=sample_dp_means,
+                                          max_high_dp_freq=0.01,
+                                          do_histogram=True,
+                                          samples=samples)
         res = flt(snps)
 
         assert res[FLT_STATS]['tot'] == snps.num_variations

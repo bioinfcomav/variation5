@@ -883,6 +883,9 @@ def plot_sample_dp_het_hom(stats, min_dp=5, fhand=None, axes=None,
     samples = stats['samples']
     stats = stats['dp_hists']
 
+    # TODO This is wrong, we should take into account the number of het and
+    # hom calls
+    raise NotImplementedError('FIXME')
     dp_ratio = stats['dp_het_counts'] / stats['dp_hom_counts']
     dp_ratio[stats['dp_hom_counts'] < min_dp] = float('nan')
 

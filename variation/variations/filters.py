@@ -791,6 +791,46 @@ class PseudoHetDuplicationFilter(_BaseFilter):
         return result
 
 
+class PseudoHetDuplicationFilter2(_BaseFilter):
+
+    def __init__(self, sample_dp_means, max_high_dp_freq,
+                 poisson_percent_for_high_dp_call=1, **kwargs):
+        super().__init__(**kwargs)
+
+        self.sample_dp_means = sample_dp_means
+
+        self.max_high_dp_freq = max_high_dp_freq
+
+        cutoff = (100 - 2 * poisson_percent_for_high_dp_call) / 100
+        dps = [poisson(mean).interval(cutoff)[1] for mean in sample_dp_means]
+        self._too_high_dps = numpy.array(dps)
+
+    def _calc_stat(self, variations):
+
+        vars_for_stat = self._filter_samples_for_stats(variations)
+
+        assert len(vars_for_stat.samples) == self.sample_dp_means.shape[0]
+
+        dps = vars_for_stat[DP_FIELD]
+        if is_dataset(dps):
+            dps = dps[:]
+
+        num_no_miss_calls = numpy.sum(dps > 0, axis=1)
+
+        high_dp_calls = dps > self._too_high_dps
+        het_calls = call_is_het(vars_for_stat[GT_FIELD])
+        het_and_high_dp_calls = numpy.logical_or(high_dp_calls, het_calls)
+
+        num_high_dp_and_het_calls = numpy.sum(het_and_high_dp_calls, axis=1)
+
+        with numpy.errstate(all='ignore'):
+            # This is the stat
+            freq_high_dp_and_het_calls = (num_high_dp_and_het_calls /
+                                          num_no_miss_calls)
+
+        return freq_high_dp_and_het_calls
+
+
 class OrFilter:
     def __init__(self, filters):
         self.filters = filters

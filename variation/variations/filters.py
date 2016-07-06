@@ -799,7 +799,7 @@ class PseudoHetDuplicationFilter2(_BaseFilter):
 
         self.sample_dp_means = sample_dp_means
 
-        self.max_high_dp_freq = max_high_dp_freq
+        self.max = max_high_dp_freq
 
         cutoff = (100 - 2 * poisson_percent_for_high_dp_call) / 100
         dps = [poisson(mean).interval(cutoff)[1] for mean in sample_dp_means]

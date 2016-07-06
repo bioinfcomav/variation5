@@ -819,7 +819,7 @@ class PseudoHetDuplicationFilter2(_BaseFilter):
 
         high_dp_calls = dps > self._too_high_dps
         het_calls = call_is_het(vars_for_stat[GT_FIELD])
-        het_and_high_dp_calls = numpy.logical_or(high_dp_calls, het_calls)
+        het_and_high_dp_calls = numpy.logical_and(high_dp_calls, het_calls)
 
         num_high_dp_and_het_calls = numpy.sum(het_and_high_dp_calls, axis=1)
 

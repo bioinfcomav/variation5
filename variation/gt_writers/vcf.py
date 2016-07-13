@@ -82,8 +82,9 @@ def _write_vcf_header(variations, out_fhand):
     out_fhand.write(header.encode())
 
 
-def numbered_chunks(variations):
-    for index, chunk in enumerate(variations.iterate_chunks()):
+def _numbered_chunks(variations, chunk_size):
+    chunks = enumerate(variations.iterate_chunks(chunk_size=chunk_size))
+    for index, chunk in chunks:
         yield index, chunk
 
 
@@ -106,7 +107,7 @@ def write_vcf_parallel(variations, out_fhand, n_threads, tmp_dir,
     with Pool(n_threads) as pool:
         try:
             vcf_fpaths = pool.map(_partial_write_snvs,
-                                  numbered_chunks(variations))
+                                  _numbered_chunks(variations, chunk_size))
         except Exception:
             remove_temp_file_in_dir(tmp_dir, '.vcf.h5')
             raise

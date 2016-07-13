@@ -105,7 +105,8 @@ def write_vcf_parallel(variations, out_fhand, n_threads, tmp_dir,
 
     with Pool(n_threads) as pool:
         try:
-            vcf_fpaths = pool.map(_partial_write_snvs, numbered_chunks(variations))
+            vcf_fpaths = pool.map(_partial_write_snvs,
+                                  numbered_chunks(variations))
         except Exception:
             remove_temp_file_in_dir(tmp_dir, '.vcf.h5')
             raise
@@ -146,52 +147,52 @@ def _write_snvs(variations, out_fhand, grouped_paths):
 
 
 def _create_snv_line(variations, var_index, grouped_paths, metadata):
-        var = {}
-        for field, data in ONEDATA_FIELD_GROUP_MAPPING.items():
-            path = data['path']
-            if path in variations.keys():
-                value = variations[path][var_index]
-                if not value or value == data['missing']:
-                    value = '.'
-                elif data['dtype'] == 'str':
-                    value = value.decode()
-                else:
-                    value = str(value)
-                var[field] = value
+    var = {}
+    for field, data in ONEDATA_FIELD_GROUP_MAPPING.items():
+        path = data['path']
+        if path in variations.keys():
+            value = variations[path][var_index]
+            if not value or value == data['missing']:
+                value = '.'
+            elif data['dtype'] == 'str':
+                value = value.decode()
             else:
-                var[field] = '.'
-        if '/variations/alt' in variations:
-            alt = [x.decode() for x in variations['/variations/alt'][var_index]
-                   if x.decode() != MISSING_STR]
-            num_alt = len(alt)
-            var['ALT'] = '.' if num_alt == 0 else ','.join(alt)
+                value = str(value)
+            var[field] = value
         else:
-            var['ALT'] = '.'
-            num_alt = 0
+            var[field] = '.'
+    if '/variations/alt' in variations:
+        alt = [x.decode() for x in variations['/variations/alt'][var_index]
+               if x.decode() != MISSING_STR]
+        num_alt = len(alt)
+        var['ALT'] = '.' if num_alt == 0 else ','.join(alt)
+    else:
+        var['ALT'] = '.'
+        num_alt = 0
 
-        if grouped_paths['filter']:
-            var['FILTER'] = _get_filters_value(variations, var_index,
-                                               grouped_paths['filter'])
-        else:
-            var['FILTER'] = '.'
+    if grouped_paths['filter']:
+        var['FILTER'] = _get_filters_value(variations, var_index,
+                                           grouped_paths['filter'])
+    else:
+        var['FILTER'] = '.'
 
-        if grouped_paths['info']:
-            var['INFO'] = _get_info_value(variations, var_index,
-                                          grouped_paths['info'], metadata,
-                                          num_alt)
-        else:
-            var['INFO'] = '.'
+    if grouped_paths['info']:
+        var['INFO'] = _get_info_value(variations, var_index,
+                                      grouped_paths['info'], metadata,
+                                      num_alt)
+    else:
+        var['INFO'] = '.'
 
-        new_paths = _preprocess_format_calls_paths(variations, var_index,
-                                                   grouped_paths['calls'])
+    new_paths = _preprocess_format_calls_paths(variations, var_index,
+                                               grouped_paths['calls'])
 
-        new_calls_paths, new_format_paths = new_paths
-        var['FORMAT'] = ':'.join(new_format_paths)
-        var['CALLS'] = _get_calls_samples(variations, var_index,
-                                          new_calls_paths, num_alt,
-                                          metadata, variations.ploidy)
-        snp_line = '\t'.join([var[field] for field in VCF_FIELDS]) + '\n'
-        return snp_line
+    new_calls_paths, new_format_paths = new_paths
+    var['FORMAT'] = ':'.join(new_format_paths)
+    var['CALLS'] = _get_calls_samples(variations, var_index,
+                                      new_calls_paths, num_alt,
+                                      metadata, variations.ploidy)
+    snp_line = '\t'.join([var[field] for field in VCF_FIELDS]) + '\n'
+    return snp_line
 
 
 def _preprocess_format_calls_paths(variations, var_index, calls_paths):
@@ -279,7 +280,9 @@ def _possible_genotypes(num_alleles, ploidy):
     try:
         return POSSIBLE_GENOS_CACHE[ploidy][num_alleles]
     except KeyError:
-        possible_geno = int(factorial(num_alleles + ploidy - 1) / (factorial(ploidy) * factorial(num_alleles - 1)))
+        possible_geno = factorial(num_alleles + ploidy - 1)
+        possible_geno /= (factorial(ploidy) * factorial(num_alleles - 1))
+        possible_geno = int(possible_geno)
         POSSIBLE_GENOS_CACHE[ploidy][num_alleles] = possible_geno
         return possible_geno
 

@@ -27,6 +27,7 @@ N_FILTERED_OUT = 'n_filtered_out'
 TOT = 'tot'
 FLT_STATS = 'flt_stats'
 SELECTED_VARS = 'selected_vars'
+DISCARDED_VARS = 'discarded_vars'
 
 
 def _filter_no_row(chunk):
@@ -39,7 +40,7 @@ class _BaseFilter:
 
     def __init__(self, n_bins=DEF_NUM_BINS, range_=None, do_filtering=True,
                  do_histogram=None, samples=None, keep_missing=False,
-                 report_selection=False):
+                 report_selection=False, return_discarded=False):
         if do_histogram is None:
             if range_ is not None or n_bins != DEF_NUM_BINS:
                 do_histogram = True
@@ -47,6 +48,7 @@ class _BaseFilter:
                 do_histogram = False
         self.do_filtering = do_filtering
         self.do_histogram = do_histogram
+        self.return_discarded = return_discarded
         self.report_selection = report_selection
 
         self._keep_nan = False
@@ -134,10 +136,14 @@ class _BaseFilter:
             result[SELECTED_VARS] = selected_rows
 
         if self.do_filtering:
-            # flt_vars, flt_stats = self._filter(variations, stats)
             flt_vars = variations.get_chunk(selected_rows)
             result[FLT_VARS] = flt_vars
             result[FLT_STATS] = flt_stats
+
+            if self.return_discarded:
+                discarded_rows = numpy.logical_not(selected_rows)
+                discarded_vars = variations.get_chunk(discarded_rows)
+                result[DISCARDED_VARS] = discarded_vars
 
         return result
 

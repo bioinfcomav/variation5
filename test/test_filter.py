@@ -28,7 +28,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           PseudoHetDuplicationFilter,
                                           PseudoHetDuplicationFilter2,
                                           N_FILTERED_OUT, SELECTED_VARS,
-                                          OrFilter)
+                                          OrFilter, DISCARDED_VARS)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
@@ -497,6 +497,11 @@ class Chi2GtFilterTest(unittest.TestCase):
         assert res[FLT_STATS][TOT] == 4
         assert res[FLT_STATS][N_FILTERED_OUT] == 2
         assert res[SELECTED_VARS].shape
+
+        flt = Chi2GtFreqs2SampleSetsFilter(samples1, samples2, min_pval=0.05,
+                                           n_bins=2, return_discarded=True)
+        res = flt(variations)
+        assert res[DISCARDED_VARS].num_variations
 
 
 class FieldFilterTest(unittest.TestCase):

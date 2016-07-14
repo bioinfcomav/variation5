@@ -1,13 +1,16 @@
 import unittest
 from os.path import join
+from tempfile import NamedTemporaryFile
 
+import numpy
+
+from variation import GT_FIELD, POS_FIELD, CHROM_FIELD, REF_FIELD, ALT_FIELD
 from variation.variations.vars_matrices import VariationsArrays, VariationsH5
 from variation.gt_parsers.vcf import VCFParser
-
-from test.test_utils import TEST_DATA_DIR
-from tempfile import NamedTemporaryFile
 from variation.gt_writers.vcf import (_write_vcf_header, _write_vcf_meta,
                                       write_vcf, write_vcf_parallel)
+from variation.gt_writers.excel import write_excel
+from test.test_utils import TEST_DATA_DIR
 
 
 class VcfWrittenTest(unittest.TestCase):
@@ -164,6 +167,32 @@ class VcfWrittenTest(unittest.TestCase):
         h5.write_vcf(out_fhand)
 
 
+class ExcelTest(unittest.TestCase):
+    def test_excel(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [0, 1], [1, 1], [0, 0], [0, 0]],
+                           [[2, 2], [2, 0], [2, 1], [0, 0], [-1, -1]],
+                           [[0, 0], [0, 0], [0, 0], [-1, -1], [-1, -1]],
+                           [[0, 0], [-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        variations[GT_FIELD] = gts
+        variations.samples = list(range(gts.shape[1]))
+
+        fhand = NamedTemporaryFile(suffix='.xlsx')
+        write_excel(variations, fhand)
+
+        # chrom pos
+        variations[CHROM_FIELD] = numpy.array([1, 1, 2, 2])
+        variations[POS_FIELD] = numpy.array([10, 20, 10, 20])
+        fhand = NamedTemporaryFile(suffix='.xlsx')
+        write_excel(variations, fhand)
+
+        # REF, ALT
+        variations[REF_FIELD] = numpy.array(['A', 'A', 'A', 'A'])
+        variations[ALT_FIELD] = numpy.array([['T'], ['T'], ['T'], ['T']])
+        write_excel(variations, fhand)
+        input(fhand.name)
+
+
 if __name__ == "__main__":
-#     import sys; sys.argv = ['', 'VcfWrittenTest.test_parallel_vcf_write']
+    import sys; sys.argv = ['', 'ExcelTest']
     unittest.main()

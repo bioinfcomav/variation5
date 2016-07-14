@@ -108,7 +108,7 @@ def write_excel(variations, out_fhand):
 
         snp_gts = gts[snp_idx, :, :]
         row.extend(snp_gts)
-        print(row)
+
         cells = [_create_cell(sheet, val) for val in row]
         sheet.append(cells)
     wbook.save(out_fhand)

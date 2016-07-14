@@ -190,7 +190,6 @@ class ExcelTest(unittest.TestCase):
         variations[REF_FIELD] = numpy.array(['A', 'A', 'A', 'A'])
         variations[ALT_FIELD] = numpy.array([['T'], ['T'], ['T'], ['T']])
         write_excel(variations, fhand)
-        input(fhand.name)
 
 
 if __name__ == "__main__":

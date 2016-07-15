@@ -32,10 +32,9 @@ def _indi_snp_gt_to_str(snp_indi_gt):
         color_fill = GT_COLORS[tuple(snp_indi_gt)]
     except KeyError:
         color_fill = None
-    print('snp_indi_gt', snp_indi_gt)
     if MISSING_INT in snp_indi_gt:
         color_fill = COLORS['grey']
-    str_gt = '|'.join(map(str, snp_indi_gt))
+    str_gt = '/'.join(map(str, snp_indi_gt))
     return str_gt, color_fill
 
 

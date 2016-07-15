@@ -193,5 +193,5 @@ class ExcelTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'ExcelTest']
+    # import sys; sys.argv = ['', 'ExcelTest']
     unittest.main()

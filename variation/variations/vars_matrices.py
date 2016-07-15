@@ -507,6 +507,11 @@ class _VariationMatrices():
         var_array._set_samples(self.samples)
         return var_array
 
+    def get_chunk_from_genome_pos(self, chrom, start, end):
+        # with index
+        # bisect
+        pass
+
     def _filter_fields(self, kept_fields, ignored_fields):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'

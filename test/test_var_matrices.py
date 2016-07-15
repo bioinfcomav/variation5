@@ -22,6 +22,7 @@ from test.test_utils import TEST_DATA_DIR
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
+from variation import SNPS_PER_CHUNK
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -228,7 +229,7 @@ class VarMatsTests(unittest.TestCase):
         for var_mats in _create_var_mat_objs_from_vcf(fpath, kwargs=kwargs):
             chunks = list(var_mats.iterate_chunks())
             chunk = chunks[0]
-            assert chunk['/calls/GT'].shape == (200, 153, 2)
+            assert chunk['/calls/GT'].shape == (SNPS_PER_CHUNK, 153, 2)
 
         fpath = join(TEST_DATA_DIR, 'format_def.vcf')
         # check GT

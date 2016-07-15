@@ -32,6 +32,7 @@ def _indi_snp_gt_to_str(snp_indi_gt):
         color_fill = GT_COLORS[tuple(snp_indi_gt)]
     except KeyError:
         color_fill = None
+    print('snp_indi_gt', snp_indi_gt)
     if MISSING_INT in snp_indi_gt:
         color_fill = COLORS['grey']
     str_gt = '|'.join(map(str, snp_indi_gt))
@@ -48,8 +49,10 @@ def _create_allele_str(ref, alt):
 def _create_cell(worksheet, value):
 
     color_fill = None
-    if isinstance(value, numpy.int64):
+    if issubclass(type(value), numpy.integer):
         value = int(value)
+    elif isinstance(value, numpy.bytes_):
+        value = str(value)
     elif hasattr(value, 'shape') or isinstance(value, (tuple, list)):
         value, color_fill = _indi_snp_gt_to_str(value)
 
@@ -71,6 +74,7 @@ def write_excel(variations, out_fhand):
     poss = variations[POS_FIELD] if POS_FIELD in variations else None
     refs = variations[REF_FIELD] if REF_FIELD in variations else None
     alts = variations[ALT_FIELD] if ALT_FIELD in variations else None
+    gts = variations[GT_FIELD]
 
     if samples:
         row = []
@@ -90,7 +94,6 @@ def write_excel(variations, out_fhand):
         row.extend([str(sample) for sample in samples])
         sheet.append(row)
 
-    gts = variations[GT_FIELD]
     for snp_idx in range(gts.shape[0]):
         row = []
         chrom = None if chroms is None else chroms[snp_idx]

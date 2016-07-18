@@ -62,7 +62,7 @@ def _create_cell(worksheet, value):
     return cell
 
 
-def write_excel(variations, out_fhand):
+def write_excel(variations, out_fhand, sample_classes=None):
 
     wbook = Workbook(write_only=True)
     sheet = wbook.create_sheet()
@@ -74,6 +74,11 @@ def write_excel(variations, out_fhand):
     refs = variations[REF_FIELD] if REF_FIELD in variations else None
     alts = variations[ALT_FIELD] if ALT_FIELD in variations else None
     gts = variations[GT_FIELD]
+
+    if sample_classes:
+        row = [None, None, None]
+        row.extend(sample_classes)
+        sheet.append(row)
 
     if samples:
         row = []

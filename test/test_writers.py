@@ -191,6 +191,9 @@ class ExcelTest(unittest.TestCase):
         variations[ALT_FIELD] = numpy.array([['T'], ['T'], ['T'], ['T']])
         write_excel(variations, fhand)
 
+        # with classifications
+        classes = [1, 1, 1, 2, 2]
+        write_excel(variations, fhand, classes)
 
 if __name__ == "__main__":
     # import sys; sys.argv = ['', 'ExcelTest']

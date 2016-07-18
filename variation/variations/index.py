@@ -1,7 +1,6 @@
 
 from collections import OrderedDict
 from bisect import bisect_left, bisect_right
-from functools import total_ordering
 
 import numpy
 

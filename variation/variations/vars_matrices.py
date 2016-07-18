@@ -507,7 +507,7 @@ class _VariationMatrices():
         var_array._set_samples(self.samples)
         return var_array
 
-    def get_chunk_from_genome_pos(self, chrom, start, end):
+    def get_genome_chunk(self, chrom, start, end):
         # with index
         # bisect
         pass

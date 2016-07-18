@@ -22,7 +22,7 @@ from test.test_utils import TEST_DATA_DIR
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
-from variation import SNPS_PER_CHUNK
+from variation import SNPS_PER_CHUNK, POS_FIELD, CHROM_FIELD
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -391,6 +391,25 @@ class SamplesTest(unittest.TestCase):
         samples[0] = '0'
         h5.samples = samples
 
+
+class GenomeChunkTest(unittest.TestCase):
+    def test_genome_chunk(self):
+        poss = [5, 7, 8, 10, 11, 12]
+        chroms = ['c1'] * len(poss)
+        poss = numpy.array(poss)
+        chroms = numpy.array(chroms)
+        varis = VariationsArrays()
+        varis[POS_FIELD] = poss
+        varis[CHROM_FIELD] = chroms
+
+        # empty before
+        varis.get_genome_chunk('c1', 1, 4)
+        # empy after
+        # before and middle
+        # middle and after
+        # middle and middle
+        # exact or close to
+
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VarMatsTests.test_get_empty_chunk']
+    import sys; sys.argv = ['', 'GenomeChunkTest']
     unittest.main()

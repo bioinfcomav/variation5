@@ -1,8 +1,10 @@
 
 from collections import OrderedDict
 from bisect import bisect_left, bisect_right
+from functools import total_ordering
 
 import numpy
+
 from variation import POS_FIELD, CHROM_FIELD
 
 
@@ -70,3 +72,76 @@ class PosIndex():
             else:
                 hi = mid
         return lo
+
+
+def var_bisect_right(variations, chrom, pos, lo=0, hi=None):
+
+    chroms = variations[CHROM_FIELD]
+    poss = variations[POS_FIELD]
+
+    if lo < 0:
+        raise ValueError('lo must be equal or bigger than 0')
+
+    if hi is None:
+        hi = chroms.shape[0]
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if (chrom < chroms[mid]) or (chrom == chroms[mid] and pos < poss[mid]):
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
+def var_bisect_left(variations, chrom, pos, lo=0, hi=None):
+
+    chroms = variations[CHROM_FIELD]
+    poss = variations[POS_FIELD]
+
+    if lo < 0:
+        raise ValueError('lo must be non-negative')
+    if hi is None:
+        hi = chroms.shape[0]
+    while lo < hi:
+        mid = (lo + hi) // 2
+
+        if chroms[mid] < chrom or (chroms[mid] == chrom and poss[mid] < pos):
+            lo = mid + 1
+        else:
+            hi = mid
+
+    return lo
+
+
+def find_le(variations, chrom, pos):
+    'Find rightmost value less than or equal to x'
+    idx = var_bisect_right(variations, chrom, pos)
+    if idx:
+        return idx - 1
+    raise ValueError
+
+
+def find_ge(variations, chrom, pos):
+    'Find leftmost item greater than or equal to x'
+    idx = var_bisect_left(variations, chrom, pos)
+    if idx != variations.num_variations:
+        return idx
+    raise ValueError
+
+
+def _raise_index_error(chrom, pos):
+    msg = 'chrom and pos not found in variations : '
+    msg += str(chrom) + ' ' + str(pos)
+    raise IndexError(msg)
+
+
+def index(variations, chrom, pos):
+    try:
+        idx = find_le(variations, chrom, pos)
+    except ValueError:
+        _raise_index_error(chrom, pos)
+    # print(variations[CHROM_FIELD][idx], variations[POS_FIELD][idx])
+    if (chrom != variations[CHROM_FIELD][idx] or
+       variations[POS_FIELD][idx] != pos):
+        _raise_index_error(chrom, pos)
+    return idx

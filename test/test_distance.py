@@ -13,7 +13,7 @@ import numpy
 from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            calc_pairwise_distance,
                                            sel_samples_from_dist_mat,
-                                           _matching)
+                                           _matching, calc_pop_distance)
 from variation.variations.vars_matrices import VariationsArrays
 from variation.variations.stats import GT_FIELD
 
@@ -165,6 +165,29 @@ class IndividualDistTest(unittest.TestCase):
         variations['/calls/GT'] = gts
         distance = calc_pairwise_distance(variations, method='matching')
         assert numpy.isnan(distance[0])
+
+
+class PopDistTest(unittest.TestCase):
+
+    def test_nei_dist(self):
+        gts = [[[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 0]],
+               [[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 1]],
+               [[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 1]]]
+        snps = VariationsArrays()
+        snps['/calls/GT'] = numpy.array(gts)
+        snps.samples = [1, 2, 3, 4, 5, 6, 7]
+        pops = [[1, 2, 3], [1, 2, 3], [4, 5, 6, 7], [1, 4, 5, 6, 7],
+                [1, 2, 5, 6]]
+        pops = [[1, 2, 3], [4, 5, 6, 7]]
+        dists = calc_pop_distance(snps, populations=pops, method='nei')
+        assert dists[0] - 3.14019792 < 0.001
+        pops = [[1, 2, 3], [1, 2, 3]]
+        dists = calc_pop_distance(snps, populations=pops, method='nei')
+        assert dists[0] - 0 < 0.001
+        pops = [[1, 2, 3], [1, 4, 5, 6, 7]]
+        dists = calc_pop_distance(snps, populations=pops, method='nei')
+        assert dists[0] - 1.23732507 < 0.001
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise']

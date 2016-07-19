@@ -1,12 +1,15 @@
 
 import itertools
+import math
 
 import numpy
 
-from variation.matrix.methods import is_missing
-
 from scipy.spatial.distance import squareform
-from variation.variations.stats import GT_FIELD
+
+from variation.matrix.methods import is_missing
+from variation.variations.stats import counts_and_allels_by_row
+from variation.variations.filters import SampleFilter, FLT_VARS
+from variation import GT_FIELD, MISSING_INT
 
 
 def _get_sample_gts(gts, sample_i, sample_j, indi_cache):
@@ -184,9 +187,83 @@ def _calc_kosman_pairwise_distance(variations, chunk_size=None):
     return distance
 
 
+def _calc_nei_pop_distance(variations, populations, chunk_size=None):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD])
+
+    pop_flts = [SampleFilter(pop) for pop in populations]
+
+    jxy = {}
+    jxx = {}
+    jyy = {}
+    for chunk in chunks:
+        alleles = sorted(numpy.unique(chunk[GT_FIELD]))
+        for pop_i, pop_j in itertools.combinations(range(len(populations)), 2):
+            chunk_pop_i = pop_flts[pop_i](chunk)[FLT_VARS]
+            chunk_pop_j = pop_flts[pop_j](chunk)[FLT_VARS]
+            gts_pop_i = chunk_pop_i[GT_FIELD]
+            res = counts_and_allels_by_row(gts_pop_i, alleles=alleles,
+                                           missing_value=MISSING_INT)
+            al_cnts_i, alleles_i = res
+            gts_pop_j = chunk_pop_j[GT_FIELD]
+            res = counts_and_allels_by_row(gts_pop_j, alleles=alleles,
+                                           missing_value=MISSING_INT)
+            al_cnts_j, alleles_j = res
+            assert alleles_i == alleles_j
+            shape_j = gts_pop_j.shape
+            freq_al_j = al_cnts_j / (shape_j[1] * shape_j[2])
+            shape_i = gts_pop_i.shape
+            freq_al_i = al_cnts_i / (shape_i[1] * shape_i[2])
+            # print(freq_al_i)
+            # print(freq_al_j)
+
+            chunk_jxy = numpy.sum(freq_al_i * freq_al_j)
+            chunk_jxx = numpy.sum(freq_al_i ** 2)
+            chunk_jyy = numpy.sum(freq_al_j ** 2)
+
+            pop_idx = pop_i, pop_j
+            if pop_idx not in jxy:
+                jxy[pop_idx] = 0
+                jxx[pop_idx] = 0
+                jyy[pop_idx] = 0
+
+            jxy[pop_idx] += chunk_jxy
+            jxx[pop_idx] += chunk_jxx
+            jyy[pop_idx] += chunk_jyy
+
+    n_pops = len(populations)
+    dists = numpy.zeros(int((n_pops ** 2 - n_pops) / 2))
+    index = 0
+    for pop_idx in itertools.combinations(range(len(populations)), 2):
+        pjxy = jxy[pop_idx] # / n_snps
+        pjxx = jxx[pop_idx] # / n_snps
+        pjyy = jyy[pop_idx] # / n_snps
+        try:
+            nei = math.log(pjxy / math.sqrt(pjxx * pjyy))
+            if nei != 0:
+                nei = -nei
+        except ValueError:
+            nei = float('inf')
+
+        # n_snps = variations.num_variations
+        # print('pjxy', pjxy / n_snps, 'pjxx', pjxx / n_snps, 'pjyy', pjyy / n_snps, 'nei', nei)
+
+        dists[index] = nei
+        index += 1
+
+    return dists
+
+
 DISTANCES = {'kosman': _calc_kosman_pairwise_distance,
-             'matching': _calc_matching_pairwise_distance}
+             'matching': _calc_matching_pairwise_distance,
+             'nei': _calc_nei_pop_distance}
 
 
 def calc_pairwise_distance(variations, chunk_size=None, method='kosman'):
     return DISTANCES[method](variations, chunk_size=chunk_size)
+
+
+def calc_pop_distance(variations, populations, method, chunk_size=None):
+    return DISTANCES[method](variations, populations, chunk_size=chunk_size)

@@ -74,9 +74,11 @@ def counts_by_row(mat, missing_value=None):
     return counts_and_allels_by_row(mat, missing_value=missing_value)[0]
 
 
-def counts_and_allels_by_row(mat, missing_value=None):
+def counts_and_allels_by_row(mat, missing_value=None, alleles=None):
 
-    alleles = sorted(numpy.unique(mat))
+    if alleles is None:
+        alleles = sorted(numpy.unique(mat))
+
     allele_counts = None
     # This algorithm is suboptimal, it would be better to go row per row
     # the problem is a for snp in gts is very slow because the for in

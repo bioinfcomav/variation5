@@ -565,7 +565,6 @@ def calc_stats_by_sample(variations, chunk_size=SNPS_PER_CHUNK,
             num_vars = variations.num_variations
         call_gt_rate = call_gt_counts / num_vars
 
-
     # for the test
     samples = {} if isinstance(variations, dict) else variations.samples[:]
     res = {'called_gt_rate': call_gt_rate,

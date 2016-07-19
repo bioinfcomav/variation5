@@ -229,6 +229,8 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None):
                 jxx[pop_idx] = 0
                 jyy[pop_idx] = 0
 
+            # The real Jxy is usually divided by num_snps, but it does not
+            # not matter for the calculation
             jxy[pop_idx] += chunk_jxy
             jxx[pop_idx] += chunk_jxx
             jyy[pop_idx] += chunk_jyy
@@ -237,18 +239,15 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None):
     dists = numpy.zeros(int((n_pops ** 2 - n_pops) / 2))
     index = 0
     for pop_idx in itertools.combinations(range(len(populations)), 2):
-        pjxy = jxy[pop_idx] # / n_snps
-        pjxx = jxx[pop_idx] # / n_snps
-        pjyy = jyy[pop_idx] # / n_snps
+        pjxy = jxy[pop_idx]
+        pjxx = jxx[pop_idx]
+        pjyy = jyy[pop_idx]
         try:
             nei = math.log(pjxy / math.sqrt(pjxx * pjyy))
             if nei != 0:
                 nei = -nei
         except ValueError:
             nei = float('inf')
-
-        # n_snps = variations.num_variations
-        # print('pjxy', pjxy / n_snps, 'pjxx', pjxx / n_snps, 'pjyy', pjyy / n_snps, 'nei', nei)
 
         dists[index] = nei
         index += 1

@@ -70,8 +70,9 @@ def row_value_counter_fact(value, ratio=False):
     return partial(_row_value_counter, value=value, ratio=ratio)
 
 
-def counts_by_row(mat, missing_value=None):
-    return counts_and_allels_by_row(mat, missing_value=missing_value)[0]
+def counts_by_row(mat, missing_value=None, alleles=None):
+    return counts_and_allels_by_row(mat, missing_value=missing_value,
+                                    alleles=alleles)[0]
 
 
 def counts_and_allels_by_row(mat, missing_value=None, alleles=None):

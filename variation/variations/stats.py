@@ -693,18 +693,18 @@ def calc_snp_density(variations, window):
         yield snps_in_win
 
 
-def _calc_allele_counts(gts):
-    return counts_by_row(gts, MISSING_VALUES[int])
+def _calc_allele_counts(gts, alleles=None):
+    return counts_by_row(gts, MISSING_VALUES[int], alleles=alleles)
 
 
-def calc_allele_freq(variations,
+def calc_allele_freq(variations, alleles=None,
                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     gts = variations[GT_FIELD]
 
     if gts.shape[0] == 0:
         return numpy.array([])
 
-    allele_counts = _calc_allele_counts(gts)
+    allele_counts = _calc_allele_counts(gts, alleles=alleles)
     total_counts = numpy.sum(allele_counts, axis=1)
     allele_freq = allele_counts / total_counts[:, None]
     _mask_stats_with_few_samples(allele_freq, variations, min_num_genotypes)

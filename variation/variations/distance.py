@@ -201,13 +201,14 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None,
     jxx = {}
     jyy = {}
     for chunk in chunks:
+        alleles = sorted(numpy.unique(chunk[GT_FIELD]))
         for pop_i, pop_j in itertools.combinations(range(len(populations)), 2):
             chunk_pop_i = pop_flts[pop_i](chunk)[FLT_VARS]
             chunk_pop_j = pop_flts[pop_j](chunk)[FLT_VARS]
 
-            freq_al_i = calc_allele_freq(chunk_pop_i,
+            freq_al_i = calc_allele_freq(chunk_pop_i, alleles=alleles,
                                          min_num_genotypes=min_num_genotypes)
-            freq_al_j = calc_allele_freq(chunk_pop_j,
+            freq_al_j = calc_allele_freq(chunk_pop_j, alleles=alleles,
                                          min_num_genotypes=min_num_genotypes)
 
             chunk_jxy = numpy.sum(freq_al_i * freq_al_j)

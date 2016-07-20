@@ -291,12 +291,6 @@ class StatsTest(unittest.TestCase):
                                 [4 / 6, 1 / 6, 1 / 6]])
         assert numpy.allclose(allele_freq, expected)
 
-        varis = {'/calls/GT': gts, '/variations/alt': numpy.zeros((3, 3))}
-        allele_freq = calc_allele_freq(varis, min_num_genotypes=0)
-        expected = numpy.array([[0.6, 0.4, 0, 0], [1, 0, 0, 0],
-                                [4 / 6, 1 / 6, 1 / 6, 0]])
-        assert numpy.allclose(allele_freq, expected)
-
     def test_2d_allele_freq_het(self):
 
         gts = numpy.array([[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]],

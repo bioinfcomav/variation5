@@ -211,6 +211,8 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None):
             res = counts_and_allels_by_row(gts_pop_j, alleles=alleles,
                                            missing_value=MISSING_INT)
             al_cnts_j, alleles_j = res
+            if al_cnts_j is None or al_cnts_i is None:
+                return
             assert alleles_i == alleles_j
             shape_j = gts_pop_j.shape
             freq_al_j = al_cnts_j / (shape_j[1] * shape_j[2])

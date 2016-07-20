@@ -704,12 +704,9 @@ def calc_allele_freq(variations,
     if gts.shape[0] == 0:
         return numpy.array([])
 
-    max_num_allele = variations[ALT_FIELD].shape[1] + 1
     allele_counts = _calc_allele_counts(gts)
     total_counts = numpy.sum(allele_counts, axis=1)
     allele_freq = allele_counts / total_counts[:, None]
-    if allele_freq.shape[1] < max_num_allele:
-        allele_freq = fill_array(allele_freq, max_num_allele, dim=1)
     _mask_stats_with_few_samples(allele_freq, variations, min_num_genotypes)
     return allele_freq
 
@@ -730,7 +727,7 @@ def calc_expected_het(variations,
     if chunk_size is None:
         chunks = [variations]
     else:
-        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD, ALT_FIELD],
+        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
                                            chunk_size=chunk_size)
     exp_het = None
     for chunk in chunks:

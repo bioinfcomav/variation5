@@ -37,7 +37,9 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         calc_depth_mean_by_sample,
                                         calc_stats_by_sample,
                                         histograms_for_columns,
-                                        write_stats_by_sample)
+                                        write_stats_by_sample,
+                                        calc_expected_het,
+                                        calc_unbias_expected_het)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -362,6 +364,20 @@ class StatsTest(unittest.TestCase):
         assert numpy.allclose(hist, numpy.array([[0., 2.], [0., 1.]]))
         assert numpy.allclose(xedges, numpy.array([0.5, 0.75, 1.]))
         assert numpy.allclose(yedges, numpy.array([0, 0.5, 1.]))
+
+    def test_expected_het(self):
+        gts = [[[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 0]],
+               [[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 1]],
+               [[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 1]]]
+        snps = VariationsArrays()
+        snps['/calls/GT'] = numpy.array(gts)
+        exp = [0.5, 0.48979592, 0.48979592]
+        assert numpy.allclose(calc_expected_het(snps, min_num_genotypes=0),
+                              exp)
+        exp = [0.53846154, 0.52747253, 0.52747253]
+        assert numpy.allclose(calc_unbias_expected_het(snps,
+                                                       min_num_genotypes=0),
+                              exp)
 
     def test_calc_inbreeding_coeficient(self):
         variations = {'/calls/GT': numpy.array([[[0, 0], [0, 1], [0, 1],

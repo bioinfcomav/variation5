@@ -711,39 +711,33 @@ def calc_allele_freq(variations,
     return allele_freq
 
 
-def _calc_expected_het(variations,
-                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+def calc_expected_het(variations,
+                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     allele_freq = calc_allele_freq(variations,
                                    min_num_genotypes=min_num_genotypes)
     if allele_freq.shape[0] == 0:
         return numpy.array([])
-    ploidy = variations[GT_FIELD].shape[2]
-    return 1 - numpy.sum(allele_freq ** ploidy, axis=1)
-
-
-def calc_expected_het(variations,
-                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                      chunk_size=SNPS_PER_CHUNK):
-    if chunk_size is None:
-        chunks = [variations]
-    else:
-        chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
-                                           chunk_size=chunk_size)
-    exp_het = None
-    for chunk in chunks:
-        chunk_exp_het = _calc_expected_het(chunk, min_num_genotypes)
-        if exp_het is None:
-            exp_het = chunk_exp_het
-        else:
-            exp_het = numpy.append(exp_het, chunk_exp_het)
+    gts = variations[GT_FIELD]
+    ploidy = gts.shape[2]
+    exp_het = 1 - numpy.sum(allele_freq ** ploidy, axis=1)
     return exp_het
+
+
+def calc_unbias_expected_het(variations,
+                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    exp_het = calc_expected_het(variations,
+                                min_num_genotypes=min_num_genotypes)
+    gts = variations[GT_FIELD]
+    num_samples = gts.shape[1]
+    unbiased_exp_het = (2 * num_samples / (2 * num_samples - 1)) * exp_het
+    return unbiased_exp_het
 
 
 def _calc_inbreeding_coef(variations,
                           min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     obs_het = calc_obs_het(variations, min_num_genotypes=min_num_genotypes)
-    exp_het = _calc_expected_het(variations,
-                                 min_num_genotypes=min_num_genotypes)
+    exp_het = calc_expected_het(variations,
+                                min_num_genotypes=min_num_genotypes)
     with numpy.errstate(invalid='ignore'):
         inbreed = 1 - (obs_het / exp_het)
     return inbreed

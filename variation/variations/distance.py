@@ -7,9 +7,10 @@ import numpy
 from scipy.spatial.distance import squareform
 
 from variation.matrix.methods import is_missing
-from variation.variations.stats import counts_and_allels_by_row
+from variation.variations.stats import (counts_and_allels_by_row,
+                                        calc_allele_freq)
 from variation.variations.filters import SampleFilter, FLT_VARS
-from variation import GT_FIELD, MISSING_INT
+from variation import GT_FIELD, MISSING_INT, MIN_NUM_GENOTYPES_FOR_POP_STAT
 
 
 def _get_sample_gts(gts, sample_i, sample_j, indi_cache):
@@ -187,7 +188,8 @@ def _calc_kosman_pairwise_distance(variations, chunk_size=None):
     return distance
 
 
-def _calc_nei_pop_distance(variations, populations, chunk_size=None):
+def _calc_nei_pop_distance(variations, populations, chunk_size=None,
+                           min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     if chunk_size is None:
         chunks = [variations]
     else:
@@ -199,27 +201,14 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None):
     jxx = {}
     jyy = {}
     for chunk in chunks:
-        alleles = sorted(numpy.unique(chunk[GT_FIELD]))
         for pop_i, pop_j in itertools.combinations(range(len(populations)), 2):
             chunk_pop_i = pop_flts[pop_i](chunk)[FLT_VARS]
             chunk_pop_j = pop_flts[pop_j](chunk)[FLT_VARS]
-            gts_pop_i = chunk_pop_i[GT_FIELD]
-            res = counts_and_allels_by_row(gts_pop_i, alleles=alleles,
-                                           missing_value=MISSING_INT)
-            al_cnts_i, alleles_i = res
-            gts_pop_j = chunk_pop_j[GT_FIELD]
-            res = counts_and_allels_by_row(gts_pop_j, alleles=alleles,
-                                           missing_value=MISSING_INT)
-            al_cnts_j, alleles_j = res
-            if al_cnts_j is None or al_cnts_i is None:
-                return
-            assert alleles_i == alleles_j
-            shape_j = gts_pop_j.shape
-            freq_al_j = al_cnts_j / (shape_j[1] * shape_j[2])
-            shape_i = gts_pop_i.shape
-            freq_al_i = al_cnts_i / (shape_i[1] * shape_i[2])
-            # print(freq_al_i)
-            # print(freq_al_j)
+
+            freq_al_i = calc_allele_freq(chunk_pop_i,
+                                         min_num_genotypes=min_num_genotypes)
+            freq_al_j = calc_allele_freq(chunk_pop_j,
+                                         min_num_genotypes=min_num_genotypes)
 
             chunk_jxy = numpy.sum(freq_al_i * freq_al_j)
             chunk_jxx = numpy.sum(freq_al_i ** 2)
@@ -266,5 +255,7 @@ def calc_pairwise_distance(variations, chunk_size=None, method='kosman'):
     return DISTANCES[method](variations, chunk_size=chunk_size)
 
 
-def calc_pop_distance(variations, populations, method, chunk_size=None):
-    return DISTANCES[method](variations, populations, chunk_size=chunk_size)
+def calc_pop_distance(variations, populations, method, chunk_size=None,
+                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    return DISTANCES[method](variations, populations, chunk_size=chunk_size,
+                             min_num_genotypes=min_num_genotypes)

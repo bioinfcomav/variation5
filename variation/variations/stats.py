@@ -13,20 +13,20 @@ from allel.model.ndarray import GenotypeArray
 
 from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH,
                        MISSING_INT, GT_FIELD, ALT_FIELD, DP_FIELD,
-                       GQ_FIELD, CHROM_FIELD, POS_FIELD, RO_FIELD, AO_FIELD)
+                       GQ_FIELD, CHROM_FIELD, POS_FIELD, RO_FIELD, AO_FIELD,
+                       MIN_NUM_GENOTYPES_FOR_POP_STAT)
 from variation.matrix.stats import (counts_by_row, counts_and_allels_by_row,
                                     row_value_counter_fact)
-from variation.matrix.methods import (is_missing, fill_array, calc_min_max,
+from variation.matrix.methods import (is_missing, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.plot import _estimate_percentiles_from_distrib
 
 
-MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
 DEF_NUM_BINS = 20
 
 
 REQUIRED_FIELDS_FOR_STAT = {'calc_maf': [GT_FIELD],
-                            'calc_allele_freq': [GT_FIELD, ALT_FIELD],
+                            'calc_allele_freq': [GT_FIELD],
                             'calc_hwe_chi2_test': [GT_FIELD, ALT_FIELD],
                             'calc_called_gts_distrib_per_depth': [DP_FIELD,
                                                                   GT_FIELD],

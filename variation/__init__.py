@@ -66,6 +66,8 @@ MISSING_VALUES = _MissingValues()
 # performance
 SNPS_PER_CHUNK = 600
 
+MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
+
 DEF_DSET_PARAMS = {
                    # Not much slower than lzf but compresses much more
                    'compression': 'gzip',

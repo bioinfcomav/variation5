@@ -178,27 +178,30 @@ class PopDistTest(unittest.TestCase):
         snps.samples = [1, 2, 3, 4, 5, 6, 7]
 
         pops = [[1, 2, 3], [4, 5, 6, 7]]
-        dists = calc_pop_distance(snps, populations=pops, method='nei')
+        dists = calc_pop_distance(snps, populations=pops, method='nei',
+                                  min_num_genotypes=0)
         assert dists[0] - 3.14019792 < 0.001
         pops = [[1, 2, 3], [1, 2, 3]]
-        dists = calc_pop_distance(snps, populations=pops, method='nei')
+        dists = calc_pop_distance(snps, populations=pops, method='nei',
+                                  min_num_genotypes=0)
         assert dists[0] - 0 < 0.001
         pops = [[1, 2, 3], [1, 4, 5, 6, 7]]
-        dists = calc_pop_distance(snps, populations=pops, method='nei')
+        dists = calc_pop_distance(snps, populations=pops, method='nei',
+                                  min_num_genotypes=0)
         assert dists[0] - 1.23732507 < 0.001
 
         # by chunk
         pops = [[1, 2, 3], [4, 5, 6, 7]]
         dists = calc_pop_distance(snps, populations=pops, method='nei',
-                                  chunk_size=2)
+                                  chunk_size=2, min_num_genotypes=0)
         assert dists[0] - 3.14019792 < 0.001
         pops = [[1, 2, 3], [1, 2, 3]]
         dists = calc_pop_distance(snps, populations=pops, method='nei',
-                                  chunk_size=2)
+                                  chunk_size=2, min_num_genotypes=0)
         assert dists[0] - 0 < 0.001
         pops = [[1, 2, 3], [1, 4, 5, 6, 7]]
         dists = calc_pop_distance(snps, populations=pops, method='nei',
-                                  chunk_size=2)
+                                  chunk_size=2, min_num_genotypes=0)
         assert dists[0] - 1.23732507 < 0.001
 
 

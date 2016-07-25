@@ -9,11 +9,13 @@
 import unittest
 
 import numpy
+from scipy.spatial.distance import squareform
 
 from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            calc_pairwise_distance,
                                            sel_samples_from_dist_mat,
-                                           _matching, calc_pop_distance)
+                                           _matching, calc_pop_distance,
+                                           filter_dist_matrix)
 from variation.variations.vars_matrices import VariationsArrays
 from variation.variations.stats import GT_FIELD
 
@@ -204,6 +206,16 @@ class PopDistTest(unittest.TestCase):
                                   chunk_size=2, min_num_genotypes=0)
         assert dists[0] - 1.23732507 < 0.001
 
+
+class FilterDistTest(unittest.TestCase):
+    def test_filter_dists(self):
+        dist = [[0, 1, 2],
+                [1, 0, 3],
+                [2, 3, 0]]
+
+        dist = squareform(numpy.array(dist))
+        assert numpy.allclose(filter_dist_matrix(dist, [0, 1]), [1])
+        assert numpy.allclose(filter_dist_matrix(dist, [1, 2]), [3])
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise']

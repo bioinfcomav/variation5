@@ -210,9 +210,9 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None,
             freq_al_j = calc_allele_freq(chunk_pop_j, alleles=alleles,
                                          min_num_genotypes=min_num_genotypes)
 
-            chunk_jxy = numpy.sum(freq_al_i * freq_al_j)
-            chunk_jxx = numpy.sum(freq_al_i ** 2)
-            chunk_jyy = numpy.sum(freq_al_j ** 2)
+            chunk_jxy = numpy.nansum(freq_al_i * freq_al_j)
+            chunk_jxx = numpy.nansum(freq_al_i ** 2)
+            chunk_jyy = numpy.nansum(freq_al_j ** 2)
 
             pop_idx = pop_i, pop_j
             if pop_idx not in jxy:
@@ -225,6 +225,9 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None,
             jxy[pop_idx] += chunk_jxy
             jxx[pop_idx] += chunk_jxx
             jyy[pop_idx] += chunk_jyy
+            # print(freq_al_i)
+            # print(freq_al_j)
+            # print(chunk_jxy, chunk_jxx, chunk_jyy)
 
     n_pops = len(populations)
     dists = numpy.zeros(int((n_pops ** 2 - n_pops) / 2))
@@ -233,6 +236,7 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None,
         pjxy = jxy[pop_idx]
         pjxx = jxx[pop_idx]
         pjyy = jyy[pop_idx]
+
         try:
             nei = math.log(pjxy / math.sqrt(pjxx * pjyy))
             if nei != 0:

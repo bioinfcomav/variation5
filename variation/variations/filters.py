@@ -119,6 +119,8 @@ class _BaseFilter:
         return self._calc_stat(vars_for_stat)
 
     def __call__(self, variations):
+        if variations.num_variations == 0:
+            raise ValueError('No SNPs to filter')
         stats = self._calc_stat_for_filtered_samples(variations)
         if stats is None:
             return {}
@@ -818,6 +820,9 @@ class PseudoHetDuplicationFilter2(_BaseFilter):
         assert len(vars_for_stat.samples) == self.sample_dp_means.shape[0]
 
         dps = vars_for_stat[DP_FIELD]
+        if dps.shape[0] == 0:
+            # No SNPs
+            raise ValueError('No SNPs to filter')
         if is_dataset(dps):
             dps = dps[:]
 

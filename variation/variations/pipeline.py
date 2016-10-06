@@ -28,6 +28,10 @@ class Pipeline():
             # This for should be more internal than the for for the HDF5
             # chunks because in that way the chunk won't abandond the
             # processor cache until of the processing is done for that chunk
+
+            if chunk.num_variations == 0:
+                continue
+
             callable_instance = step['callable']
             result = callable_instance(chunk)
             if FLT_VARS in result:

@@ -28,11 +28,71 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           PseudoHetDuplicationFilter,
                                           PseudoHetDuplicationFilter2,
                                           N_FILTERED_OUT, SELECTED_VARS,
-                                          OrFilter, DISCARDED_VARS)
+                                          OrFilter, DISCARDED_VARS,
+                                          IndelFilter)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
-                       SNPS_PER_CHUNK)
+                       SNPS_PER_CHUNK, ALT_FIELD)
+
+
+class IndelTest(unittest.TestCase):
+    def test_filter_indels(self):
+        variations = VariationsArrays()
+        alt = [['A', 'T', 'CG'], ['A', '', ''], ['C', '', ''], ['G', '', '']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt[1:])
+
+        variations = VariationsArrays()
+        alt = [['A', 'TT', 'T'], ['A', '', ''], ['C', '', ''], ['G', '', '']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt[1:])
+
+        variations = VariationsArrays()
+        alt = [[b'A', b'TT'], [b'A', b''], [b'C', b''], [b'G', b'']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt[1:])
+
+        variations = VariationsArrays()
+        alt = [[b'A', b''], [b'A', b''], [b'C', b''], [b'GT', b'T']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt[:-1])
+
+        variations = VariationsArrays()
+        alt = [['A', 'T'], ['A', ''], ['C', ''], ['G', '']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt)
+
+        variations = VariationsArrays()
+        alt = [[b'A'], [b'A'], [b'C'], [b'G']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt)
+
+        variations = VariationsArrays()
+        alt = [[b'A'], [b'A'], [b'C'], [b'GT']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt[:-1])
+
+        variations = VariationsArrays()
+        alt = [['A'], ['A'], ['C'], ['GT']]
+        variations[ALT_FIELD] = numpy.array(alt)
+        filter_gts = IndelFilter()
+        res = filter_gts(variations)
+        assert numpy.all(res[FLT_VARS][ALT_FIELD] == alt[:-1])
 
 
 class FilterTest(unittest.TestCase):

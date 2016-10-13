@@ -2,6 +2,7 @@
 import array
 from collections import Counter
 import itertools
+import sys
 
 import numpy
 from scipy.stats import chi2_contingency, poisson
@@ -13,7 +14,7 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         histogram, DEF_NUM_BINS,
                                         call_is_het)
 from variation.variations.vars_matrices import VariationsArrays
-from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT)
+from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT, ALT_FIELD)
 from variation.matrix.methods import is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import row_value_counter_fact
@@ -141,6 +142,61 @@ class _BaseFilter:
             flt_vars = variations.get_chunk(selected_rows)
             result[FLT_VARS] = flt_vars
             result[FLT_STATS] = flt_stats
+
+            if self.return_discarded:
+                discarded_rows = numpy.logical_not(selected_rows)
+                discarded_vars = variations.get_chunk(discarded_rows)
+                result[DISCARDED_VARS] = discarded_vars
+
+        return result
+
+
+class IndelFilter():
+
+    def __init__(self, do_filtering=True, report_selection=False,
+                 return_discarded=False):
+        self.do_filtering = do_filtering
+        self.return_discarded = return_discarded
+        self.report_selection = report_selection
+
+    def _is_snp(self, variations):
+        alt = variations[ALT_FIELD]
+        dtype = alt.dtype
+        max_str_len = int(dtype.str.split(dtype.char)[-1])
+        n_snps = alt.shape[0]
+        if max_str_len < 2:
+            # All alt alleles have length one, so everything is a SNP
+            is_snp = numpy.ones((n_snps,), dtype=numpy.bool_)
+        else:
+            char_size = dtype.itemsize // max_str_len
+            max_n_alleles = alt.shape[1]
+            # We transform the array to ints and we see if the second int
+            # is a zero. That would mean that the string has a length lower
+            # than 2
+            alt = alt.copy()
+            alt.dtype = 'i' + str(char_size)
+            new_shape = [n_snps, max_n_alleles, max_str_len]
+            alt = alt.reshape(new_shape)
+            # The second int for each SNP comes from the second letter of the
+            # string that was the allele
+            second_letters_as_ints = alt[:, :, 1]
+            is_snp = numpy.sum(second_letters_as_ints, axis=1) == 0
+        return is_snp
+
+    def __call__(self, variations):
+
+        if variations.num_variations == 0:
+            raise ValueError('No SNPs to filter')
+
+        selected_rows = self._is_snp(variations)
+        result = {}
+
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
+
+        if self.do_filtering:
+            flt_vars = variations.get_chunk(selected_rows)
+            result[FLT_VARS] = flt_vars
 
             if self.return_discarded:
                 discarded_rows = numpy.logical_not(selected_rows)

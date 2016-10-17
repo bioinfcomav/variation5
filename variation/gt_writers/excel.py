@@ -3,12 +3,11 @@ import numpy
 
 from openpyxl import Workbook
 from openpyxl.writer.write_only import WriteOnlyCell
-from openpyxl.cell.cell import Cell
 from openpyxl.styles import PatternFill
 
 
-from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD, \
-    MISSING_INT
+from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD,
+                       MISSING_INT)
 
 
 COLORS = {'red': 'FFFF0000', 'green': 'FF00FF00', 'yellow': 'FFFFFF00',

@@ -1,6 +1,7 @@
 import unittest
 from os.path import join
 from tempfile import NamedTemporaryFile
+import io
 
 import numpy
 
@@ -10,6 +11,8 @@ from variation.gt_parsers.vcf import VCFParser
 from variation.gt_writers.vcf import (_write_vcf_header, _write_vcf_meta,
                                       write_vcf, write_vcf_parallel)
 from variation.gt_writers.excel import write_excel
+from variation.gt_writers.fasta import write_fasta
+
 from test.test_utils import TEST_DATA_DIR
 
 
@@ -195,6 +198,50 @@ class ExcelTest(unittest.TestCase):
         classes = [1, 1, 1, 2, 2]
         write_excel(variations, fhand, classes)
 
+
+class FastaWriterTest(unittest.TestCase):
+    def test_fasta_writer(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [0, 1], [1, 1], [0, 0], [0, 0]],
+                           [[2, 2], [1, 1], [-1, 2], [0, 0], [-1, -1]],
+                           [[0, 1], [0, 0], [0, 0], [1, 1], [0, 0]],
+                           [[0, 0], [1, -1], [1, 1], [1, -1], [1, 1]]])
+        ref = numpy.array(['C', 'G', 'A', 'T'])
+        alt = numpy.array([['A', 'TT'], ['A', 'T'], ['C', ''], ['G', '']])
+        variations[GT_FIELD] = gts
+        variations[ALT_FIELD] = alt
+        variations[REF_FIELD] = ref
+        variations[CHROM_FIELD] = numpy.array(['ch1', 'ch2', 'ch2', 'ch2'])
+        variations[POS_FIELD] = numpy.array([10, 20, 30, 40])
+        variations.samples = list(map(str, range(gts.shape[1])))
+
+        fhand = io.StringIO()
+        write_fasta(variations, fhand)
+        # SNPS
+        # C A TT
+        # G A T
+        # A C
+        # T G
+        # indi1> TNT
+        # indi2> AAN
+        # indi3> NAG
+        # indi4> GCN
+        # indi5> NAG
+        result = fhand.getvalue().splitlines()
+        # print('\n'.join(result))
+        assert '>0' in result[0]
+        assert result[1] == 'TNT'
+        assert '>1' in result[2]
+        assert result[3] == 'AAN'
+        assert '>2' in result[4]
+        assert result[5] == 'NAG'
+        assert '>3' in result[6]
+        assert result[7] == 'GCN'
+        assert '>4' in result[8]
+        assert result[9] == 'NAG'
+        assert 'length covered:20' in result[0]
+
+
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'ExcelTest']
+    # import sys; sys.argv = ['', 'FastaWriterTest']
     unittest.main()

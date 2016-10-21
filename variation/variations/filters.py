@@ -658,7 +658,7 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
                                                    range_)
     res = _get_result_if_empty_vars(in_vars, do_histogram)
     if res is not None:
-        return None
+        raise ValueError('No SNPs to filter')
 
     do_filtering = False if out_vars is None else True
 

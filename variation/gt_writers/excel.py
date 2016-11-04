@@ -40,7 +40,7 @@ def _indi_snp_gt_to_str(snp_indi_gt):
 def _create_allele_str(ref, alt):
     alleles = [ref]
     alleles.extend(alt)
-    alleles = ','.join(map(str, alleles))
+    alleles = ','.join([alle.decode() for alle in alleles if alle])
     return alleles
 
 
@@ -50,7 +50,7 @@ def _create_cell(worksheet, value):
     if issubclass(type(value), numpy.integer):
         value = int(value)
     elif isinstance(value, numpy.bytes_):
-        value = str(value)
+        value = value.decode()
     elif hasattr(value, 'shape') or isinstance(value, (tuple, list)):
         value, color_fill = _indi_snp_gt_to_str(value)
 

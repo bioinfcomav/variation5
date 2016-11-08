@@ -190,8 +190,8 @@ class ExcelTest(unittest.TestCase):
         write_excel(variations, fhand)
 
         # REF, ALT
-        variations[REF_FIELD] = numpy.array(['A', 'A', 'A', 'A'])
-        variations[ALT_FIELD] = numpy.array([['T'], ['T'], ['T'], ['T']])
+        variations[REF_FIELD] = numpy.array([b'A', b'A', b'A', b'A'])
+        variations[ALT_FIELD] = numpy.array([[b'T'], [b'T'], [b'T'], [b'T']])
         write_excel(variations, fhand)
 
         # with classifications
@@ -205,23 +205,33 @@ class FastaWriterTest(unittest.TestCase):
         gts = numpy.array([[[0, 0], [0, 1], [1, 1], [0, 0], [0, 0]],
                            [[2, 2], [1, 1], [-1, 2], [0, 0], [-1, -1]],
                            [[0, 1], [0, 0], [0, 0], [1, 1], [0, 0]],
-                           [[0, 0], [1, -1], [1, 1], [1, -1], [1, 1]]])
-        ref = numpy.array(['C', 'G', 'A', 'T'])
-        alt = numpy.array([['A', 'TT'], ['A', 'T'], ['C', ''], ['G', '']])
+                           [[0, 0], [1, -1], [1, 1], [1, -1], [1, 1]],
+                           [[0, 1], [0, 1], [-1, -1], [-1, 1], [1, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1], [-1, -1]],
+                           ])
+        ref = numpy.array(['C', 'G', 'A', 'T', 'T', 'C', 'C'])
+        alt = numpy.array([['A', 'TT'], ['A', 'T'], ['C', ''], ['G', ''],
+                           ['A', 'T'], ['G', ''], ['G', '']])
         variations[GT_FIELD] = gts
         variations[ALT_FIELD] = alt
         variations[REF_FIELD] = ref
-        variations[CHROM_FIELD] = numpy.array(['ch1', 'ch2', 'ch2', 'ch2'])
-        variations[POS_FIELD] = numpy.array([10, 20, 30, 40])
+        variations[CHROM_FIELD] = numpy.array(['ch1', 'ch2', 'ch2', 'ch2',
+                                               'ch2', 'ch3', 'ch3'])
+        variations[POS_FIELD] = numpy.array([10, 20, 30, 40, 50, 10, 15])
         variations.samples = list(map(str, range(gts.shape[1])))
 
         fhand = io.StringIO()
-        write_fasta(variations, fhand)
+        write_fasta(variations, fhand, remove_sites_all_N=True,
+                    remove_invariant_snps=True)
         # SNPS
         # C A TT
         # G A T
         # A C
         # T G
+        # T A T
+        # C G
+        # N
         # indi1> TNT
         # indi2> AAN
         # indi3> NAG
@@ -239,8 +249,18 @@ class FastaWriterTest(unittest.TestCase):
         assert result[7] == 'GCN'
         assert '>4' in result[8]
         assert result[9] == 'NAG'
-        assert 'length covered:20' in result[0]
 
+        fhand = io.StringIO()
+        write_fasta(variations, fhand, remove_invariant_snps=True)
+        result = fhand.getvalue().splitlines()
+        assert '>0' in result[0]
+        assert result[1] == 'TNT'
+
+        fhand = io.StringIO()
+        write_fasta(variations, fhand, remove_sites_all_N=True)
+        result = fhand.getvalue().splitlines()
+        assert '>0' in result[0]
+        assert result[1] == 'TNTC'
 
 if __name__ == "__main__":
     # import sys; sys.argv = ['', 'FastaWriterTest']

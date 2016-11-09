@@ -4,6 +4,7 @@ import numpy
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD,
                        MISSING_INT, MISSING_STR)
 from variation.variations.filters import IndelFilter, FLT_VARS
+from variation.matrix.stats import counts_and_allels_by_row
 
 
 def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
@@ -46,16 +47,10 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
     haps2 = gts[:, :, 1]
     haps1[haps1 != haps2] = MISSING_INT
     haps = haps1
-
     haps_to_keep = None
     if remove_invariant_snps:
-        # remove all invariant or invariant and missing
-        # we sort the matrix and we check if the first column is equal to the
-        # last
-        haps_tmp = numpy.copy(haps)
-        haps_tmp.sort(axis=1)
-        not_invariant = haps_tmp[:, 0] != haps_tmp[:, haps.shape[1] - 1]
-        haps_to_keep = not_invariant
+        counts = counts_and_allels_by_row(haps, missing_value=MISSING_INT)[0]
+        haps_to_keep = numpy.sum(counts, axis=1) - numpy.max(counts, axis=1) > 0
     elif remove_sites_all_N:
         all_missing = numpy.all(haps == MISSING_INT, axis=1)
         haps_to_keep = numpy.logical_not(all_missing)

@@ -238,7 +238,7 @@ class FastaWriterTest(unittest.TestCase):
         # indi4> GCN
         # indi5> NAG
         result = fhand.getvalue().splitlines()
-        # print('\n'.join(result))
+
         assert '>0' in result[0]
         assert result[1] == 'TNT'
         assert '>1' in result[2]

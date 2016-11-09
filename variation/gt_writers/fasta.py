@@ -25,17 +25,17 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
     else:
         raise NotImplementedError('Fix me if you want indels')
 
-    N = 'N'
-    desc = ''
+    N = b'N'
+    desc = b''
 
     if chroms is not None and poss is not None:
-        chrom0 = chroms[0]
+        chrom0 = chroms[0].astype('S')
         pos0 = poss[0]
-        chrom1 = chroms[-1]
+        chrom1 = chroms[-1].astype('S')
         pos1 = poss[-1]
-        desc = ' From %s:%i to %s:%i' % (chrom0, pos0, chrom1, pos1)
+        desc = b' From %s:%i to %s:%i' % (chrom0, pos0, chrom1, pos1)
         if chrom0 == chrom1:
-            desc += ' length covered:%i' % (pos1 - pos0)
+            desc += b' length covered:%i' % (pos1 - pos0)
     refs = variations[REF_FIELD]
     alts = variations[ALT_FIELD]
     gts = variations[GT_FIELD][...]
@@ -72,10 +72,10 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
             letter_haps[snp_idx, :][haps[snp_idx, :] == alt_allele_idx + 1] = alt_allele
 
     for smpl_idx, sample in enumerate(samples):
-        this_desc = '>%s' % sample + desc
+        this_desc = b'>%s' % sample.encode() + desc
         out_fhand.write(this_desc)
-        out_fhand.write('\n')
+        out_fhand.write(b'\n')
         sample_hap = letter_haps[:, smpl_idx]
-        sample_hap = b''.join(sample_hap).decode()
+        sample_hap = b''.join(sample_hap)
         out_fhand.write(sample_hap)
-        out_fhand.write('\n')
+        out_fhand.write(b'\n')

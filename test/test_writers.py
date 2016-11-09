@@ -221,7 +221,7 @@ class FastaWriterTest(unittest.TestCase):
         variations[POS_FIELD] = numpy.array([10, 20, 30, 40, 50, 10, 15])
         variations.samples = list(map(str, range(gts.shape[1])))
 
-        fhand = io.StringIO()
+        fhand = io.BytesIO()
         write_fasta(variations, fhand, remove_sites_all_N=True,
                     remove_invariant_snps=True)
         # SNPS
@@ -238,29 +238,28 @@ class FastaWriterTest(unittest.TestCase):
         # indi4> GCN
         # indi5> NAG
         result = fhand.getvalue().splitlines()
+        assert b'>0' in result[0]
+        assert result[1] == b'TNT'
+        assert b'>1' in result[2]
+        assert result[3] == b'AAN'
+        assert b'>2' in result[4]
+        assert result[5] == b'NAG'
+        assert b'>3' in result[6]
+        assert result[7] == b'GCN'
+        assert b'>4' in result[8]
+        assert result[9] == b'NAG'
 
-        assert '>0' in result[0]
-        assert result[1] == 'TNT'
-        assert '>1' in result[2]
-        assert result[3] == 'AAN'
-        assert '>2' in result[4]
-        assert result[5] == 'NAG'
-        assert '>3' in result[6]
-        assert result[7] == 'GCN'
-        assert '>4' in result[8]
-        assert result[9] == 'NAG'
-
-        fhand = io.StringIO()
+        fhand = io.BytesIO()
         write_fasta(variations, fhand, remove_invariant_snps=True)
         result = fhand.getvalue().splitlines()
-        assert '>0' in result[0]
-        assert result[1] == 'TNT'
+        assert b'>0' in result[0]
+        assert result[1] == b'TNT'
 
-        fhand = io.StringIO()
+        fhand = io.BytesIO()
         write_fasta(variations, fhand, remove_sites_all_N=True)
         result = fhand.getvalue().splitlines()
-        assert '>0' in result[0]
-        assert result[1] == 'TNTC'
+        assert b'>0' in result[0]
+        assert result[1] == b'TNTC'
 
 if __name__ == "__main__":
     # import sys; sys.argv = ['', 'FastaWriterTest']

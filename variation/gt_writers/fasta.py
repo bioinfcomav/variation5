@@ -8,7 +8,8 @@ from variation.matrix.stats import counts_and_allels_by_row
 
 
 def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
-                remove_invariant_snps=False, remove_sites_all_N=False):
+                remove_invariant_snps=False, remove_sites_all_N=False,
+                stats=None):
     samples = variations.samples
 
     chroms = variations[CHROM_FIELD] if CHROM_FIELD in variations else None
@@ -34,8 +35,16 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
         chrom1 = chroms[-1].astype('S')
         pos1 = poss[-1]
         desc = b' From %s:%i to %s:%i' % (chrom0, pos0, chrom1, pos1)
+        if stats is not None:
+            stats['start_chrom'] = chrom0
+            stats['start_pos'] = chrom0
+            stats['end_chrom'] = chrom1
+            stats['end_pos'] = chrom1
         if chrom0 == chrom1:
             desc += b' length covered:%i' % (pos1 - pos0)
+            if stats is not None:
+                stats['length_covered'] = pos1 - pos0
+
     refs = variations[REF_FIELD]
     alts = variations[ALT_FIELD]
     gts = variations[GT_FIELD][...]
@@ -70,6 +79,9 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
             if alt_allele == MISSING_STR:
                 break
             letter_haps[snp_idx, :][haps[snp_idx, :] == alt_allele_idx + 1] = alt_allele
+
+    if stats is not None:
+        stats['snps_written'] = letter_haps.shape[0]
 
     for smpl_idx, sample in enumerate(samples):
         this_desc = b'>%s' % sample.encode() + desc

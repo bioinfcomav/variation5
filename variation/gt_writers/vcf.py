@@ -1,18 +1,17 @@
-import os
+from functools import partial
 from math import factorial
+from multiprocessing import Pool
+import os
+from tempfile import NamedTemporaryFile
 
 import numpy as np
-
 from variation import (VCF_FORMAT, MISSING_FLOAT, MISSING_STR, MISSING_INT,
                        MISSING_VALUES)
-from variation.utils.misc import remove_nans
-from multiprocessing import Pool
-from functools import partial
-from tempfile import NamedTemporaryFile
 from variation.utils.file_utils import remove_temp_file_in_dir
+from variation.utils.misc import remove_nans
+
+
 # from variation.gt_writers.vcf_field_writer import cy_create_snv_line
-
-
 GROUP_FIELD_MAPPING = {'/variations/info': 'INFO', '/calls': 'FORMAT',
                        '/variations/filter': 'FILTER', '/other/alt': 'ALT',
                        '/other/contig': 'contig', '/other/sample': 'SAMPLE',
@@ -323,11 +322,14 @@ def _get_calls_per_sample(calls_data, n_sample, calls_path, num_alt, metadata,
             value = ','.join(value)
         elif format_data_number == 1:
             if 'GT' in key:
+                is_missing = True if np.all(value == [-1] * ploidy) else False
+
                 value = [INT_STR_CONVERTER[x] for x in value]
                 value = '/'.join(value)
 
-                if '.' in value:
-                    return '.'
+                if is_missing:
+                    return value
+
             elif value == MISSING_VALUES[value.dtype]:
                 value = '.'
             elif key in ['/calls/DP', '/calls/RO']:
@@ -377,4 +379,3 @@ def _group_variations_paths(variations):
         elif 'filter' in key:
             grouped_paths['filter'].append(key)
     return grouped_paths
-

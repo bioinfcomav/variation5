@@ -484,7 +484,7 @@ class _VariationMatrices():
                 except UnboundLocalError:
                     # This is a workaround for an error in h5py
                     if (isinstance(index, numpy.ndarray) and
-                       numpy.all(index == False)):
+                        numpy.all(index == False)):
                         matrix = numpy.array([])
                     else:
                         raise
@@ -494,7 +494,7 @@ class _VariationMatrices():
             except UnboundLocalError:
                 # This is a workaround for an error in h5py
                 if (isinstance(index, numpy.ndarray) and
-                   numpy.all(index == False)):
+                    numpy.all(index == False)):
                     matrix = numpy.array([])
                 else:
                     raise

@@ -2,7 +2,6 @@
 import array
 from collections import Counter
 import itertools
-import sys
 
 import numpy
 from scipy.stats import chi2_contingency, poisson

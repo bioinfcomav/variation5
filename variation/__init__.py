@@ -6,6 +6,8 @@ MISSING_FLOAT = float('nan')
 MISSING_STR = ''
 MISSING_BYTE = b''
 MISSING_BOOL = False
+TRUE_INT = 1
+FALSE_INT = 0
 
 GT_FIELD = '/calls/GT'
 GQ_FIELD = '/calls/GQ'

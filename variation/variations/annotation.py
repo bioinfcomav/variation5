@@ -41,8 +41,8 @@ class IsVariableAnnotator():
         else:
             samples = ', '.join(samples)
 
-        desc = 'Is variable information between this samples: {}'.format(samples)
-        self._description = desc
+        desc = 'Is variable information between this samples: {}'
+        self._description = desc.format(samples)
         return desc
 
     def __call__(self, variations):
@@ -57,7 +57,7 @@ class IsVariableAnnotator():
 
         # add metadata to variation
         metadata = variations.metadata
-        metadata[annotation_field] = {'Type': 'String', 'Number': '1',
+        metadata[annotation_field] = {'Type': 'Integer', 'Number': '1',
                                       'Description': description}
         variations._set_metadata(metadata)
 

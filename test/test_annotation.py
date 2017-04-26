@@ -35,7 +35,7 @@ class IsVariableTest(unittest.TestCase):
         result = annotator(variations)
         annotated_variations = result[ANNOTATED_VARS]
         field = '/variations/info/{}'.format(annot_id)
-        assert annotated_variations.metadata[field]['Type'] == 'String'
+        assert annotated_variations.metadata[field]['Type'] == 'Integer'
         assert annotated_variations.metadata[field]['Number'] == '1'
 
         assert field in annotated_variations.keys()

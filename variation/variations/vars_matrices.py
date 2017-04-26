@@ -450,6 +450,8 @@ class _VariationMatrices():
             return
 
         for chunk in chunks:
+            if chunk.num_variations == 0:
+                continue
             if matrices is None:
                 matrices = self._create_or_get_mats_from_chunk(chunk)
                 continue

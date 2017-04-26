@@ -1,10 +1,10 @@
-
-
 import numpy
 from variation import GT_FIELD, MISSING_INT
 from variation.matrix.stats import counts_and_allels_by_row
 from variation.variations.filters import SampleFilter, FLT_VARS
 from variation.variations.vars_matrices import VariationsArrays
+
+ANNOTATED_VARS = 'annotated_vars'
 
 
 def _filter_samples_for_stats(variations, samples=None):
@@ -27,11 +27,10 @@ def is_variable(variations, samples):
 
 
 class IsVariableAnnotator():
-    def __init__(self, annot_id, samples=None, create_variation_array=False):
+    def __init__(self, annot_id, samples=None):
         self.samples = samples
         self.annot_id = annot_id
         self._description = None
-        self.create_variation_array = create_variation_array
 
     def _get_description(self, variations, samples):
         if self._description is not None:
@@ -47,14 +46,9 @@ class IsVariableAnnotator():
         return desc
 
     def __call__(self, variations):
-        # variations must be writeable
-        if '_h5file' in dir(variations):
-            if self.create_variation_array:
-                _variations = VariationsArrays()
-                _variations.put_chunks(variations.iterate_chunks())
-                variations = _variations
-            else:
-                raise TypeError('VariationsH5 can not bw used to add new field')
+        _variations = VariationsArrays()
+        _variations.put_chunks(variations.iterate_chunks())
+        variations = _variations
 
         description = self._get_description(variations, self.samples)
 
@@ -69,4 +63,6 @@ class IsVariableAnnotator():
 
         # add matrix to matrix
         variations[annotation_field] = variable_data
-        return variations
+        result = {}
+        result[ANNOTATED_VARS] = variations
+        return result

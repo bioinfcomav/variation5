@@ -29,11 +29,12 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           PseudoHetDuplicationFilter2,
                                           N_FILTERED_OUT, SELECTED_VARS,
                                           OrFilter, DISCARDED_VARS,
-                                          IndelFilter)
+                                          IndelFilter, FieldValueFilter)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
                        SNPS_PER_CHUNK, ALT_FIELD)
+from variation.variations.annotation import IsVariableAnnotator, ANNOTATED_VARS
 
 
 class IndelTest(unittest.TestCase):
@@ -714,6 +715,26 @@ class OrFiltterTest(unittest.TestCase):
         assert filtered[FLT_STATS][N_FILTERED_OUT] == 0
 
 
+class FieldValueFilterTest(unittest.TestCase):
+
+    def test_annotation_filter(self):
+        annot_id = 'test'
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        variations = VariationsArrays()
+        variations.put_chunks(hdf5.iterate_chunks())
+
+        annotator = IsVariableAnnotator(annot_id=annot_id)
+        result = annotator(variations)
+        annotated_variations = result[ANNOTATED_VARS]
+        field = '/variations/info/{}'.format(annot_id)
+
+        annotator = FieldValueFilter(field_path=field, value=0)
+        filtered = annotator(annotated_variations)
+        assert filtered[FLT_STATS][N_KEPT] == 133
+        assert filtered[FLT_STATS][TOT] == 943
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 810
+
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'HetDupFilterTest']
+    # import sys;sys.argv = ['', 'AnnotationFilterTest']
     unittest.main()

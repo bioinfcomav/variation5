@@ -931,3 +931,36 @@ class OrFilter:
                              N_FILTERED_OUT: n_filtered_out,
                              TOT: tot}
         return result
+
+
+class FieldValueFilter(_BaseFilter):
+    def __init__(self, field_path, value, **kwargs):
+        super().__init__(**kwargs)
+        self._field = field_path
+        self._value = value
+
+    def __call__(self, variations):
+        try:
+            assert self._field in variations
+        except AssertionError:
+            msg = 'Used annotation field not in var_matrix: {}'
+            raise RuntimeError(msg.format(self._field))
+
+        selected_vars = variations[self._field] == self._value
+
+        n_kept = numpy.count_nonzero(selected_vars)
+        tot = selected_vars.shape[0]
+        n_filtered_out = tot - n_kept
+
+        flt_vars = variations.get_chunk(selected_vars)
+
+        result = {}
+        result[FLT_VARS] = flt_vars
+
+        result[FLT_STATS] = {N_KEPT: n_kept,
+                             N_FILTERED_OUT: n_filtered_out,
+                             TOT: tot}
+        return result
+
+
+

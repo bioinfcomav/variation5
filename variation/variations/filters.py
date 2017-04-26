@@ -961,6 +961,3 @@ class FieldValueFilter(_BaseFilter):
                              N_FILTERED_OUT: n_filtered_out,
                              TOT: tot}
         return result
-
-
-

@@ -6,6 +6,7 @@ from variation.variations.filters import (COUNTS, EDGES, FLT_VARS, FLT_STATS,
                                           N_KEPT, TOT, N_FILTERED_OUT,
                                           SELECTED_VARS)
 from collections import OrderedDict
+from variation.variations.annotation import ANNOTATED_VARS
 
 
 class Pipeline():
@@ -37,6 +38,10 @@ class Pipeline():
             if FLT_VARS in result:
                 chunk = result[FLT_VARS]
                 del result[FLT_VARS]
+            elif ANNOTATED_VARS in result:
+                chunk = result[ANNOTATED_VARS]
+                del result[ANNOTATED_VARS]
+
             results.append(result)
         return results, chunk
 

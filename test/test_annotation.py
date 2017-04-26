@@ -44,7 +44,8 @@ class IsVariableTest(unittest.TestCase):
     def test_annotator_h5(self):
         annot_id = 'test'
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
-        annotator = IsVariableAnnotator(annot_id=annot_id, samples=['1_14_1_gbs'])
+        annotator = IsVariableAnnotator(annot_id=annot_id, samples=['1_14_1_gbs',
+                                                                    '1_17_1_gbs'])
 
         result = annotator(hdf5)
         annotated_variations = result[ANNOTATED_VARS]
@@ -53,7 +54,7 @@ class IsVariableTest(unittest.TestCase):
         assert annotated_variations.metadata[field]['Number'] == '1'
 
         assert field in annotated_variations.keys()
-        assert annotated_variations[field][3] == MISSING_INT
+        assert annotated_variations[field][3] == FALSE_INT
 
     def test_annotator_all_samples(self):
         annot_id = 'test'

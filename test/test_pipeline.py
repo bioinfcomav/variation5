@@ -19,7 +19,7 @@ from variation.variations.filters import (MinCalledGTsFilter, MafFilter,
                                           SampleFilter, FieldFilter,
                                           Chi2GtFreqs2SampleSetsFilter, N_KEPT,
                                           FLT_STATS, TOT, N_FILTERED_OUT,
-    FieldValueFilter)
+                                          FieldValueFilter)
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from variation import GT_FIELD
 from test.test_utils import TEST_DATA_DIR
@@ -252,14 +252,15 @@ class PipelineTest(unittest.TestCase):
         annot_id = 'test'
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         field = '/variations/info/{}'.format(annot_id)
-        annotator = IsVariableAnnotator(annot_id=annot_id)
+        annotator = IsVariableAnnotator(annot_id=annot_id, samples=['1_14_1_gbs',
+                                                                    '1_17_1_gbs'])
         pipeline.append(annotator)
         annotator = FieldValueFilter(field_path=field, value=0)
         pipeline.append(annotator)
 
         vars_out = VariationsArrays()
         pipeline.run(hdf5, vars_out)
-        assert vars_out.num_variations == 133
+        assert vars_out.num_variations == 484
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PipelineTest.test_pipeline']

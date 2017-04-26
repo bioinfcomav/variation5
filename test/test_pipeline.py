@@ -125,7 +125,8 @@ class PipelineTest(unittest.TestCase):
         result2 = flt(hdf5)
         assert numpy.allclose(result['filter1']['counts'], result2['counts'])
         assert numpy.allclose(result['filter1']['edges'], result2['edges'])
-        assert vars_out['/calls/GT'].shape[0] == 0
+        assert not vars_out.keys()
+
         assert result2[FLT_VARS]['/calls/GT'].shape[0] == 0
 
     def test_het(self):

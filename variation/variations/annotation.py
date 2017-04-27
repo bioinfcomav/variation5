@@ -20,6 +20,11 @@ def is_variable(variations, samples):
     sample_variation = _filter_samples_for_stats(variations, samples=samples)
     gts = sample_variation[GT_FIELD]
     counts, _ = counts_and_allels_by_row(gts, missing_value=MISSING_INT)
+    if counts is None:
+        # in this case all data is muissing
+        return numpy.full(shape=variations.num_variations,
+                          fill_value=MISSING_INT, dtype=numpy.int)
+
     all_missing_gts = numpy.sum(counts, axis=1) == 0
     is_variable_ = (numpy.sum(counts > 0, axis=1) > 1).astype(int)
     is_variable_[all_missing_gts] = MISSING_INT
@@ -57,7 +62,7 @@ class IsVariableAnnotator():
 
         # add metadata to variation
         metadata = variations.metadata
-        metadata[annotation_field] = {'Type': 'Integer', 'Number': '1',
+        metadata[annotation_field] = {'Type': 'Integer', 'Number': 1,
                                       'Description': description}
         variations._set_metadata(metadata)
 

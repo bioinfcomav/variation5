@@ -338,8 +338,9 @@ class LowQualGTsToMissingSetter(_GTsToMissingSetter):
 
 class NonBiallelicFilter(_BaseFilter):
 
-    def __init__(self, samples=None, report_selection=False):
-        self.keep_monomorphic = False
+    def __init__(self, samples=None, report_selection=False,
+                 keep_monomorphic=False):
+        self.keep_monomorphic = keep_monomorphic
         self._samples = samples
         self.report_selection = report_selection
 

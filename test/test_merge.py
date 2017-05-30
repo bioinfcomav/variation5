@@ -277,7 +277,7 @@ class MergeTest(unittest.TestCase):
         vars2.samples = ['c', 'd']
         merger = MockMerger(gt_shape=(4, 2), merge_only_snps=True)
         assert not merger._snps_are_mergeable(vars1, vars2)
-        
+
         merger = MockMerger(gt_shape=(4, 2), merge_only_snps=False)
         assert merger._snps_are_mergeable(vars1, vars2)
 

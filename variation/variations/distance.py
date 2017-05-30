@@ -7,9 +7,10 @@ import numpy
 from scipy.spatial.distance import squareform
 
 from variation.matrix.methods import is_missing
-from variation.variations.stats import (calc_allele_freq)
+from variation.variations.stats import (calc_allele_freq,
+    calc_allele_freq_by_depth)
 from variation.variations.filters import SampleFilter, FLT_VARS
-from variation import GT_FIELD, MIN_NUM_GENOTYPES_FOR_POP_STAT
+from variation import GT_FIELD, MIN_NUM_GENOTYPES_FOR_POP_STAT, DP_FIELD
 
 
 def _get_sample_gts(gts, sample_i, sample_j, indi_cache):
@@ -250,9 +251,103 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None,
     return dists
 
 
+def calc_gst_per_loci(variations, populations, chunk_size=None,
+                      min_num_genotypes=None):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks()
+
+    gst = numpy.array([])
+    for chunk in chunks:
+        het_exp_by_pop = []
+        allele_freqs_by_pop = []
+        for pop in populations:
+            chunk_pop = SampleFilter(pop)(chunk)[FLT_VARS]
+            allele_freq = calc_allele_freq_by_depth(chunk_pop)
+            het_exp = 1 - numpy.sum(allele_freq ** 2, axis=1)
+            het_exp_by_pop.append(het_exp)
+            allele_freqs_by_pop.append(allele_freq)
+
+        hs = numpy.sum(het_exp_by_pop, axis=0) / len(het_exp_by_pop)
+        allele_freq_averages = numpy.sum(allele_freqs_by_pop, axis=0) / len(allele_freqs_by_pop)
+        ht = 1 - numpy.sum(allele_freq_averages ** 2, axis=1)
+
+        gst_ = (ht - hs) / ht
+        gst_ = numpy.nan_to_num(gst_)
+        gst = numpy.append(gst, gst_)
+
+        # print(hs[:10])
+        # print(ht[:10])
+#         print(gst)
+    return gst
+
+
+def _calc_nei_pop_distance_by_depth(variations, populations, chunk_size=None,
+                                    min_num_genotypes=None):
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks()
+
+    pop_flts = [SampleFilter(pop) for pop in populations]
+
+    jxy = {}
+    jxx = {}
+    jyy = {}
+    for chunk in chunks:
+        for pop_i, pop_j in itertools.combinations(range(len(populations)), 2):
+            chunk_pop_i = pop_flts[pop_i](chunk)[FLT_VARS]
+            chunk_pop_j = pop_flts[pop_j](chunk)[FLT_VARS]
+
+            freq_al_i = calc_allele_freq_by_depth(chunk_pop_i)
+            freq_al_j = calc_allele_freq_by_depth(chunk_pop_j)
+
+            chunk_jxy = numpy.nansum(freq_al_i * freq_al_j)
+            chunk_jxx = numpy.nansum(freq_al_i ** 2)
+            chunk_jyy = numpy.nansum(freq_al_j ** 2)
+
+            pop_idx = pop_i, pop_j
+            if pop_idx not in jxy:
+                jxy[pop_idx] = 0
+                jxx[pop_idx] = 0
+                jyy[pop_idx] = 0
+
+            # The real Jxy is usually divided by num_snps, but it does not
+            # not matter for the calculation
+            jxy[pop_idx] += chunk_jxy
+            jxx[pop_idx] += chunk_jxx
+            jyy[pop_idx] += chunk_jyy
+            # print(freq_al_i)
+            # print(freq_al_j)
+            # print(chunk_jxy, chunk_jxx, chunk_jyy)
+
+    n_pops = len(populations)
+    dists = numpy.zeros(int((n_pops ** 2 - n_pops) / 2))
+    index = 0
+    for pop_idx in itertools.combinations(range(len(populations)), 2):
+        pjxy = jxy[pop_idx]
+        pjxx = jxx[pop_idx]
+        pjyy = jyy[pop_idx]
+
+        try:
+            nei = math.log(pjxy / math.sqrt(pjxx * pjyy))
+            if nei != 0:
+                nei = -nei
+        except ValueError:
+            nei = float('inf')
+
+        dists[index] = nei
+        index += 1
+
+    return dists
+
+
 DISTANCES = {'kosman': _calc_kosman_pairwise_distance,
              'matching': _calc_matching_pairwise_distance,
-             'nei': _calc_nei_pop_distance}
+             'nei': _calc_nei_pop_distance,
+             'nei_depth': _calc_nei_pop_distance_by_depth,
+             'gst_per_loci': calc_gst_per_loci}
 
 
 def calc_pairwise_distance(variations, chunk_size=None, method='kosman'):

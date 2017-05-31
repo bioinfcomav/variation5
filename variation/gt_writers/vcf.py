@@ -318,7 +318,6 @@ def _get_calls_per_sample(calls_data, n_sample, calls_path, num_alt, metadata,
         elif format_data_number == 'R':
             value = ",".join([str(val) for val in value if val != -1])
         elif format_data_number not in ('A', 'G', 'R', 1):
-            print(format_data_number)
             value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
                      for x in value[:format_data_number]]
             value = ','.join(value)

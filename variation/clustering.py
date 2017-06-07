@@ -50,3 +50,19 @@ def do_tree(dists, labels, method):
         return _do_tree(dists, labels, do_nj)
 
     raise ValueError("Unknown Method: {}".format(method))
+
+
+def get_subtrees(tree, dist_treshold):
+    if dist_treshold == 0:
+        yield tree
+    else:
+        root = tree.get_tree_root()
+        for node in tree.traverse():
+            distance = tree.get_distance(node, target2=root, topology_only=False)
+            if distance < dist_treshold:
+                continue
+            parent = node.up
+            parent_dist_to_root = tree.get_distance(parent, target2=root,
+                                                    topology_only=False)
+            if parent_dist_to_root < dist_treshold:
+                yield node

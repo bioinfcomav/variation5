@@ -17,6 +17,9 @@ from variation.matrix.stats import (row_value_counter_fact,
                                     counts_by_row)
 from variation.iterutils import first
 from test.test_utils import TEST_DATA_DIR
+from variation.variations.stats import calc_allele_freq_by_depth
+from variation.variations.filters import FLT_VARS, SampleFilter
+from variation.variations.distance import calc_pop_distance
 
 
 class RowValueCounterTest(unittest.TestCase):
@@ -71,6 +74,19 @@ class RowValueCounterTest(unittest.TestCase):
         gts = numpy.array(gts)
         counts = counts_by_row(gts, missing_value=-1)
         assert numpy.all(counts == [[6, 6]])
+
+    def test_count_alleles_by_freq(self):
+        h5 = VariationsH5(join(TEST_DATA_DIR, 'limon.h5'), mode='r')
+        # flt = SampleFilter(['V51'])
+        # v51 = flt(h5)[FLT_VARS]
+        chunk = first(h5.iterate_chunks())
+        freqs_by_snp = calc_allele_freq_by_depth(chunk)
+        assert numpy.all(freqs_by_snp[0] == [0, 1, 0, 0])
+
+#         a = calc_pop_distance(chunk, method='nei_depth', populations=[['V51'], ['F49']])
+#         print(a)
+
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'RowValueCounterTest.test_count_alleles']

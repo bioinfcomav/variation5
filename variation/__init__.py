@@ -17,6 +17,7 @@ QUAL_FIELD = '/variations/qual'
 DP_FIELD = '/calls/DP'
 AO_FIELD = '/calls/AO'
 RO_FIELD = '/calls/RO'
+AD_FIELD = '/calls/AD'
 CHROM_FIELD = '/variations/chrom'
 POS_FIELD = '/variations/pos'
 

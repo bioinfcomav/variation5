@@ -7,7 +7,7 @@
 # pylint: disable=C0111
 
 import unittest
-
+from os.path import join
 import numpy
 from scipy.spatial.distance import squareform
 
@@ -15,9 +15,13 @@ from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            calc_pairwise_distance,
                                            sel_samples_from_dist_mat,
                                            _matching, calc_pop_distance,
-                                           filter_dist_matrix)
-from variation.variations.vars_matrices import VariationsArrays
+                                           filter_dist_matrix,
+                                           calc_gst_per_loci)
+from variation.variations.vars_matrices import VariationsArrays, VariationsH5
 from variation.variations.stats import GT_FIELD
+from test.test_utils import TEST_DATA_DIR
+from variation.iterutils import first
+from variation import AD_FIELD
 
 
 class IndividualDistTest(unittest.TestCase):
@@ -216,6 +220,32 @@ class FilterDistTest(unittest.TestCase):
         dist = squareform(numpy.array(dist))
         assert numpy.allclose(filter_dist_matrix(dist, [0, 1]), [1])
         assert numpy.allclose(filter_dist_matrix(dist, [1, 2]), [3])
+
+
+class GstDistTest(unittest.TestCase):
+    def test_gst_basic(self):
+        ad = [[[10, 3, -1], [11, 2, -1]],
+              [[10, 0, -1], [10, 0, -1]],
+              [[10, 10, -1], [11, 11, -1]],
+              [[-1, 2, 10], [-1, 10, 2]]]
+        snps = VariationsArrays()
+        snps.samples = [1, 2]
+        populations = [[1], [2]]
+        snps[AD_FIELD] = numpy.array(ad)
+        dist = calc_gst_per_loci(snps, populations)
+
+        expected = numpy.array([0.00952381, 0, 0, 0.44444444])
+        numpy.testing.assert_almost_equal(dist, expected)
+
+    def test_gst(self):
+        h5 = VariationsH5(join(TEST_DATA_DIR, 'limon.h5'), mode='r')
+        # flt = SampleFilter(['V51'])
+        # v51 = flt(h5)[FLT_VARS]
+        chunk = first(h5.iterate_chunks())
+
+        dists = calc_gst_per_loci(chunk, populations=[['V51'], ['F49']])
+        # print(dists)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise']

@@ -14,7 +14,7 @@ from allel.model.ndarray import GenotypeArray
 from variation import (MISSING_VALUES, SNPS_PER_CHUNK, DEF_MIN_DEPTH,
                        MISSING_INT, GT_FIELD, ALT_FIELD, DP_FIELD,
                        GQ_FIELD, CHROM_FIELD, POS_FIELD, RO_FIELD, AO_FIELD,
-                       MIN_NUM_GENOTYPES_FOR_POP_STAT)
+                       MIN_NUM_GENOTYPES_FOR_POP_STAT, AD_FIELD)
 from variation.matrix.stats import (counts_by_row, counts_and_allels_by_row,
                                     row_value_counter_fact)
 from variation.matrix.methods import (is_missing, calc_min_max,
@@ -708,6 +708,15 @@ def calc_allele_freq(variations, alleles=None,
     total_counts = numpy.sum(allele_counts, axis=1)
     allele_freq = allele_counts / total_counts[:, None]
     _mask_stats_with_few_samples(allele_freq, variations, min_num_genotypes)
+    return allele_freq
+
+
+def calc_allele_freq_by_depth(chunk):
+    allele_counts = chunk[AD_FIELD]
+    allele_counts[allele_counts == -1] = 0
+    allele_counts = numpy.sum(allele_counts, axis=1)
+    total_counts = numpy.sum(allele_counts, axis=1)
+    allele_freq = allele_counts / total_counts[:, None]
     return allele_freq
 
 

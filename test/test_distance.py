@@ -228,12 +228,12 @@ class GstDistTest(unittest.TestCase):
               [[10, 0, -1], [10, 0, -1]],
               [[10, 10, -1], [11, 11, -1]],
               [[-1, 2, 10], [-1, 10, 2]]]
+
         snps = VariationsArrays()
         snps.samples = [1, 2]
         populations = [[1], [2]]
         snps[AD_FIELD] = numpy.array(ad)
         dist = calc_gst_per_loci(snps, populations)
-
         expected = numpy.array([0.00952381, 0, 0, 0.44444444])
         numpy.testing.assert_almost_equal(dist, expected)
 
@@ -244,7 +244,7 @@ class GstDistTest(unittest.TestCase):
         chunk = first(h5.iterate_chunks())
 
         dists = calc_gst_per_loci(chunk, populations=[['V51'], ['F49']])
-        # print(dists)
+        assert dists[0] == 0
 
 
 if __name__ == "__main__":

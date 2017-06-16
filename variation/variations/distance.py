@@ -8,9 +8,9 @@ from scipy.spatial.distance import squareform
 
 from variation.matrix.methods import is_missing
 from variation.variations.stats import (calc_allele_freq,
-    calc_allele_freq_by_depth)
+                                        calc_allele_freq_by_depth)
 from variation.variations.filters import SampleFilter, FLT_VARS
-from variation import GT_FIELD, MIN_NUM_GENOTYPES_FOR_POP_STAT, DP_FIELD
+from variation import GT_FIELD, MIN_NUM_GENOTYPES_FOR_POP_STAT
 
 
 def _get_sample_gts(gts, sample_i, sample_j, indi_cache):

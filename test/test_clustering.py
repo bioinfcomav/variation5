@@ -5,12 +5,16 @@
 # Missing docstring
 # pylint: disable=C0111
 
+from tempfile import NamedTemporaryFile
 import unittest
 
 from ete3 import Tree
 
 
-from variation.clustering import (do_tree, get_subtrees)
+from variation.clustering import (do_tree, get_subtrees, annotate_tree,
+                                  write_tree_to_nexus_file, FigtreeConfig)
+
+
 
 
 class ClusteringTest(unittest.TestCase):
@@ -73,9 +77,49 @@ class ClusteringTest(unittest.TestCase):
                   for node in get_subtrees(tree, dist_treshold=4)}
         assert leaves == {frozenset({'R'})}
 
-        leaves = {frozenset(node.get_leaf_names())
-                  for node in get_subtrees(tree, dist_treshold=2)}
-        assert leaves == {frozenset({'R'}), frozenset({'O'})}
+    def test_draw_figtree(self):
+        dists = [1.45, 1.51, 1.57, 2.98, 2.94, 3.04, 7.51, 7.55, 7.39, 7.10]
+        labels = ["H", "C", "G", "O", "R"]
+        tree = do_tree(dists, labels, method="nj")
+        leaf_annotations = {"R": {"group1": "A", "group2": "C", "group3": "A"},
+                            "O": {"group1": "A", "group2": "A", "group3": "A"},
+                            "H": {"group1": "B", "group2": "B", "group3": "B"},
+                            "C": {"group1": "B", "group2": "A", "group3": "B"},
+                            "G": {"group1": "C", "group2": "D", "group3": "B"}
+                            }
+        annotate_tree(tree, leaf_annotations)
+        figtree_config = FigtreeConfig(branch_color_attribute="group1",
+                                       leaf_label_color_attribute="group2",
+                                       )
+        with NamedTemporaryFile(mode="w") as test_fhand:
+            write_tree_to_nexus_file(tree, test_fhand,
+                                     figtree_config=figtree_config)
+            test_fhand.flush()
+            test_string = open(test_fhand.name, "r").read()
+            tree_string = test_string.split(";")[5]
+            leaves = tree_string.split("],")
+            assert "H:0.71[&" in leaves[0]
+            assert "group1=B" in leaves[0]
+            assert "G:0.755[&" in leaves[2]
+            assert "group1=C" in leaves[2]
+            assert "set appearance.branchColorAttribute=\"group1\";" in test_string
+            assert "set tipLabels.colorAttribute=\"group2\";" in test_string
+
+        figtree_config = FigtreeConfig(branch_color_attribute="group1")
+        chosen_features = ["group1", "group2"]
+        with NamedTemporaryFile(mode="w") as test_fhand:
+            write_tree_to_nexus_file(tree, test_fhand,
+                                     figtree_config=figtree_config,
+                                     chosen_features=chosen_features)
+            test_fhand.flush()
+            test_string = open(test_fhand.name, "r").read()
+            tree_string = test_string.split(";")[5]
+            leaves = tree_string.split("],")
+            assert "group1=A" in leaves[2]
+            assert "set appearance.branchColorAttribute=\"group1\";" in test_string
+            assert "set tipLabels.colorAttribute=\"group2\";" not in test_string
+            assert "group3" not in leaves[0]
+            assert "group3" not in leaves[2]
 
 
 if __name__ == "__main__":

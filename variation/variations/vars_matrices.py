@@ -129,7 +129,6 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
                 dtype = numpy.dtype((bytes, str_len))
             # extra dimension
             number_dims = metadata[basepath][field].get('Number', '')
-
             try:
                 if path == '/calls/GT':
                     number_dims = ploidy

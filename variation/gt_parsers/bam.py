@@ -50,8 +50,17 @@ def _filter_samples_by_coverage(loci, min_sample_coverage,
         yield locus
 
 
+def _generate_regions(references, reference_lens, step):
+    for reference in references:
+        for location in range(0, reference_lens[reference], step):
+            yield reference, location, location + 1
+
+
 def _parse_bams(bam_fpaths, kmer_size, filter_out_no_kmer_columns=True,
-                min_sample_coverage=0, min_num_samples=0):
+                min_sample_coverage=0, min_num_samples=0, step=1):
+    if step is None:
+        step = 1
+
     sams = []
     references = None
     samples = set()
@@ -59,9 +68,15 @@ def _parse_bams(bam_fpaths, kmer_size, filter_out_no_kmer_columns=True,
         samfile = pysam.AlignmentFile(bam_fpath, 'rb')
 
         this_references = samfile.references
+
         if references is None:
             references = this_references
             reference_index = {reference: idx for idx, reference in enumerate(references)}
+            reference_lens = {ref['SN']: ref['LN'] for ref in samfile.header['SQ']}
+            if step > 1:
+                regions = _generate_regions(references, reference_lens, step)
+            else:
+                regions = None
         else:
             assert references == this_references
 
@@ -69,7 +84,8 @@ def _parse_bams(bam_fpaths, kmer_size, filter_out_no_kmer_columns=True,
         samples.update(read_group_samples.values())
         loci = _parse_bam(samfile, read_group_samples, kmer_size,
                           filter_out_no_kmer_columns=filter_out_no_kmer_columns,
-                          reference_index=reference_index)
+                          reference_index=reference_index,
+                          reference_lens=reference_lens, regions=regions)
         sams.append({'fpath': bam_fpath,
                      'samfile': samfile,
                      'read_groups': read_group_samples,
@@ -86,43 +102,51 @@ def _parse_bams(bam_fpaths, kmer_size, filter_out_no_kmer_columns=True,
                                            filter_out_no_kmer_columns,
                                            min_num_samples=min_num_samples)
 
-    return {'loci': loci, 'references': references, 'samples': samples}
+    assert not set(references).difference(reference_lens.keys())
+    return {'loci': loci, 'references': references, 'samples': samples,
+            'reference_lens': reference_lens}
 
 
 def _parse_bam(samfile, read_group_samples, kmer_size,
-               reference_index, filter_out_no_kmer_columns=True):
+               reference_index, reference_lens, regions=None,
+               filter_out_no_kmer_columns=True):
 
-    for pileup_column in samfile.pileup():
-        ref_seq_name = pileup_column.reference_name
-        position = pileup_column.pos
-        coverage = pileup_column.n
+    if regions is None:
+        regions = [(None, None, None)]
 
-        kmer_counts = defaultdict(Counter)
-        at_least_one_kmer = False
-        for pileup_read in pileup_column.pileups:
-            if not pileup_read.is_del and not pileup_read.is_refskip:
-                start = pileup_read.query_position
-                end = start + kmer_size
-                kmer = pileup_read.alignment.query_sequence[start:end]
+    for contig, start, stop in regions:
+        for pileup_column in samfile.pileup(contig=contig, start=start,
+                                            stop=stop, truncate=True):
+            ref_seq_name = pileup_column.reference_name
+            position = pileup_column.pos
+            coverage = pileup_column.n
 
-                if len(kmer) < kmer_size:
-                    continue
+            kmer_counts = defaultdict(Counter)
+            at_least_one_kmer = False
+            for pileup_read in pileup_column.pileups:
+                if not pileup_read.is_del and not pileup_read.is_refskip:
+                    start = pileup_read.query_position
+                    end = start + kmer_size
+                    kmer = pileup_read.alignment.query_sequence[start:end]
 
-                try:
-                    read_group = pileup_read.alignment.get_tag('RG')
-                except KeyError:
-                    read_group = None
-                sample = read_group_samples[read_group]
+                    if len(kmer) < kmer_size:
+                        continue
 
-                kmer_counts[sample][kmer] += 1
-                at_least_one_kmer = True
+                    try:
+                        read_group = pileup_read.alignment.get_tag('RG')
+                    except KeyError:
+                        read_group = None
+                    sample = read_group_samples[read_group]
 
-        if filter_out_no_kmer_columns and not at_least_one_kmer:
-            continue
+                    kmer_counts[sample][kmer] += 1
+                    at_least_one_kmer = True
 
-        yield {'location': (reference_index[ref_seq_name], position),
-               'coverage': coverage,
-               'kmer_counts': kmer_counts}
+            if filter_out_no_kmer_columns and not at_least_one_kmer:
+                continue
+
+            yield {'location': (reference_index[ref_seq_name], position),
+                   'coverage': coverage,
+                   'kmer_counts': kmer_counts}
 
 
 def _allele_distance(allele1, allele2):
@@ -235,14 +259,15 @@ class BAMParser():
                  min_coverage_to_be_template_for_fix=3,
                  low_freq_allele_filter_pvalue=0.05,
                  min_num_samples=0, max_field_lens=None,
-                 max_field_str_lens=None):
+                 max_field_str_lens=None, step=1):
         self.ploidy = ploidy
         self.kmer_size = kmer_size
 
         result = _parse_bams(bam_fpaths=bam_fpaths, kmer_size=kmer_size,
                              filter_out_no_kmer_columns=True,
                              min_sample_coverage=min_sample_coverage,
-                             min_num_samples=min_num_samples)
+                             min_num_samples=min_num_samples,
+                             step=step)
         loci = _infer_alleles(result['loci'], ploidy=ploidy,
                               edit_distance_fix=edit_distance_fix,
                               min_coverage_to_be_template_for_fix=min_coverage_to_be_template_for_fix,

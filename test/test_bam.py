@@ -13,6 +13,7 @@ from variation.variations.vars_matrices import VariationsArrays
 from variation.gt_parsers.bam import BAMParser
 from variation.gt_parsers.bam import _parse_bams as parse_bams
 from variation.gt_parsers.bam import _infer_alleles as infer_alleles
+from variation.gt_parsers.bam import _generate_regions as generate_regions
 from variation import GT_FIELD, CHROM_FIELD, POS_FIELD, AD_FIELD, REF_FIELD
 
 
@@ -90,6 +91,34 @@ class TestBamParsing(unittest.TestCase):
         assert locus['location'] == (0, 6)
         assert locus['coverage'] == 2
         assert locus['kmer_counts']['sample1']['TTAG'] == 2
+
+    def test_generate_regions(self):
+        regions = generate_regions(references=['ref'],
+                                   reference_lens={'ref': 3},
+                                   step=1)
+        assert list(regions) == [('ref', 0, 1), ('ref', 1, 2), ('ref', 2, 3)]
+
+        regions = generate_regions(references=['ref1', 'ref2'],
+                                   reference_lens={'ref1': 2, 'ref2': 2},
+                                   step=1)
+        assert list(regions) == [('ref1', 0, 1), ('ref1', 1, 2),
+                                 ('ref2', 0, 1), ('ref2', 1, 2)]
+
+        regions = generate_regions(references=['ref1', 'ref2'],
+                                   reference_lens={'ref1': 4, 'ref2': 4},
+                                   step=2)
+        assert list(regions) == [('ref1', 0, 1), ('ref1', 2, 3),
+                                 ('ref2', 0, 1), ('ref2', 2, 3)]
+
+    def test_step(self):
+        bam_fpath = join(TEST_DATA_DIR, 'example.rg.bam')
+
+        loci = list(parse_bams([bam_fpath], kmer_size=4, step=1)['loci'])
+        assert len(loci) == 24
+
+        loci = list(parse_bams([bam_fpath], kmer_size=4, step=2)['loci'])
+        assert len(loci) == 12
+
 
 
 class TestInferAlleles(unittest.TestCase):

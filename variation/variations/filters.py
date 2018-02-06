@@ -222,9 +222,9 @@ class NoMissingGTsFilter(_BaseFilter):
     def _select_rows(self, variations):
         if variations.ploidy != 2:
             raise NotImplementedError('not tested for polyploids')
-        selected_rows = numpy.all(variations[GT_FIELD] != MISSING_INT,
-                                  axis=2)
-        selected_rows = numpy.all(selected_rows, axis=1)
+        non_missing_gts = numpy.all(variations[GT_FIELD] != MISSING_INT,
+                                    axis=2)
+        selected_rows = numpy.all(non_missing_gts, axis=1)
 
         n_kept = numpy.count_nonzero(selected_rows)
         tot = selected_rows.shape[0]
@@ -255,6 +255,33 @@ class NoMissingGTsFilter(_BaseFilter):
                 result[DISCARDED_VARS] = discarded_vars
 
         return result
+
+
+class NoMissingGTsOrHetFilter(NoMissingGTsFilter):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def _select_rows(self, variations):
+        if variations.ploidy != 2:
+            raise NotImplementedError('not tested for polyploids')
+
+        genotypes = variations[GT_FIELD]
+        # Some genotype missing
+        non_missing_gts = numpy.all(genotypes != MISSING_INT,
+                                    axis=2)
+        selected_rows1 = numpy.all(non_missing_gts, axis=1)
+        # Some heterozygote
+        is_hom_geno = genotypes[..., 0] == genotypes[..., 1]
+        selected_rows2 = numpy.all(is_hom_geno, axis=1)
+
+        selected_rows = numpy.logical_and(selected_rows1, selected_rows2)
+
+        n_kept = numpy.count_nonzero(selected_rows)
+        tot = selected_rows.shape[0]
+        n_filtered_out = tot - n_kept
+        stats = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out, TOT: tot}
+
+        return selected_rows, stats
 
 
 class MafFilter(_BaseFilter):

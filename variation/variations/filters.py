@@ -215,6 +215,48 @@ class MinCalledGTsFilter(_BaseFilter):
         return calc_called_gt(variations, rates=self.rates)
 
 
+class NoMissingGTsFilter(_BaseFilter):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def _select_rows(self, variations):
+        if variations.ploidy != 2:
+            raise NotImplementedError('not tested for polyploids')
+        selected_rows = numpy.all(variations[GT_FIELD] != MISSING_INT,
+                                  axis=2)
+        selected_rows = numpy.all(selected_rows, axis=1)
+
+        n_kept = numpy.count_nonzero(selected_rows)
+        tot = selected_rows.shape[0]
+        n_filtered_out = tot - n_kept
+        stats = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out, TOT: tot}
+
+        return selected_rows, stats
+
+    def __call__(self, variations):
+        if variations.num_variations == 0:
+            raise ValueError('No SNPs to filter')
+
+        if self.report_selection or self.do_filtering:
+            selected_rows, flt_stats = self._select_rows(variations)
+
+        result = {}
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
+
+        if self.do_filtering:
+            flt_vars = variations.get_chunk(selected_rows)
+            result[FLT_VARS] = flt_vars
+            result[FLT_STATS] = flt_stats
+
+            if self.return_discarded:
+                discarded_rows = numpy.logical_not(selected_rows)
+                discarded_vars = variations.get_chunk(discarded_rows)
+                result[DISCARDED_VARS] = discarded_vars
+
+        return result
+
+
 class MafFilter(_BaseFilter):
     def __init__(self, min_maf=None, max_maf=None,
                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,

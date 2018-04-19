@@ -31,6 +31,9 @@ class VcfTest(unittest.TestCase):
         metadata2 = snps2.metadata
         assert '/calls/HQ' in metadata.keys()
         assert '/variations/qual' not in metadata2.keys()
+        assert vcf.max_field_str_lens == {'FILTER': 0, 'alt': 5, 'ref': 4,
+                                          'chrom': 2, 'id': 10, 'INFO': {}}
+        assert vcf.max_field_str_lens == vcf2.max_field_str_lens
         vcf_fhand.close()
         vcf_fhand2.close()
 

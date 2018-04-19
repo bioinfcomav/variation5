@@ -314,6 +314,9 @@ class VCFLineParser:
         if max_field_str_lens['chrom'] < len(chrom):
             max_field_str_lens['chrom'] = len(chrom)
 
+        if max_field_str_lens['ref'] < len(ref):
+            max_field_str_lens['ref'] = len(ref)
+
         calls = items[9:]
         pos = int(pos)
         if id_ == b'.':

@@ -2,7 +2,7 @@ from itertools import chain, islice
 import re
 import subprocess
 from multiprocessing import Pool
-
+import math
 
 from variation import (MISSING_VALUES, SNPS_PER_CHUNK)
 from variation.utils.compressed_queue import CCache
@@ -87,8 +87,13 @@ class _VarParserWithPreRead():
 
     @property
     def variations(self):
-        snps = chain(self._variations_cache.items,
-                     self._variations(self.n_threads))
+        if (self.pre_read_max_size is not None and
+            math.isinf(self.pre_read_max_size) and
+            (not self.max_n_vars or math.isinf(self.max_n_vars))):
+            snps = self._variations_cache.items
+        else:
+            snps = chain(self._variations_cache.items,
+                         self._variations(self.n_threads))
         if self.max_n_vars:
             snps = islice(snps, self.max_n_vars)
         return snps

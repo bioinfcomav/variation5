@@ -3,6 +3,7 @@ from io import BytesIO
 import gzip
 import pickle
 import sys
+import math
 
 
 class CCache():
@@ -19,6 +20,8 @@ class CCache():
     def put_iterable(self, iterable, max_items=0, max_size=0):
         for i, item in enumerate(iterable):
             self.put(item)
+            if math.isinf(max_items) or math.isinf(max_size):
+                continue
             if max_items and i + 1 >= max_items:
                 break
             if max_size and sys.getsizeof(self._fhand) > max_size:

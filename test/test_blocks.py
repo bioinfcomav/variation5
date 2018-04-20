@@ -8,14 +8,14 @@
 
 import unittest
 import io
+import math
 
 import numpy
 
 from variation.variations.vars_matrices import VariationsArrays
 from variation.gt_parsers.vcf import VCFParser
 from variation.variations.blocks import (BlocksVariationGrouper,
-                                         ALIGNED_ALLELES_FIELD_NAME,
-                                         NUMBER_OF_SNPS_FIELD_NAME)
+                                         ALIGNED_ALLELES_FIELD_NAME)
 from variation import (GT_FIELD, REF_FIELD, ALT_FIELD, CHROM_FIELD, POS_FIELD)
 
 VCF1 = b'''##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -45,7 +45,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 
         var_grouper = BlocksVariationGrouper(variations, blocks,
                                              remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=1000)
+                                             pre_read_max_size=math.inf)
 
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
@@ -63,7 +63,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 
         var_grouper = BlocksVariationGrouper(variations, blocks,
                                              remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=1000)
+                                             pre_read_max_size=math.inf)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'T']
@@ -84,7 +84,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
                                              remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=1000)
+                                             pre_read_max_size=math.inf)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'T']
@@ -105,7 +105,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
                                              remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=1000)
+                                             pre_read_max_size=math.inf)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'GT']
@@ -127,7 +127,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
                                              remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=1000)
+                                             pre_read_max_size=math.inf)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'GAT']
@@ -159,7 +159,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
                                              remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=1000)
+                                             pre_read_max_size=math.inf)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert list(grouped_vars[REF_FIELD]) == [b'GT', b'G', b'G', b'TGT']

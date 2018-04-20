@@ -12,6 +12,7 @@ import numpy
 from variation.variations.vars_matrices import VariationsArrays
 from variation import GT_FIELD
 from variation.variations.pop_stats import (calc_number_of_alleles,
+                                            calc_number_of_private_alleles,
                                             calc_pop_stats)
 
 
@@ -53,6 +54,21 @@ class PopStatsTest(unittest.TestCase):
         varis.samples = [1, 2, 3, 4, 5]
         pops = {1: [1, 2], 2: [3, 4, 5]}
         expected = {1: [0, 0, 0, 0], 2: [1, 1, 2, 0]}
+        self._check_function(stat_funct, varis, pops, expected)
+
+    def xtest_num_private_alleles(self):
+        stat_funct = calc_number_of_private_alleles
+
+        gts = numpy.array([[[0], [0], [0], [0], [-1]],
+                           [[0], [0], [1], [1], [-1]],
+                           [[0], [2], [0], [1], [-1]],
+                           [[-1], [-1], [-1], [-1], [-1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2], 2: [3, 4, 5]}
+        expected = {1: [0, 0, 1, 0], 2: [0, 1, 1, 0]}
+        self._check_function(stat_funct, varis, pops, expected)
 
 
 if __name__ == "__main__":

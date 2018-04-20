@@ -4,28 +4,10 @@ import numpy
 from variation.variations.filters import SampleFilter, FLT_VARS
 from variation import GT_FIELD, SNPS_PER_CHUNK
 
-
-def calc_number_of_alleles_old(variations, populations, chunk_size=SNPS_PER_CHUNK):
-    pop_sample_filters = {pop_id: SampleFilter(pop_samples) for pop_id, pop_samples in populations.items()}
-
-    chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
-                                       chunk_size=chunk_size)
-    num_alleles_per_snp = {pop_id: None for pop_id in populations}
-    for chunk in chunks:
-        for pop_id, pop_sample_filter in pop_sample_filters.items():
-            vars_for_pop = pop_sample_filter(chunk)[FLT_VARS]
-            num_of_allele_counts_per_allele_and_snp = vars_for_pop.allele_count
-            chunk_num_alleles_per_snp = numpy.sum(num_of_allele_counts_per_allele_and_snp != 0, axis=1)
-            if num_alleles_per_snp[pop_id] is None:
-                num_alleles_per_snp[pop_id] = chunk_num_alleles_per_snp
-            else:
-                num_alleles_per_snp[pop_id] = numpy.append(num_alleles_per_snp[pop_id],
-                                                           chunk_num_alleles_per_snp)
-    return num_alleles_per_snp
-
-
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],
-                                                     'stat_name': 'number_of_alleles'}}
+                                                     'stat_name': 'number_of_alleles'},
+                          'calc_number_of_private_alleles': {'required_fields': [GT_FIELD],
+                                                             'stat_name': 'number_of_private_alleles'}}
 
 
 def calc_number_of_alleles(variations, populations=None, pop_sample_filters=None):
@@ -36,9 +18,16 @@ def calc_number_of_alleles(variations, populations=None, pop_sample_filters=None
     for pop_id, pop_sample_filter in pop_sample_filters.items():
         vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
         num_of_allele_counts_per_allele_and_snp = vars_for_pop.allele_count
+        if num_of_allele_counts_per_allele_and_snp is None:
+            num_of_allele_counts_per_allele_and_snp = numpy.zeros((variations.num_variations, 1),
+                                                                  dtype=int)
         chunk_num_alleles_per_snp = numpy.sum(num_of_allele_counts_per_allele_and_snp != 0, axis=1)
         num_alleles_per_snp[pop_id] = chunk_num_alleles_per_snp
     return num_alleles_per_snp
+
+
+def wip_calc_number_of_private_alleles(variations, populations=None, pop_sample_filters=None):
+    pass
 
 
 def calc_pop_stats(variations, populations, pop_stat_functions,

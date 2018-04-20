@@ -56,7 +56,19 @@ class PopStatsTest(unittest.TestCase):
         expected = {1: [0, 0, 0, 0], 2: [1, 1, 2, 0]}
         self._check_function(stat_funct, varis, pops, expected)
 
-    def xtest_num_private_alleles(self):
+        # only one pop
+        gts = numpy.array([[[1], [-1], [0], [0], [-1]],
+                           [[-1], [-1], [1], [1], [-1]],
+                           [[-1], [-1], [0], [1], [-1]],
+                           [[-1], [-1], [-1], [-1], [-1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2]}
+        expected = {1: [1, 0, 0, 0]}
+        self._check_function(stat_funct, varis, pops, expected)
+
+    def test_num_private_alleles(self):
         stat_funct = calc_number_of_private_alleles
 
         gts = numpy.array([[[0], [0], [0], [0], [-1]],
@@ -67,7 +79,32 @@ class PopStatsTest(unittest.TestCase):
         varis[GT_FIELD] = gts
         varis.samples = [1, 2, 3, 4, 5]
         pops = {1: [1, 2], 2: [3, 4, 5]}
-        expected = {1: [0, 0, 1, 0], 2: [0, 1, 1, 0]}
+        expected = {1: [0, 1, 1, 0], 2: [0, 1, 1, 0]}
+
+        self._check_function(stat_funct, varis, pops, expected)
+
+        # No missing alleles
+        gts = numpy.array([[[0], [0], [0], [0], [1]],
+                           [[0], [0], [1], [1], [1]],
+                           [[0], [2], [0], [1], [1]],
+                           [[1], [1], [0], [0], [2]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2], 2: [3, 4, 5]}
+        expected = {1: [0, 1, 1, 1], 2: [1, 1, 1, 2]}
+        self._check_function(stat_funct, varis, pops, expected)
+
+        # all missing
+        gts = numpy.array([[[0], [0], [0], [-1], [-1]],
+                           [[0], [0], [1], [-1], [-1]],
+                           [[0], [2], [-1], [-1], [-1]],
+                           [[-1], [-1], [-1], [-1], [-1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2], 2: [3, 4, 5]}
+        expected = {1: [0, 1, 2, 0], 2: [0, 1, 0, 0]}
         self._check_function(stat_funct, varis, pops, expected)
 
 

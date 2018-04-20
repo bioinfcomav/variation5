@@ -411,5 +411,5 @@ class GenomeChunkTest(unittest.TestCase):
         # exact or close to
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'GenomeChunkTest']
+    # import sys; sys.argv = ['', 'GenomeChunkTest']
     unittest.main()

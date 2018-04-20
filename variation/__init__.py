@@ -20,6 +20,7 @@ RO_FIELD = '/calls/RO'
 AD_FIELD = '/calls/AD'
 CHROM_FIELD = '/variations/chrom'
 POS_FIELD = '/variations/pos'
+INFO_FIELD = '/variations/info'
 
 
 class _MissingValues():

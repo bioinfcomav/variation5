@@ -129,6 +129,7 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
                 dtype = numpy.dtype((bytes, str_len))
             # extra dimension
             number_dims = metadata[basepath][field].get('Number', '')
+
             try:
                 if path == '/calls/GT':
                     number_dims = ploidy
@@ -153,6 +154,7 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
                         raise RuntimeError(msg)
                     log['undefined_fields'].append(path)
                     continue
+
             # shape
             if basepath == 'VARIATIONS':
                 if field == 'alt':
@@ -179,7 +181,6 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
         fields = fields.difference(ignored_fields)
     if kept_fields:
         fields = fields.intersection(kept_fields)
-
     structure = {fld: struct
                  for fld, struct in structure.items() if fld in fields}
     return structure

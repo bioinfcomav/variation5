@@ -54,7 +54,60 @@ def _detect_fields_in_vcf(metadata, fields):
     return check_fields
 
 
-class VCFParser():
+class _VarParserWithPreRead():
+
+    def __init__(self, pre_read_max_size=None, max_n_vars=None):
+        self.pre_read_max_size = pre_read_max_size
+        self.max_n_vars = max_n_vars
+        self._variations_cache = CCache()
+        self._read_snps_in_compressed_cache()
+
+    @property
+    def max_field_lens(self):
+        if self.n_threads is not None:
+            msg = 'We do not know how to share dict between processes'
+            raise NotImplementedError(msg)
+        return self._max_field_lens
+
+    @property
+    def max_field_str_lens(self):
+        if self.n_threads is not None:
+            msg = 'We do not know how to share dict between processes'
+            raise NotImplementedError(msg)
+        return self._max_field_str_lens
+
+    def _read_snps_in_compressed_cache(self):
+        if not self.pre_read_max_size:
+            return
+
+        snps = self._variations_for_cache()
+        # we store some snps in the cache
+        self._variations_cache.put_iterable(snps,
+                                            max_size=self.pre_read_max_size)
+
+    @property
+    def variations(self):
+        snps = chain(self._variations_cache.items,
+                     self._variations(self.n_threads))
+        if self.max_n_vars:
+            snps = islice(snps, self.max_n_vars)
+        return snps
+
+    def _variations_for_cache(self):
+        parser_args = {'max_field_lens': self._max_field_lens,
+                       'max_field_str_lens': self._max_field_str_lens,
+                       'ignored_fields': self.ignored_fields,
+                       'kept_fields': self.kept_fields,
+                       'metadata': self.metadata,
+                       'empty_gt': self._empty_gt,
+                       }
+        line_parser = VCFLineParser(**parser_args)
+        for line in self._fhand:
+            snp = line_parser(line)
+            yield snp
+
+
+class VCFParser(_VarParserWithPreRead):
 
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
@@ -66,7 +119,6 @@ class VCFParser():
             raise ValueError(msg)
         self._fhand = fhand
         self.n_threads = n_threads
-        self.max_n_vars = max_n_vars
         self.metadata = None
         self.vcf_format = None
         self.ploidy = None
@@ -100,23 +152,8 @@ class VCFParser():
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
-        self.pre_read_max_size = pre_read_max_size
-        self._variations_cache = CCache()
-        self._read_snps_in_compressed_cache()
-
-    @property
-    def max_field_lens(self):
-        if self.n_threads is not None:
-            msg = 'We do not know how to share dict between processes'
-            raise NotImplementedError(msg)
-        return self._max_field_lens
-
-    @property
-    def max_field_str_lens(self):
-        if self.n_threads is not None:
-            msg = 'We do not know how to share dict between processes'
-            raise NotImplementedError(msg)
-        return self._max_field_str_lens
+        super().__init__(pre_read_max_size=pre_read_max_size,
+                         max_n_vars=max_n_vars)
 
     def _init_max_field_lens(self):
         meta = self.metadata
@@ -131,15 +168,6 @@ class VCFParser():
                 self._max_field_lens[section][field] = 0
                 if 'str' in meta_field['dtype']:
                     self._max_field_str_lens[section][field] = 0
-
-    def _read_snps_in_compressed_cache(self):
-        if not self.pre_read_max_size:
-            return
-
-        snps = self._variations_for_cache()
-        # we store some snps in the cache
-        self._variations_cache.put_iterable(snps,
-                                            max_size=self.pre_read_max_size)
 
     def _determine_ploidy(self):
         read_lines = []
@@ -237,27 +265,6 @@ class VCFParser():
                                                     self.ignored_fields)
 
         self.metadata = metadata
-
-    @property
-    def variations(self):
-        snps = chain(self._variations_cache.items,
-                     self._variations(self.n_threads))
-        if self.max_n_vars:
-            snps = islice(snps, self.max_n_vars)
-        return snps
-
-    def _variations_for_cache(self):
-        parser_args = {'max_field_lens': self._max_field_lens,
-                       'max_field_str_lens': self._max_field_str_lens,
-                       'ignored_fields': self.ignored_fields,
-                       'kept_fields': self.kept_fields,
-                       'metadata': self.metadata,
-                       'empty_gt': self._empty_gt,
-                       }
-        line_parser = VCFLineParser(**parser_args)
-        for line in self._fhand:
-            snp = line_parser(line)
-            yield snp
 
     def _variations(self, n_threads):
         lines_chunks = group_items(self._fhand, SNPS_PER_CHUNK)

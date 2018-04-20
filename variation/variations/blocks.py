@@ -6,6 +6,8 @@ import numpy
 from variation import REF_FIELD, ALT_FIELD, POS_FIELD, GT_FIELD, DEF_METADATA
 from variation.variations import stats
 from variation.variations.filters import NoMissingGTsOrHetFilter, FLT_VARS
+from variation.gt_parsers.vcf import _VarParserWithPreRead
+from Cython.Compiler.ExprNodes import NoneNode
 
 ALIGNED_ALLELES_FIELD_NAME = b'AA'
 NUMBER_OF_SNPS_FIELD_NAME = b'SN'
@@ -66,24 +68,32 @@ def _create_new_alleles_and_genotypes(variations):
             'all_alleles_aligned': info_alleles}
 
 
-class BlocksVariationGrouper:
+class BlocksVariationGrouper(_VarParserWithPreRead):
 
     def __init__(self, variations, blocks, min_num_vars_in_block=1,
                  remove_snps_with_hets_or_missing=False,
-                 max_field_lens=None, max_field_str_lens=None):
+                 pre_read_max_size=None, max_field_lens=None,
+                 max_field_str_lens=None, max_n_vars=None,
+                 n_threads=None):
+
+        if n_threads is not None:
+            raise NotImplemented('Parallelization is not implemented')
+        self.n_threads = n_threads
+
+        self.pre_read_max_size = pre_read_max_size
 
         if max_field_lens is None:
-            self.max_field_lens = {'alt': 0,
-                                   'INFO': {ALIGNED_ALLELES_FIELD_NAME: 0}}
+            self._max_field_lens = {'alt': 0,
+                                    'INFO': {ALIGNED_ALLELES_FIELD_NAME: 0}}
         else:
-            self.max_field_lens = max_field_lens
+            self._max_field_lens = max_field_lens
         if max_field_str_lens is None:
-            self.max_field_str_lens = {'alt': 0,
-                                       'chrom': 1,
-                                       'ref': 1,
-                                       'INFO': {ALIGNED_ALLELES_FIELD_NAME: 1}}
+            self._max_field_str_lens = {'alt': 0,
+                                        'chrom': 1,
+                                        'ref': 1,
+                                        'INFO': {ALIGNED_ALLELES_FIELD_NAME: 1}}
         else:
-            self.max_field_str_lens = max_field_str_lens
+            self._max_field_str_lens = max_field_str_lens
 
         metadata = copy.deepcopy(DEF_METADATA)
         metadata['INFO'] = {NUMBER_OF_SNPS_FIELD_NAME:
@@ -97,9 +107,11 @@ class BlocksVariationGrouper:
         self.metadata = metadata
 
         self._variations_to_group = variations
-        self.blocks = blocks
+        self.blocks = iter(blocks)
         self.min_num_vars_in_block = min_num_vars_in_block
         self.remove_snps_with_hets_or_missing = remove_snps_with_hets_or_missing
+        super().__init__(pre_read_max_size=pre_read_max_size,
+                         max_n_vars=max_n_vars)
 
     @property
     def samples(self):
@@ -110,15 +122,26 @@ class BlocksVariationGrouper:
         return self._variations_to_group.ploidy
 
     @property
-    def variations(self):
+    def max_field_lens(self):
+        return self._max_field_lens
+
+    @property
+    def max_field_str_lens(self):
+        return self._max_field_str_lens
+
+    def _variations_for_cache(self):
+        for snp in self._variations():
+            yield snp
+
+    def _variations(self, n_threads=None):
         variations = self._variations_to_group
         index = variations.pos_index
 
         if self.remove_snps_with_hets_or_missing:
             flt = NoMissingGTsOrHetFilter()
 
-        max_field_lens = self.max_field_lens
-        max_field_str_lens = self.max_field_str_lens
+        max_field_lens = self._max_field_lens
+        max_field_str_lens = self._max_field_str_lens
 
         for block in self.blocks:
             chrom = block['chrom']

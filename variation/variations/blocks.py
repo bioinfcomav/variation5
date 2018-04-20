@@ -91,6 +91,7 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
             self._max_field_str_lens = {'alt': 0,
                                         'chrom': 1,
                                         'ref': 1,
+                                        'id': 0,
                                         'INFO': {ALIGNED_ALLELES_FIELD_NAME: 1}}
         else:
             self._max_field_str_lens = max_field_str_lens
@@ -174,6 +175,8 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
 
             if max_field_str_lens['ref'] < len(ref_allele):
                 max_field_str_lens['ref'] = len(ref_allele)
+            if snp_id is not None and max_field_str_lens['id'] < len(snp_id):
+                max_field_str_lens['id'] = len(snp_id)
 
             if alt_alleles:
                 if max_field_lens['alt'] < len(alt_alleles):

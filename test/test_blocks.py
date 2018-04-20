@@ -189,9 +189,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 
         list(var_grouper.variations)
         field_lens = {'alt': 2, 'INFO': {ALIGNED_ALLELES_FIELD_NAME: 3}}
-        field_str_lens = {'alt': 3,
-                          'chrom': 2,
-                          'ref': 3,
+        field_str_lens = {'alt': 3, 'chrom': 2, 'ref': 3, 'id': 0,
                           'INFO': {b'AA': 3},
                           }
         assert var_grouper.max_field_lens == field_lens

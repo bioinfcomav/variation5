@@ -190,7 +190,7 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
 
             if len(aligned_alleles) > max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
                 max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = len(aligned_alleles)
-            max_aa_len = max([len(aligned_alleles) for allele in aligned_alleles])
+            max_aa_len = max([len(allele) for allele in aligned_alleles])
             if max_aa_len > max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
                 max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = max_aa_len
             if len(ref_allele) > max_field_str_lens['ref']:

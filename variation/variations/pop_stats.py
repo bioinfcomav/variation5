@@ -4,11 +4,14 @@ import numpy
 from variation.variations.filters import SampleFilter, FLT_VARS
 from variation import GT_FIELD, SNPS_PER_CHUNK, MISSING_INT
 from variation.matrix.stats import counts_and_allels_by_row
+from variation.variations.stats import calc_maf as calc_maf_in_pop
 
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],
                                                      'stat_name': 'number_of_alleles'},
                           'calc_number_of_private_alleles': {'required_fields': [GT_FIELD],
-                                                             'stat_name': 'number_of_private_alleles'}}
+                                                             'stat_name': 'number_of_private_alleles'},
+                          'calc_major_allele_freq': {'required_fields': [GT_FIELD],
+                                                     'stat_name': 'major_allele_freq'}}
 
 
 def _prepare_pop_sample_filters(populations, pop_sample_filters=None):
@@ -114,3 +117,18 @@ def calc_pop_stats(variations, populations, pop_stat_functions,
                 accumulated_results = stat_per_pop
             results_per_stat[funct_name] = accumulated_results
     return results_per_stat
+
+
+def calc_major_allele_freq(variations, populations=None, pop_sample_filters=None):
+
+    pop_sample_filters = _prepare_pop_sample_filters(populations,
+                                                     pop_sample_filters)
+
+    allele_freq = {}
+    for pop_id, pop_sample_filter in pop_sample_filters.items():
+        vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
+        allele_freq[pop_id] = calc_maf_in_pop(vars_for_pop,
+                                              min_num_genotypes=1,
+                                              chunk_size=None)
+        # print(allele_freq[pop_id])
+    return allele_freq

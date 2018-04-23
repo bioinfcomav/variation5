@@ -1,5 +1,6 @@
 
 import copy
+import pickle
 
 import numpy
 
@@ -7,7 +8,6 @@ from variation import REF_FIELD, ALT_FIELD, POS_FIELD, GT_FIELD, DEF_METADATA
 from variation.variations import stats
 from variation.variations.filters import NoMissingGTsOrHetFilter, FLT_VARS
 from variation.gt_parsers.vcf import _VarParserWithPreRead
-from Cython.Compiler.ExprNodes import NoneNode
 
 ALIGNED_ALLELES_FIELD_NAME = b'AA'
 NUMBER_OF_SNPS_FIELD_NAME = b'SN'
@@ -74,7 +74,7 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
                  remove_snps_with_hets_or_missing=False,
                  pre_read_max_size=None, max_field_lens=None,
                  max_field_str_lens=None, max_n_vars=None,
-                 n_threads=None):
+                 n_threads=None, out_alleles_pickle_fhand=None):
 
         if n_threads is not None:
             raise NotImplemented('Parallelization is not implemented')
@@ -106,6 +106,9 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
                                     'dtype': 'str',
                                     'Number': 'R'}}
         self.metadata = metadata
+        self.out_alleles_pickle_fhand = out_alleles_pickle_fhand
+        if self.out_alleles_pickle_fhand is not None:
+            del metadata['INFO'][ALIGNED_ALLELES_FIELD_NAME]
 
         self._variations_to_group = variations
         self.blocks = iter(blocks)
@@ -143,6 +146,9 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
 
         max_field_lens = self._max_field_lens
         max_field_str_lens = self._max_field_str_lens
+
+        alleles_pickle_fhand = self.out_alleles_pickle_fhand
+        aligned_alleles_for_snps = {}
 
         for block in self.blocks:
             chrom = block['chrom']
@@ -188,18 +194,29 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
             aligned_alleles = alleles_and_gts['all_alleles_aligned']
             aligned_alleles = [aligned_alleles[idx] for idx in range(len(aligned_alleles))]
 
-            if len(aligned_alleles) > max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
-                max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = len(aligned_alleles)
-            max_aa_len = max([len(allele) for allele in aligned_alleles])
-            if max_aa_len > max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
-                max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = max_aa_len
-            if len(ref_allele) > max_field_str_lens['ref']:
-                max_field_str_lens['ref'] = len(ref_allele)
+            info = {NUMBER_OF_SNPS_FIELD_NAME: block_chunk.num_variations}
+
+            if alleles_pickle_fhand is None:
+                if len(aligned_alleles) > max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
+                    max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = len(aligned_alleles)
+                max_aa_len = max([len(allele) for allele in aligned_alleles])
+                if max_aa_len > max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
+                    max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = max_aa_len
+                if len(ref_allele) > max_field_str_lens['ref']:
+                    max_field_str_lens['ref'] = len(ref_allele)
+                info[ALIGNED_ALLELES_FIELD_NAME] = aligned_alleles
+            else:
+                aligned_alleles_for_snps[(chrom, start)] = aligned_alleles
+                ref_allele = None
+                alt_alleles = None
+
             if len(chrom) > max_field_str_lens['chrom']:
                 max_field_str_lens['chrom'] = len(chrom)
 
-            info = {ALIGNED_ALLELES_FIELD_NAME: aligned_alleles,
-                    NUMBER_OF_SNPS_FIELD_NAME: block_chunk.num_variations}
-
             yield (chrom, start, snp_id, ref_allele, alt_alleles,
                    None, None, info, [(b'GT', gts)])
+
+        if alleles_pickle_fhand is not None:
+            pickle.dump(aligned_alleles_for_snps,
+                        alleles_pickle_fhand)
+            alleles_pickle_fhand.flush()

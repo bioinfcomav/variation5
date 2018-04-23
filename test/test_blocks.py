@@ -9,6 +9,7 @@
 import unittest
 import io
 import math
+import pickle
 
 import numpy
 
@@ -195,7 +196,27 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         assert var_grouper.max_field_lens == field_lens
         assert var_grouper.max_field_str_lens == field_str_lens
 
+    def test_alleles_json(self):
+        vcf_fhand = io.BytesIO(VCF1)
+        variations = self._get_var_array(vcf_fhand)
+
+        # 20    10    .    G    A    29    .    .    GT    0|0    0|0    1/1
+        # 20    20    .    T    C    3    .    .    GT    0|0    1|1    0/0
+        # 20    40    .    T    A    47    .    .    GT    0|0    1|1    0/0
+
+        blocks = [{'chrom': b'20', 'start': 10, 'stop': 100}]
+        pickle_fhand = io.BytesIO()
+        var_grouper = BlocksVariationGrouper(variations, blocks,
+                                             remove_snps_with_hets_or_missing=True,
+                                             out_alleles_pickle_fhand=pickle_fhand)
+
+        list(var_grouper.variations)
+        pickle_fhand.seek(0)
+        alleles = pickle.load(pickle_fhand)
+        assert alleles == {(b'20', 10): [b'GTT', b'GCA', b'ATT']}
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_group_vars_per_block_deletion_test']
     unittest.main()
+

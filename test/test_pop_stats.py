@@ -17,7 +17,7 @@ from variation.variations.pop_stats import (calc_number_of_alleles,
                                             calc_number_of_private_alleles,
                                             calc_pop_stats,
                                             calc_major_allele_freq,
-                                            calc_obs_het,
+                                            calc_obs_het, calc_exp_het,
                                             _get_original_function_name)
 
 
@@ -116,7 +116,7 @@ class PopStatsTest(unittest.TestCase):
         expected = {1: [0, 1, 2, 0], 2: [0, 1, 0, 0]}
         self._check_function(stat_funct, varis, pops, expected)
 
-    def test_calc_allele_freq(self):
+    def test_calc_major_allele_freq(self):
         stat_funct = calc_major_allele_freq
 
         gts = numpy.array([[[0], [0], [0], [0], [-1]],
@@ -154,6 +154,20 @@ class PopStatsTest(unittest.TestCase):
         expected = {1: [0, 0, math.nan], 2: [0, 1., math.nan]}
         partial_stat_funct = partial(stat_funct, min_call_dp=20,
                                      min_num_genotypes=1)
+        self._check_function(partial_stat_funct, varis, pops, expected)
+
+    def test_calc_exp_het(self):
+        stat_funct = calc_exp_het
+
+        gts = numpy.array([[[0, 0], [0, 1], [0, 0], [0, 0], [0, -1]],
+                           [[0, 0], [0, 0], [0, 1], [1, 0], [-1, -1]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2], 2: [3, 4, 5]}
+        expected = {1: [0.5, 0, math.nan], 2: [0, 0.6, math.nan]}
+        partial_stat_funct = partial(stat_funct, min_num_genotypes=1)
         self._check_function(partial_stat_funct, varis, pops, expected)
 
 # min_num_genotypes for other functions

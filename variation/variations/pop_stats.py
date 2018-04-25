@@ -10,6 +10,7 @@ from variation import (GT_FIELD, SNPS_PER_CHUNK, MISSING_INT,
 from variation.matrix.stats import counts_and_allels_by_row
 from variation.variations.stats import calc_maf as calc_maf_in_pop
 from variation.variations.stats import calc_obs_het as calc_obs_het_in_pop
+from variation.variations.stats import calc_unbias_expected_het
 
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],
                                                      'stat_name': 'number_of_alleles'},
@@ -17,6 +18,8 @@ STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIEL
                                                              'stat_name': 'number_of_private_alleles'},
                           'calc_major_allele_freq': {'required_fields': [GT_FIELD],
                                                      'stat_name': 'major_allele_freq'},
+                          'calc_exp_het': {'required_fields': [GT_FIELD],
+                                           'stat_name': 'expected_heterozigosity'},
                           'calc_obs_het': {'required_fields': [GT_FIELD],
                                            'optional_fields': {'min_call_dp': [DP_FIELD]},
                                            'stat_name': 'observed_heterozigosity'}}
@@ -187,3 +190,18 @@ def calc_obs_het(variations, populations=None, pop_sample_filters=None,
                                               min_call_dp=min_call_dp,
                                               min_num_genotypes=min_num_genotypes)
     return obs_het
+
+
+def calc_exp_het(variations, populations=None, pop_sample_filters=None,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+
+    pop_sample_filters = _prepare_pop_sample_filters(populations,
+                                                     pop_sample_filters)
+
+    het = {}
+    for pop_id, pop_sample_filter in pop_sample_filters.items():
+        vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
+        het[pop_id] = calc_unbias_expected_het(vars_for_pop,
+                                               min_num_genotypes=min_num_genotypes)
+    return het
+

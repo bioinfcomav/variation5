@@ -705,6 +705,8 @@ def calc_allele_freq(variations, alleles=None,
         return numpy.array([])
 
     allele_counts = _calc_allele_counts(gts, alleles=alleles)
+    if allele_counts is None:
+        raise ValueError('No alleles, everything is missing data')
     total_counts = numpy.sum(allele_counts, axis=1)
     allele_freq = allele_counts / total_counts[:, None]
     _mask_stats_with_few_samples(allele_freq, variations, min_num_genotypes)
@@ -722,8 +724,13 @@ def calc_allele_freq_by_depth(chunk):
 
 def calc_expected_het(variations,
                       min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
-    allele_freq = calc_allele_freq(variations,
-                                   min_num_genotypes=min_num_genotypes)
+    try:
+        allele_freq = calc_allele_freq(variations,
+                                       min_num_genotypes=min_num_genotypes)
+    except ValueError:
+        exp_het = numpy.empty((variations.num_variations,))
+        exp_het[:] = numpy.nan
+        return exp_het
     if allele_freq.shape[0] == 0:
         return numpy.array([])
     gts = variations[GT_FIELD]

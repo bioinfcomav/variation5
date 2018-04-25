@@ -1,17 +1,25 @@
 
+import functools
+
 import numpy
 
 from variation.variations.filters import SampleFilter, FLT_VARS
-from variation import GT_FIELD, SNPS_PER_CHUNK, MISSING_INT
+from variation import (GT_FIELD, SNPS_PER_CHUNK, MISSING_INT,
+                       MIN_NUM_GENOTYPES_FOR_POP_STAT, DP_FIELD,
+                       MIN_CALL_DP_FOR_HET)
 from variation.matrix.stats import counts_and_allels_by_row
 from variation.variations.stats import calc_maf as calc_maf_in_pop
+from variation.variations.stats import calc_obs_het as calc_obs_het_in_pop
 
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],
                                                      'stat_name': 'number_of_alleles'},
                           'calc_number_of_private_alleles': {'required_fields': [GT_FIELD],
                                                              'stat_name': 'number_of_private_alleles'},
                           'calc_major_allele_freq': {'required_fields': [GT_FIELD],
-                                                     'stat_name': 'major_allele_freq'}}
+                                                     'stat_name': 'major_allele_freq'},
+                          'calc_obs_het': {'required_fields': [GT_FIELD],
+                                           'optional_fields': {'min_call_dp': [DP_FIELD]},
+                                           'stat_name': 'observed_heterozigosity'}}
 
 
 def _prepare_pop_sample_filters(populations, pop_sample_filters=None):
@@ -89,20 +97,51 @@ def calc_number_of_private_alleles(variations, populations=None,
     return private_alleles
 
 
+def _get_original_function_name(funct):
+    if isinstance(funct, functools.partial):
+        original_funct = funct.func
+        funct_name = original_funct.__name__
+    else:
+        funct_name = funct.__name__
+    return funct_name
+
+
+def _get_partial_funct_kwargs(funct):
+    if isinstance(funct, functools.partial):
+        return funct.keywords
+    else:
+        return []
+
+
 def calc_pop_stats(variations, populations, pop_stat_functions,
                    chunk_size=SNPS_PER_CHUNK):
 
     pop_sample_filters = _prepare_pop_sample_filters(populations)
 
-    pop_stat_functions = {funct.__name__: funct for funct in pop_stat_functions}
+    pop_stat_functions_orig_list = pop_stat_functions
+    pop_stat_functions = {}
+    for funct in pop_stat_functions_orig_list:
+        funct_name = _get_original_function_name(funct)
+        pop_stat_functions[funct_name] = {'function': funct}
 
-    kept_fields = set([req_field for funct in pop_stat_functions for req_field in STAT_FUNCTION_METADATA[funct]['required_fields']])
+    kept_fields = set()
+    for funct_name, funct_info in pop_stat_functions.items():
+        funct_metadata = STAT_FUNCTION_METADATA[funct_name]
+        kept_fields.update(funct_metadata['required_fields'])
+        if 'optional_fields' in funct_metadata:
+            funct = funct_info['function']
+            kwargs = _get_partial_funct_kwargs(funct)
+            for kwarg in kwargs:
+                if kwarg in funct_metadata['optional_fields']:
+                    kept_fields.update(funct_metadata['optional_fields'][kwarg])
+
     chunks = variations.iterate_chunks(kept_fields=kept_fields,
                                        chunk_size=chunk_size)
     results_per_stat = {}
 
     for chunk in chunks:
-        for funct_name, funct in pop_stat_functions.items():
+        for funct_name, funct_info in pop_stat_functions.items():
+            funct = funct_info['function']
             stat_per_pop = funct(chunk, pop_sample_filters=pop_sample_filters)
 
             if funct_name in results_per_stat:
@@ -119,7 +158,9 @@ def calc_pop_stats(variations, populations, pop_stat_functions,
     return results_per_stat
 
 
-def calc_major_allele_freq(variations, populations=None, pop_sample_filters=None):
+def calc_major_allele_freq(variations, populations=None,
+                           pop_sample_filters=None,
+                           min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
 
     pop_sample_filters = _prepare_pop_sample_filters(populations,
                                                      pop_sample_filters)
@@ -128,7 +169,21 @@ def calc_major_allele_freq(variations, populations=None, pop_sample_filters=None
     for pop_id, pop_sample_filter in pop_sample_filters.items():
         vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
         allele_freq[pop_id] = calc_maf_in_pop(vars_for_pop,
-                                              min_num_genotypes=1,
+                                              min_num_genotypes=min_num_genotypes,
                                               chunk_size=None)
-        # print(allele_freq[pop_id])
     return allele_freq
+
+
+def calc_obs_het(variations, populations=None, pop_sample_filters=None,
+                 min_call_dp=MIN_CALL_DP_FOR_HET,
+                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    pop_sample_filters = _prepare_pop_sample_filters(populations,
+                                                     pop_sample_filters)
+
+    obs_het = {}
+    for pop_id, pop_sample_filter in pop_sample_filters.items():
+        vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
+        obs_het[pop_id] = calc_obs_het_in_pop(vars_for_pop,
+                                              min_call_dp=min_call_dp,
+                                              min_num_genotypes=min_num_genotypes)
+    return obs_het

@@ -71,6 +71,7 @@ MISSING_VALUES = _MissingValues()
 SNPS_PER_CHUNK = 600
 
 MIN_NUM_GENOTYPES_FOR_POP_STAT = 10
+MIN_CALL_DP_FOR_HET = 20
 
 DEF_DSET_PARAMS = {
                    # Not much slower than lzf but compresses much more

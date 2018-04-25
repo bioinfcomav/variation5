@@ -10,7 +10,9 @@ from variation import (GT_FIELD, SNPS_PER_CHUNK, MISSING_INT,
 from variation.matrix.stats import counts_and_allels_by_row
 from variation.variations.stats import calc_maf as calc_maf_in_pop
 from variation.variations.stats import calc_obs_het as calc_obs_het_in_pop
-from variation.variations.stats import calc_unbias_expected_het
+from variation.variations.stats import (calc_unbias_expected_het,
+                                        _mask_stats_with_few_samples,
+                                        calc_called_gt)
 
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],
                                                      'stat_name': 'number_of_alleles'},
@@ -32,7 +34,8 @@ def _prepare_pop_sample_filters(populations, pop_sample_filters=None):
 
 
 def calc_number_of_alleles(variations, populations=None,
-                           pop_sample_filters=None):
+                           pop_sample_filters=None,
+                           min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     pop_sample_filters = _prepare_pop_sample_filters(populations,
                                                      pop_sample_filters)
 
@@ -43,6 +46,10 @@ def calc_number_of_alleles(variations, populations=None,
         allele_counts_per_allele_and_snp = _count_alleles_per_allele_and_snp(vars_for_pop)
 
         chunk_num_alleles_per_snp = numpy.sum(allele_counts_per_allele_and_snp != 0, axis=1)
+        chunk_num_alleles_per_snp = _mask_stats_with_few_samples(chunk_num_alleles_per_snp,
+                                                                 vars_for_pop,
+                                                                 min_num_genotypes,
+                                                                 masking_value=0)
         num_alleles_per_snp[pop_id] = chunk_num_alleles_per_snp
     return num_alleles_per_snp
 
@@ -60,7 +67,8 @@ def _count_alleles_per_allele_and_snp(variations, alleles=None):
 
 
 def calc_number_of_private_alleles(variations, populations=None,
-                                   pop_sample_filters=None):
+                                   pop_sample_filters=None,
+                                   min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
 
     pop_sample_filters = _prepare_pop_sample_filters(populations,
                                                      pop_sample_filters)
@@ -72,11 +80,20 @@ def calc_number_of_private_alleles(variations, populations=None,
     if different_alleles[0] == MISSING_INT:
         different_alleles = different_alleles[1:]
 
+    tot_num_called_gts = calc_called_gt(variations, rates=False)
+
     allele_counts_per_pop_per_allele_and_snp = {}
+    not_enough_genotypes_masks = {}
     for pop_id, pop_sample_filter in pop_sample_filters.items():
         vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
         allele_counts = _count_alleles_per_allele_and_snp(vars_for_pop,
                                                           different_alleles)
+        if min_num_genotypes:
+            num_called_gts_in_pop = calc_called_gt(vars_for_pop, rates=False)
+            num_called_gts_in_other_pops = tot_num_called_gts - num_called_gts_in_pop
+            mask = numpy.logical_or(num_called_gts_in_pop < min_num_genotypes,
+                                    num_called_gts_in_other_pops < min_num_genotypes)
+            not_enough_genotypes_masks[pop_id] = mask
         allele_counts_per_pop_per_allele_and_snp[pop_id] = allele_counts
 
     private_alleles = {}
@@ -96,7 +113,14 @@ def calc_number_of_private_alleles(variations, populations=None,
         alleles_not_present_in_other_pops = other_pops_allele_counts == 0
         alleles_present_in_this_pop_not_in_others = numpy.logical_and(alleles_present_in_this_pop,
                                                                       alleles_not_present_in_other_pops)
-        private_alleles[pop_id] = numpy.sum(alleles_present_in_this_pop_not_in_others, axis=1)
+
+        private_alleles_for_pop = numpy.sum(alleles_present_in_this_pop_not_in_others, axis=1)
+
+        if min_num_genotypes:
+            mask = not_enough_genotypes_masks[pop_id]
+            private_alleles_for_pop[mask] = 0
+
+        private_alleles[pop_id] = private_alleles_for_pop
     return private_alleles
 
 

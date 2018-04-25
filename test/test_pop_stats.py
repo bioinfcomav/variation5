@@ -39,7 +39,7 @@ class PopStatsTest(unittest.TestCase):
             # assert numpy.all(results2[pop_id] == expected[pop_id])
 
     def test_num_alleles(self):
-        stat_funct = calc_number_of_alleles
+        stat_funct = partial(calc_number_of_alleles, min_num_genotypes=0)
 
         gts = numpy.array([[[0], [0], [0], [0], [-1]],
                            [[0], [0], [1], [1], [-1]],
@@ -77,8 +77,22 @@ class PopStatsTest(unittest.TestCase):
         expected = {1: [1, 0, 0, 0]}
         self._check_function(stat_funct, varis, pops, expected)
 
+        # min num genotypes
+        stat_funct = partial(calc_number_of_alleles, min_num_genotypes=3)
+        gts = numpy.array([[[1], [-1], [0], [0], [-1]],
+                           [[-1], [-1], [1], [1], [-1]],
+                           [[-1], [-1], [0], [1], [-1]],
+                           [[-1], [-1], [-1], [-1], [-1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2, 3, 4, 5]}
+        expected = {1: [2, 0, 0, 0]}
+        self._check_function(stat_funct, varis, pops, expected)
+
     def test_num_private_alleles(self):
-        stat_funct = calc_number_of_private_alleles
+        stat_funct = partial(calc_number_of_private_alleles,
+                             min_num_genotypes=0)
 
         gts = numpy.array([[[0], [0], [0], [0], [-1]],
                            [[0], [0], [1], [1], [-1]],
@@ -114,6 +128,20 @@ class PopStatsTest(unittest.TestCase):
         varis.samples = [1, 2, 3, 4, 5]
         pops = {1: [1, 2], 2: [3, 4, 5]}
         expected = {1: [0, 1, 2, 0], 2: [0, 1, 0, 0]}
+        self._check_function(stat_funct, varis, pops, expected)
+
+        # min_num_genotypes
+        stat_funct = partial(calc_number_of_private_alleles,
+                             min_num_genotypes=2)
+        gts = numpy.array([[[0], [0], [0], [0], [1]],
+                           [[0], [0], [1], [1], [1]],
+                           [[0], [2], [0], [1], [1]],
+                           [[1], [-1], [0], [0], [2]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2], 2: [3, 4, 5]}
+        expected = {1: [0, 1, 1, 0], 2: [1, 1, 1, 0]}
         self._check_function(stat_funct, varis, pops, expected)
 
     def test_calc_major_allele_freq(self):

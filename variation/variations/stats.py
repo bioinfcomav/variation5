@@ -414,12 +414,21 @@ def _calc_obs_het_counts(variations, axis, min_call_dp, max_call_dp=None):
             numpy.sum(numpy.logical_not(is_missing), axis=axis))
 
 
+def _get_mask_for_masking_samples_with_few_gts(variations, min_num_genotypes,
+                                               num_called_gts=None):
+    if num_called_gts is None:
+        num_called_gts = calc_called_gt(variations, rates=False)
+    mask = num_called_gts < min_num_genotypes
+    return mask
+
+
 def _mask_stats_with_few_samples(stats, variations, min_num_genotypes,
-                                 num_called_gts=None):
+                                 num_called_gts=None, masking_value=numpy.NaN):
     if min_num_genotypes:
-        if num_called_gts is None:
-            num_called_gts = calc_called_gt(variations, rates=False)
-        stats[num_called_gts < min_num_genotypes] = numpy.NaN
+        mask = _get_mask_for_masking_samples_with_few_gts(variations,
+                                                      min_num_genotypes,
+                                                      num_called_gts=num_called_gts)
+        stats[mask] = masking_value
     return stats
 
 

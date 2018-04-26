@@ -227,6 +227,7 @@ class PopStatsTest(unittest.TestCase):
         out_dir.cleanup()
 
 # TODO, mean bars
+# In a different plot than the violins
 # maf small/tot high/tot
 
 

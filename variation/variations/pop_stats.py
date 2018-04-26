@@ -313,7 +313,7 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     stats_csv.write(sep)
     items_to_write = []
     for stat_name in pop_stats:
-        items_to_write.extend([stat_name.replace('_', ' ')] * 7)
+        items_to_write.extend([stat_name.replace('_', ' ')] * 6)
     stats_csv.write(sep.join(items_to_write))
     stats_csv.write('\n')
 

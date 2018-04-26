@@ -226,6 +226,9 @@ class PopStatsTest(unittest.TestCase):
 
         out_dir.cleanup()
 
+# TODO, mean bars
+# maf small/tot high/tot
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'PopStatsTest.test_num_alleles']

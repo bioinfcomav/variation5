@@ -1,7 +1,10 @@
 
 import functools
+import os
 
 import numpy
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 from variation.variations.filters import SampleFilter, FLT_VARS
 from variation import (GT_FIELD, SNPS_PER_CHUNK, MISSING_INT,
@@ -159,7 +162,8 @@ def calc_pop_stats(variations, populations, pop_stat_functions,
             funct = funct_info['function']
             kwargs = _get_partial_funct_kwargs(funct)
             for kwarg in kwargs:
-                if kwarg in funct_metadata['optional_fields']:
+                if ((kwarg == 'min_call_dp' and kwargs['min_call_dp']) or
+                    (kwarg != 'min_call_dp' and kwarg in funct_metadata['optional_fields'])):
                     kept_fields.update(funct_metadata['optional_fields'][kwarg])
 
     chunks = variations.iterate_chunks(kept_fields=kept_fields,
@@ -168,11 +172,12 @@ def calc_pop_stats(variations, populations, pop_stat_functions,
 
     for chunk in chunks:
         for funct_name, funct_info in pop_stat_functions.items():
+            stat_name = STAT_FUNCTION_METADATA[funct_name]['stat_name']
             funct = funct_info['function']
             stat_per_pop = funct(chunk, pop_sample_filters=pop_sample_filters)
 
-            if funct_name in results_per_stat:
-                accumulated_results_per_pop_so_far = results_per_stat[funct_name]
+            if stat_name in results_per_stat:
+                accumulated_results_per_pop_so_far = results_per_stat[stat_name]
                 accumulated_results = {}
                 for pop_id, pop_result in stat_per_pop.items():
                     accumulated_results_so_far = accumulated_results_per_pop_so_far[pop_id]
@@ -181,7 +186,8 @@ def calc_pop_stats(variations, populations, pop_stat_functions,
 
             else:
                 accumulated_results = stat_per_pop
-            results_per_stat[funct_name] = accumulated_results
+
+            results_per_stat[stat_name] = accumulated_results
     return results_per_stat
 
 
@@ -229,3 +235,100 @@ def calc_exp_het(variations, populations=None, pop_sample_filters=None,
                                                min_num_genotypes=min_num_genotypes)
     return het
 
+
+def _format_num(num):
+    if isinstance(num, int):
+        return str(num)
+    elif isinstance(num, str):
+        return num
+    else:
+        return '{:.2f}'.format(num)
+
+
+def _draw_pop_stat_violins(pop_stats, violins_fpath):
+
+    size = 3
+    fig = Figure(figsize=(2 * size, (len(pop_stats) - 1) * 1.5 * size))
+    FigureCanvas(fig) # Don't remove it or savefig will fail later
+
+    stats = sorted(pop_stats.keys())
+    pop_names = sorted(set(pop for pop_stat in pop_stats.values() for pop in pop_stat))
+    xtick_pos = [idx + 1 for idx in range(len(pop_names))]
+
+    first_axes = None
+    for stat_idx, stat_name in enumerate(stats):
+        values_per_snp_per_pop = pop_stats[stat_name]
+        subplot_position = len(pop_stats), 1, len(pop_stats) - stat_idx
+
+        if first_axes is None:
+            axes = fig.add_subplot(*subplot_position)
+            first_axes = axes
+            axes.set_xticklabels(pop_names)
+            axes.set_xticks(xtick_pos)
+        else:
+            axes = fig.add_subplot(*subplot_position, sharex=first_axes)
+            axes.tick_params(axis='x', which='both',
+                            bottom='off',
+                            top='off',
+                            labelbottom='off')
+
+        values_per_snp_for_pops = [values_per_snp_per_pop[pop] for pop in pop_names]
+        axes.violinplot(values_per_snp_for_pops)
+
+        y_label = stat_name.replace('_', '\n')
+        axes.set_ylabel(y_label)
+
+    fig.tight_layout()
+    fig.savefig(violins_fpath)
+
+
+def create_pop_stats_report(variations, populations, out_dir_fpath,
+                            min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                            min_call_dp_for_obs_het=MIN_CALL_DP_FOR_HET):
+    funct1 = functools.partial(calc_number_of_alleles,
+                               min_num_genotypes=min_num_genotypes)
+    funct2 = functools.partial(calc_number_of_private_alleles,
+                               min_num_genotypes=min_num_genotypes)
+    funct3 = functools.partial(calc_major_allele_freq,
+                               min_num_genotypes=min_num_genotypes)
+    funct4 = functools.partial(calc_obs_het,
+                               min_num_genotypes=min_num_genotypes,
+                               min_call_dp=min_call_dp_for_obs_het)
+    funct5 = functools.partial(calc_exp_het,
+                               min_num_genotypes=min_num_genotypes)
+    pop_stat_functions = [funct1, funct2, funct3, funct4, funct5]
+
+    pop_stats = calc_pop_stats(variations, populations,
+                               pop_stat_functions)
+
+    sep = '\t'
+
+    stats_csv_fpath = os.path.join(out_dir_fpath, 'pop_stats.csv')
+    stats_csv = open(stats_csv_fpath, 'wt')
+
+    stats_csv.write(sep)
+    for stat_name in pop_stats:
+        stats_csv.write(sep.join([stat_name.replace('_', ' ')] * 6))
+    stats_csv.write('\n')
+
+    stats_csv.write('Populations')
+    stats_csv.write(sep)
+    for _ in pop_stats:
+        stats_csv.write(sep.join(['mean', 'min', 'q25', 'median', 'q50', 'q75', 'max']))
+    stats_csv.write('\n')
+
+    pop_names = sorted(populations.keys())
+    for stat_name, values_per_snp in pop_stats.items():
+        for pop in pop_names:
+            items_to_write = [pop]
+            values_for_pop_per_snp = values_per_snp[pop]
+            min_, q25, median, q75, max_ = numpy.nanpercentile(values_for_pop_per_snp,
+                                                               [0, 25, 50, 75, 100])
+            mean = numpy.nanmean(values_for_pop_per_snp)
+            items_to_write.extend([mean, min_, q25, median, q75, max_])
+        stats_csv.write(sep.join([_format_num(num) for num in items_to_write]))
+        stats_csv.write('\n')
+    stats_csv.close()
+
+    violins_fpath = os.path.join(out_dir_fpath, 'pop_stats_violin_plots.svg')
+    _draw_pop_stat_violins(pop_stats, violins_fpath)

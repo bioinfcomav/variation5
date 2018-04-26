@@ -8,6 +8,8 @@
 import unittest
 import math
 from functools import partial
+import tempfile
+import os
 
 import numpy
 
@@ -18,7 +20,9 @@ from variation.variations.pop_stats import (calc_number_of_alleles,
                                             calc_pop_stats,
                                             calc_major_allele_freq,
                                             calc_obs_het, calc_exp_het,
-                                            _get_original_function_name)
+                                            _get_original_function_name,
+                                            create_pop_stats_report,
+                                            STAT_FUNCTION_METADATA)
 
 
 class PopStatsTest(unittest.TestCase):
@@ -28,7 +32,9 @@ class PopStatsTest(unittest.TestCase):
 
         pop_stats = calc_pop_stats(varis, populations=pops, chunk_size=2,
                                    pop_stat_functions=[stat_funct])
-        results2 = pop_stats[_get_original_function_name(stat_funct)]
+        funct_name = _get_original_function_name(stat_funct)
+        stat_name = STAT_FUNCTION_METADATA[funct_name]['stat_name']
+        results2 = pop_stats[stat_name]
 
         for pop_id in pops:
             assert numpy.allclose(results1[pop_id], expected[pop_id],
@@ -198,9 +204,28 @@ class PopStatsTest(unittest.TestCase):
         partial_stat_funct = partial(stat_funct, min_num_genotypes=1)
         self._check_function(partial_stat_funct, varis, pops, expected)
 
-# min_num_genotypes for other functions
+    def test_report(self):
+        gts = numpy.array([[[0, 0], [0, 1], [0, 0], [0, 0], [0, -1]],
+                           [[0, 0], [0, 0], [0, 1], [1, 0], [-1, -1]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4, 5]
+        pops = {1: [1, 2], 2: [3, 4, 5]}
+
+        out_dir = tempfile.TemporaryDirectory()
+        create_pop_stats_report(varis, pops, out_dir.name,
+                                min_num_genotypes=1,
+                                min_call_dp_for_obs_het=0)
+        stats_csv_fpath = os.path.join(out_dir.name,
+                                       'pop_stats.csv')
+        assert os.path.exists(stats_csv_fpath)
+        stats_csv_fpath = os.path.join(out_dir.name,
+                                       'pop_stats_violin_plots.svg')
+
+        out_dir.cleanup()
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PopStatsTest.test_calc_obs_het']
+    # import sys;sys.argv = ['', 'PopStatsTest.test_num_alleles']
     unittest.main()

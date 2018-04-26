@@ -245,7 +245,7 @@ def _format_num(num):
         return '{:.2f}'.format(num)
 
 
-def _draw_pop_stat_violins(pop_stats, violins_fpath):
+def _draw_pop_stat_violins(pop_stats, violins_fpath, ylimits):
 
     size = 3
     fig = Figure(figsize=(2 * size, (len(pop_stats) - 1) * 1.5 * size))
@@ -263,7 +263,7 @@ def _draw_pop_stat_violins(pop_stats, violins_fpath):
         if first_axes is None:
             axes = fig.add_subplot(*subplot_position)
             first_axes = axes
-            axes.set_xticklabels(pop_names)
+            axes.set_xticklabels(pop_names, rotation='vertical')
             axes.set_xticks(xtick_pos)
         else:
             axes = fig.add_subplot(*subplot_position, sharex=first_axes)
@@ -272,6 +272,8 @@ def _draw_pop_stat_violins(pop_stats, violins_fpath):
                             top='off',
                             labelbottom='off')
 
+        if stat_name in ylimits:
+            axes.set_ylim(**ylimits[stat_name])
         values_per_snp_for_pops = [values_per_snp_per_pop[pop] for pop in pop_names]
         axes.violinplot(values_per_snp_for_pops)
 
@@ -284,7 +286,8 @@ def _draw_pop_stat_violins(pop_stats, violins_fpath):
 
 def create_pop_stats_report(variations, populations, out_dir_fpath,
                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
-                            min_call_dp_for_obs_het=MIN_CALL_DP_FOR_HET):
+                            min_call_dp_for_obs_het=MIN_CALL_DP_FOR_HET,
+                            violin_ylimits=None):
     funct1 = functools.partial(calc_number_of_alleles,
                                min_num_genotypes=min_num_genotypes)
     funct2 = functools.partial(calc_number_of_private_alleles,
@@ -314,7 +317,8 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     stats_csv.write('Populations')
     stats_csv.write(sep)
     for _ in pop_stats:
-        stats_csv.write(sep.join(['mean', 'min', 'q25', 'median', 'q50', 'q75', 'max']))
+        stats_csv.write(sep.join(['mean', 'min', 'q25', 'median', 'q50',
+                                  'q75', 'max']))
     stats_csv.write('\n')
 
     pop_names = sorted(populations.keys())
@@ -331,4 +335,4 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     stats_csv.close()
 
     violins_fpath = os.path.join(out_dir_fpath, 'pop_stats_violin_plots.svg')
-    _draw_pop_stat_violins(pop_stats, violins_fpath)
+    _draw_pop_stat_violins(pop_stats, violins_fpath, violin_ylimits)

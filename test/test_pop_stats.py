@@ -216,7 +216,8 @@ class PopStatsTest(unittest.TestCase):
         out_dir = tempfile.TemporaryDirectory()
         create_pop_stats_report(varis, pops, out_dir.name,
                                 min_num_genotypes=1,
-                                min_call_dp_for_obs_het=0)
+                                min_call_dp_for_obs_het=0,
+                                violin_ylimits={'observed_heterozigosity': {'bottom':0, 'top':0.5}})
         stats_csv_fpath = os.path.join(out_dir.name,
                                        'pop_stats.csv')
         assert os.path.exists(stats_csv_fpath)

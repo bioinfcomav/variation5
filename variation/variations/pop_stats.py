@@ -247,12 +247,13 @@ def _format_num(num):
 
 def _draw_pop_stat_violins(pop_stats, violins_fpath, ylimits):
 
-    size = 3
-    fig = Figure(figsize=(2 * size, (len(pop_stats) - 1) * 1.5 * size))
-    FigureCanvas(fig) # Don't remove it or savefig will fail later
-
     stats = sorted(pop_stats.keys())
     pop_names = sorted(set(pop for pop_stat in pop_stats.values() for pop in pop_stat))
+
+    size = 3
+    fig = Figure(figsize=(2 * size * len(pop_names) // 4 , (len(pop_stats) - 1) * 1.5 * size))
+    FigureCanvas(fig) # Don't remove it or savefig will fail later
+
     xtick_pos = [idx + 1 for idx in range(len(pop_names))]
 
     first_axes = None

@@ -311,15 +311,19 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     stats_csv = open(stats_csv_fpath, 'wt')
 
     stats_csv.write(sep)
+    items_to_write = []
     for stat_name in pop_stats:
-        stats_csv.write(sep.join([stat_name.replace('_', ' ')] * 6))
+        items_to_write.extend([stat_name.replace('_', ' ')] * 6)
+    stats_csv.write(sep.join(items_to_write))
     stats_csv.write('\n')
 
     stats_csv.write('Populations')
     stats_csv.write(sep)
+    items_to_write = []
     for _ in pop_stats:
-        stats_csv.write(sep.join(['mean', 'min', 'q25', 'median', 'q50',
-                                  'q75', 'max']))
+        items_to_write.extend(['mean', 'min', 'q25', 'median', 'q50',
+                               'q75', 'max'])
+    stats_csv.write(sep.join(items_to_write))
     stats_csv.write('\n')
 
     pop_names = sorted(populations.keys())

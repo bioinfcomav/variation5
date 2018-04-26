@@ -321,8 +321,7 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     stats_csv.write(sep)
     items_to_write = []
     for _ in pop_stats:
-        items_to_write.extend(['mean', 'min', 'q25', 'median', 'q50',
-                               'q75', 'max'])
+        items_to_write.extend(['mean', 'min', 'q25', 'median', 'q75', 'max'])
     stats_csv.write(sep.join(items_to_write))
     stats_csv.write('\n')
 

@@ -269,9 +269,9 @@ def _draw_pop_stat_violins(pop_stats, violins_fpath, ylimits):
         else:
             axes = fig.add_subplot(*subplot_position, sharex=first_axes)
             axes.tick_params(axis='x', which='both',
-                            bottom='off',
-                            top='off',
-                            labelbottom='off')
+                            bottom=False,
+                            top=False,
+                            labelbottom=False)
 
         if stat_name in ylimits:
             axes.set_ylim(**ylimits[stat_name])
@@ -323,10 +323,11 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     stats_csv.write('\n')
 
     pop_names = sorted(populations.keys())
-    for stat_name, values_per_snp in pop_stats.items():
-        for pop in pop_names:
-            items_to_write = [pop]
-            values_for_pop_per_snp = values_per_snp[pop]
+
+    for pop in pop_names:
+        items_to_write = [pop]
+        for stat_name in pop_stats:
+            values_for_pop_per_snp = pop_stats[stat_name][pop]
             min_, q25, median, q75, max_ = numpy.nanpercentile(values_for_pop_per_snp,
                                                                [0, 25, 50, 75, 100])
             mean = numpy.nanmean(values_for_pop_per_snp)

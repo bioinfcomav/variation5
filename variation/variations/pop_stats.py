@@ -313,10 +313,14 @@ def _draw_pop_stat_bars(pop_means, plot_fpath):
                             top=False,
                             labelbottom=False)
 
+        if stat_name == 'number_of_alleles':
+            axes.set_ylim(bottom=1)
         means = [means_per_pop[pop] for pop in pop_names]
         axes.bar(xtick_pos, means)
 
-        y_label = '% ' + stat_name.replace('_', '\n')
+        y_label = stat_name.replace('_', '\n')
+        if 'maf' in stat_name:
+            y_label = '% ' + y_label
         axes.set_ylabel(y_label)
 
     fig.tight_layout()

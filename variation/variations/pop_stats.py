@@ -379,7 +379,7 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
             else:
                 num_values = numpy.count_nonzero(~numpy.isnan(values_for_pop_per_snp))
                 almost_fixed = numpy.sum(values_for_pop_per_snp >= 0.95) / num_values * 100
-                highly_variable = numpy.sum(values_for_pop_per_snp < 0.3) / num_values * 100
+                highly_variable = numpy.sum(values_for_pop_per_snp < 0.7) / num_values * 100
                 maf_stats['almost_fixed'][pop] = almost_fixed
                 maf_stats['highly_variable'][pop] = highly_variable
         stats_csv.write(sep.join([_format_num(num) for num in items_to_write]))

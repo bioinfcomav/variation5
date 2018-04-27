@@ -365,6 +365,7 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
 
     pop_names = sorted(populations.keys())
     means = defaultdict(dict)
+    maf_stats = defaultdict(dict)
     for pop in pop_names:
         items_to_write = [pop]
         for stat_name in pop_stats:
@@ -373,7 +374,14 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
                                                                [0, 25, 50, 75, 100])
             mean = numpy.nanmean(values_for_pop_per_snp)
             items_to_write.extend([mean, min_, q25, median, q75, max_])
-            means[stat_name][pop] = mean
+            if stat_name != 'major_allele_freq':
+                means[stat_name][pop] = mean
+            else:
+                num_values = numpy.count_nonzero(~numpy.isnan(values_for_pop_per_snp))
+                almost_fixed = numpy.sum(values_for_pop_per_snp >= 0.95) / num_values * 100
+                highly_variable = numpy.sum(values_for_pop_per_snp < 0.3) / num_values * 100
+                maf_stats['almost_fixed'][pop] = almost_fixed
+                maf_stats['highly_variable'][pop] = highly_variable
         stats_csv.write(sep.join([_format_num(num) for num in items_to_write]))
         stats_csv.write('\n')
     stats_csv.close()
@@ -382,3 +390,5 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     _draw_pop_stat_violins(pop_stats, violins_fpath, violin_ylimits)
     bars_fpath = os.path.join(out_dir_fpath, 'pop_stats_bar_plots.svg')
     _draw_pop_stat_bars(means, bars_fpath)
+    bars_fpath = os.path.join(out_dir_fpath, 'pop_maf_stats_bar_plots.svg')
+    _draw_pop_stat_bars(maf_stats, bars_fpath)

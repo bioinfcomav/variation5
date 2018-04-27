@@ -316,7 +316,7 @@ def _draw_pop_stat_bars(pop_means, plot_fpath):
         means = [means_per_pop[pop] for pop in pop_names]
         axes.bar(xtick_pos, means)
 
-        y_label = stat_name.replace('_', '\n')
+        y_label = stat_name.replace('_', '\n') + ' %'
         axes.set_ylabel(y_label)
 
     fig.tight_layout()

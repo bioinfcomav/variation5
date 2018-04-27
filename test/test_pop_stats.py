@@ -223,11 +223,9 @@ class PopStatsTest(unittest.TestCase):
         assert os.path.exists(stats_csv_fpath)
         stats_csv_fpath = os.path.join(out_dir.name,
                                        'pop_stats_violin_plots.svg')
-
+        # input(out_dir.name)
         out_dir.cleanup()
 
-# TODO, mean bars
-# In a different plot than the violins
 # maf small/tot high/tot
 
 

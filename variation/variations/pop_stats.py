@@ -1,6 +1,7 @@
 
 import functools
 import os
+from collections import defaultdict
 
 import numpy
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -245,7 +246,7 @@ def _format_num(num):
         return '{:.2f}'.format(num)
 
 
-def _draw_pop_stat_violins(pop_stats, violins_fpath, ylimits):
+def _draw_pop_stat_violins(pop_stats, plot_fpath, ylimits):
 
     stats = sorted(pop_stats.keys())
     pop_names = sorted(set(pop for pop_stat in pop_stats.values() for pop in pop_stat))
@@ -282,7 +283,44 @@ def _draw_pop_stat_violins(pop_stats, violins_fpath, ylimits):
         axes.set_ylabel(y_label)
 
     fig.tight_layout()
-    fig.savefig(violins_fpath)
+    fig.savefig(plot_fpath)
+
+
+def _draw_pop_stat_bars(pop_means, plot_fpath):
+    stats = sorted(pop_means.keys())
+    pop_names = sorted(set(pop for pop_stat in pop_means.values() for pop in pop_stat))
+
+    size = 3
+    fig = Figure(figsize=(2 * size * len(pop_names) // 4 , (len(pop_means) - 1) * 1.5 * size))
+    FigureCanvas(fig) # Don't remove it or savefig will fail later
+
+    xtick_pos = [idx + 1 for idx in range(len(pop_names))]
+
+    first_axes = None
+    for stat_idx, stat_name in enumerate(stats):
+        means_per_pop = pop_means[stat_name]
+        subplot_position = len(pop_means), 1, len(pop_means) - stat_idx
+
+        if first_axes is None:
+            axes = fig.add_subplot(*subplot_position)
+            first_axes = axes
+            axes.set_xticklabels(pop_names, rotation='vertical')
+            axes.set_xticks(xtick_pos)
+        else:
+            axes = fig.add_subplot(*subplot_position, sharex=first_axes)
+            axes.tick_params(axis='x', which='both',
+                            bottom=False,
+                            top=False,
+                            labelbottom=False)
+
+        means = [means_per_pop[pop] for pop in pop_names]
+        axes.bar(xtick_pos, means)
+
+        y_label = stat_name.replace('_', '\n')
+        axes.set_ylabel(y_label)
+
+    fig.tight_layout()
+    fig.savefig(plot_fpath)
 
 
 def create_pop_stats_report(variations, populations, out_dir_fpath,
@@ -326,7 +364,7 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
     stats_csv.write('\n')
 
     pop_names = sorted(populations.keys())
-
+    means = defaultdict(dict)
     for pop in pop_names:
         items_to_write = [pop]
         for stat_name in pop_stats:
@@ -335,9 +373,12 @@ def create_pop_stats_report(variations, populations, out_dir_fpath,
                                                                [0, 25, 50, 75, 100])
             mean = numpy.nanmean(values_for_pop_per_snp)
             items_to_write.extend([mean, min_, q25, median, q75, max_])
+            means[stat_name][pop] = mean
         stats_csv.write(sep.join([_format_num(num) for num in items_to_write]))
         stats_csv.write('\n')
     stats_csv.close()
 
     violins_fpath = os.path.join(out_dir_fpath, 'pop_stats_violin_plots.svg')
     _draw_pop_stat_violins(pop_stats, violins_fpath, violin_ylimits)
+    bars_fpath = os.path.join(out_dir_fpath, 'pop_stats_bar_plots.svg')
+    _draw_pop_stat_bars(means, bars_fpath)

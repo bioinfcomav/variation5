@@ -314,7 +314,8 @@ def _draw_pop_stat_bars(pop_means, plot_fpath):
                             labelbottom=False)
 
         if stat_name == 'number_of_alleles':
-            axes.set_ylim(bottom=1)
+            _, top = axes.get_ylim()
+            axes.set_ylim(bottom=1, top=top)
         means = [means_per_pop[pop] for pop in pop_names]
         axes.bar(xtick_pos, means)
 

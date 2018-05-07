@@ -7,6 +7,7 @@
 
 import unittest
 import math
+from math import isclose
 from functools import partial
 import tempfile
 import os
@@ -22,7 +23,9 @@ from variation.variations.pop_stats import (calc_number_of_alleles,
                                             calc_obs_het, calc_exp_het,
                                             _get_original_function_name,
                                             create_pop_stats_report,
-                                            STAT_FUNCTION_METADATA)
+                                            STAT_FUNCTION_METADATA,
+                                            calc_pop_pairwise_unbiased_nei_dists
+                                            )
 
 
 class PopStatsTest(unittest.TestCase):
@@ -228,5 +231,5 @@ class PopStatsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PopStatsTest.test_num_alleles']
+    # import sys;sys.argv = ['', 'NeiDistTest.test_nei_dist']
     unittest.main()

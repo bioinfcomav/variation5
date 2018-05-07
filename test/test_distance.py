@@ -8,6 +8,8 @@
 
 import unittest
 from os.path import join
+import math
+
 import numpy
 from scipy.spatial.distance import squareform
 
@@ -16,7 +18,8 @@ from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            sel_samples_from_dist_mat,
                                            _matching, calc_pop_distance,
                                            filter_dist_matrix,
-                                           calc_gst_per_loci)
+                                           calc_gst_per_loci,
+                                           _calc_pop_pairwise_unbiased_nei_dists)
 from variation.variations.vars_matrices import VariationsArrays, VariationsH5
 from variation.variations.stats import GT_FIELD
 from test.test_utils import TEST_DATA_DIR
@@ -209,6 +212,58 @@ class PopDistTest(unittest.TestCase):
         dists = calc_pop_distance(snps, populations=pops, method='nei',
                                   chunk_size=2, min_num_genotypes=0)
         assert dists[0] - 1.23732507 < 0.001
+
+
+class NeiUnbiasedDistTest(unittest.TestCase):
+
+    def test_nei_dist(self):
+
+        gts = numpy.array([[[1, 1], [5, 2], [2, 2], [3, 2]],
+                           [[1, 1], [1, 2], [2, 2], [2, 1]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4]
+        pops = [[1, 2], [3, 4]]
+        dists = _calc_pop_pairwise_unbiased_nei_dists(varis,
+                                                      populations=pops,
+                                                      min_num_genotypes=1)
+        assert math.isclose(dists[0], 0.3726315908494797)
+
+        dists = _calc_pop_pairwise_unbiased_nei_dists(varis,
+                                                      populations=pops,
+                                                      min_num_genotypes=1,
+                                                      chunk_size=1)
+        assert math.isclose(dists[0], 0.3726315908494797)
+
+        # all missing
+        gts = numpy.array([[[-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4]
+        pops = [[1, 2], [3, 4]]
+        dists = _calc_pop_pairwise_unbiased_nei_dists(varis,
+                                                      populations=pops,
+                                                      min_num_genotypes=1)
+        assert math.isnan(dists[0])
+
+        # min_num_genotypes
+        gts = numpy.array([[[1, 1], [5, 2], [2, 2], [3, 2]],
+                           [[1, 1], [1, 2], [2, 2], [2, 1]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        varis.samples = [1, 2, 3, 4]
+        pops = [[1, 2], [3, 4]]
+        dists = _calc_pop_pairwise_unbiased_nei_dists(varis,
+                                                      populations=pops,
+                                                      min_num_genotypes=1)
+        assert math.isclose(dists[0], 0.3726315908494797)
+
+        dists = _calc_pop_pairwise_unbiased_nei_dists(varis,
+                                                      populations=pops,
+                                                      chunk_size=1)
+        assert math.isnan(dists[0])
 
 
 class FilterDistTest(unittest.TestCase):

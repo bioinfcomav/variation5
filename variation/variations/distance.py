@@ -10,7 +10,7 @@ from variation.matrix.methods import is_missing
 from variation.variations.stats import (calc_allele_freq,
                                         calc_allele_freq_by_depth)
 from variation.variations.filters import SampleFilter, FLT_VARS
-from variation import GT_FIELD, MIN_NUM_GENOTYPES_FOR_POP_STAT
+from variation import GT_FIELD, MIN_NUM_GENOTYPES_FOR_POP_STAT, MISSING_INT
 
 
 def _get_sample_gts(gts, sample_i, sample_j, indi_cache):
@@ -343,9 +343,132 @@ def _calc_nei_pop_distance_by_depth(variations, populations, chunk_size=None,
     return dists
 
 
+def _get_different_alleles(variations):
+    different_alleles = set(numpy.unique(variations[GT_FIELD]))
+    different_alleles = sorted(different_alleles.difference([MISSING_INT]))
+    return different_alleles
+
+
+def _calc_allele_freq_and_unbiased_J_per_locus(variations, alleles,
+                                               min_num_genotypes):
+    try:
+        allele_freq = calc_allele_freq(variations, alleles=alleles,
+                                       min_num_genotypes=min_num_genotypes)
+    except ValueError:
+        allele_freq = None
+        xUb_per_locus = None
+
+    if allele_freq is not None:
+        n_indi = variations[GT_FIELD].shape[1]
+        xUb_per_locus = ((2 * n_indi * numpy.sum(allele_freq ** 2, axis=1)) - 1) / (2 * n_indi - 1)
+
+    return allele_freq, xUb_per_locus
+
+
+def _calc_j_stats_per_locus(variations1, variations2,
+                            min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+
+    different_alleles = set(numpy.unique(variations1[GT_FIELD]))
+    different_alleles.update(numpy.unique(variations2[GT_FIELD]))
+    different_alleles = sorted(different_alleles.difference([MISSING_INT]))
+
+    if not different_alleles:
+        return None, None, None
+
+    res = _calc_allele_freq_and_unbiased_J_per_locus(variations1,
+                                                     alleles=different_alleles,
+                                                     min_num_genotypes=min_num_genotypes)
+    allele_freq1, xUb_per_locus = res
+
+    res = _calc_allele_freq_and_unbiased_J_per_locus(variations2,
+                                                     alleles=different_alleles,
+                                                     min_num_genotypes=min_num_genotypes)
+    allele_freq2, yUb_per_locus = res
+
+    if allele_freq1 is None or allele_freq2 is None:
+        return None, None, None
+
+    Jxy_per_locus = numpy.sum(allele_freq1 * allele_freq2, axis=1)
+
+    return xUb_per_locus, yUb_per_locus, Jxy_per_locus
+
+
+def _accumulate_j_stats(variations1, variations2,
+                        Jxy, uJx, uJy, pop_name1, pop_name2,
+                        min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+
+    res = _calc_j_stats_per_locus(variations1, variations2,
+                                  min_num_genotypes=min_num_genotypes)
+    xUb_per_locus, yUb_per_locus, Jxy_per_locus = res
+    # print('per locus')
+    # print(xUb_per_locus, yUb_per_locus, Jxy_per_locus)
+
+    if xUb_per_locus is None:
+        return
+
+    # sum over all loci
+    if Jxy[pop_name1][pop_name2] is None:
+        Jxy[pop_name1][pop_name2] = numpy.nansum(Jxy_per_locus)
+        uJx[pop_name1][pop_name2] = numpy.nansum(xUb_per_locus)
+        uJy[pop_name1][pop_name2] = numpy.nansum(yUb_per_locus)
+    else:
+        Jxy[pop_name1][pop_name2] += numpy.nansum(Jxy_per_locus)
+        uJx[pop_name1][pop_name2] += numpy.nansum(xUb_per_locus)
+        uJy[pop_name1][pop_name2] += numpy.nansum(yUb_per_locus)
+
+
+def _calc_pop_pairwise_unbiased_nei_dists(variations, populations=None,
+                                          min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                                          chunk_size=None):
+
+    pop_sample_filters = [SampleFilter(pop_samples) for pop_samples in populations]
+    pop_ids = list(range(len(populations)))
+
+    Jxy = {}
+    uJx = {}
+    uJy = {}
+    for pop_id1, pop_id2 in itertools.combinations(pop_ids, 2):
+        if pop_id1 not in Jxy:
+            Jxy[pop_id1] = {}
+        if pop_id1 not in uJx:
+            uJx[pop_id1] = {}
+        if pop_id1 not in uJy:
+            uJy[pop_id1] = {}
+
+        Jxy[pop_id1][pop_id2] = None
+        uJx[pop_id1][pop_id2] = None
+        uJy[pop_id1][pop_id2] = None
+
+    chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
+                                       chunk_size=chunk_size)
+
+    for chunk in chunks:
+        for pop_id1, pop_id2 in itertools.combinations(pop_ids, 2):
+            vars_for_pop1 = pop_sample_filters[pop_id1](chunk)[FLT_VARS]
+            vars_for_pop2 = pop_sample_filters[pop_id2](chunk)[FLT_VARS]
+            _accumulate_j_stats(vars_for_pop1, vars_for_pop2, Jxy, uJx, uJy,
+                                pop_id1, pop_id2,
+                                min_num_genotypes=min_num_genotypes)
+
+    n_pops = len(populations)
+    dists = numpy.empty(int((n_pops ** 2 - n_pops) / 2))
+    dists[:] = numpy.nan
+    for idx, (pop_id1, pop_id2) in enumerate(itertools.combinations(pop_ids, 2)):
+        if Jxy[pop_id1][pop_id2] is None:
+            unbiased_nei_identity = math.nan
+        else:
+            unbiased_nei_identity = Jxy[pop_id1][pop_id2] / math.sqrt(uJx[pop_id1][pop_id2] * uJy[pop_id1][pop_id2])
+        nei_unbiased_distance = -math.log(unbiased_nei_identity)
+        if nei_unbiased_distance < 0:
+            nei_unbiased_distance = 0
+        dists[idx] = nei_unbiased_distance
+    return dists
+
+
 DISTANCES = {'kosman': _calc_kosman_pairwise_distance,
              'matching': _calc_matching_pairwise_distance,
              'nei': _calc_nei_pop_distance,
+             'nei_unbiased': _calc_pop_pairwise_unbiased_nei_dists,
              'nei_depth': _calc_nei_pop_distance_by_depth,
              'gst_per_loci': calc_gst_per_loci}
 

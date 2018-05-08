@@ -19,7 +19,8 @@ from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            _matching, calc_pop_distance,
                                            filter_dist_matrix,
                                            calc_gst_per_loci,
-                                           _calc_pop_pairwise_unbiased_nei_dists)
+                                           _calc_pop_pairwise_unbiased_nei_dists,
+                                           triangular_dists_to_square)
 from variation.variations.vars_matrices import VariationsArrays, VariationsH5
 from variation.variations.stats import GT_FIELD
 from test.test_utils import TEST_DATA_DIR
@@ -300,6 +301,21 @@ class GstDistTest(unittest.TestCase):
 
         dists = calc_gst_per_loci(chunk, populations=[['V51'], ['F49']])
         assert dists[0] == 0
+
+
+class TriangularToSquareTest(unittest.TestCase):
+
+    def test_trinagular_to_square(self):
+        dists = [1., 2., 3.]
+        names = ['a', 'b', 'c']
+        square_dists = triangular_dists_to_square(dists, names)
+        assert math.isclose(square_dists['a']['b'], 1.)
+        assert math.isclose(square_dists['a']['c'], 2.)
+        assert math.isclose(square_dists['b']['c'], 3.)
+
+        assert numpy.allclose(square_dists.values, [[0, 1, 2],
+                                                    [1, 0, 3],
+                                                    [2, 3, 0]])
 
 
 if __name__ == "__main__":

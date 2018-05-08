@@ -3,6 +3,7 @@ import itertools
 import math
 
 import numpy
+from pandas import DataFrame
 
 from scipy.spatial.distance import squareform
 
@@ -488,3 +489,7 @@ def filter_dist_matrix(dists, idxs_to_keep):
     dists = dists[:, idxs_to_keep][idxs_to_keep, :]
     dists = squareform(dists)
     return dists
+
+
+def triangular_dists_to_square(dists, col_names):
+    return DataFrame(squareform(dists), index=col_names, columns=col_names)

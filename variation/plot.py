@@ -911,3 +911,8 @@ def plot_sample_dp_het_hom(stats, min_dp=5, fhand=None, axes=None,
     if print_figure:
         _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
     return axes
+
+
+def plot_matrix_heatmap(array, row_names, col_names, fhand=None):
+    
+    

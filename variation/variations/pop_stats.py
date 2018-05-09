@@ -18,7 +18,7 @@ from variation.variations.stats import calc_maf as calc_maf_in_pop
 from variation.variations.stats import calc_obs_het as calc_obs_het_in_pop
 from variation.variations.stats import (calc_unbias_expected_het,
                                         _mask_stats_with_few_samples,
-                                        calc_called_gt,
+                                   7     calc_called_gt,
                                         calc_allele_freq)
 
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],

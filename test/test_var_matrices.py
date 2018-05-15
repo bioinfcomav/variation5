@@ -254,7 +254,7 @@ class VarMatsTests(unittest.TestCase):
         wins = hd5.iterate_chroms()
 
         hd5_2 = VariationsArrays()
-        hd5_2.put_chunks(wins)
+        hd5_2.put_chunks([win for _, win in wins])
         numpy.all(hd5['/variations/pos'] == hd5_2['/variations/pos'])
 
     def test_delete_item_from_variationArray(self):

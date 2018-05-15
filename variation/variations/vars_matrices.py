@@ -623,9 +623,9 @@ class _VariationMatrices():
             except IndexError:
                 # No snps for this chrom
                 continue
-            yield self.get_chunk(slice(chrom_start, chrom_end + 1),
-                                 kept_fields=kept_fields,
-                                 ignored_fields=ignored_fields)
+            yield chrom, self.get_chunk(slice(chrom_start, chrom_end + 1),
+                                        kept_fields=kept_fields,
+                                        ignored_fields=ignored_fields)
 
     @property
     def chroms(self):

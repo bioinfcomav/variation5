@@ -610,6 +610,23 @@ class _VariationMatrices():
                                      ignored_fields=ignored_fields)
                 pos += win_step
 
+    def iterate_chroms(self, kept_fields=None, ignored_fields=None,
+                       chroms=None):
+        index = self.pos_index
+
+        if chroms is None:
+            chroms = index.chroms
+
+        for chrom in chroms:
+            try:
+                chrom_start, chrom_end = index.get_chrom_range_index(chrom)
+            except IndexError:
+                # No snps for this chrom
+                continue
+            yield self.get_chunk(slice(chrom_start, chrom_end + 1),
+                                 kept_fields=kept_fields,
+                                 ignored_fields=ignored_fields)
+
     @property
     def chroms(self):
         index = self.pos_index

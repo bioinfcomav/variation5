@@ -248,6 +248,15 @@ class VarMatsTests(unittest.TestCase):
         hd5_2.put_chunks(wins)
         numpy.all(hd5['/variations/pos'] == hd5_2['/variations/pos'])
 
+    def test_iterate_chroms(self):
+        fpath = join(TEST_DATA_DIR, 'ril.hdf5')
+        hd5 = VariationsH5(fpath, mode='r')
+        wins = hd5.iterate_chroms()
+
+        hd5_2 = VariationsArrays()
+        hd5_2.put_chunks(wins)
+        numpy.all(hd5['/variations/pos'] == hd5_2['/variations/pos'])
+
     def test_delete_item_from_variationArray(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
@@ -411,5 +420,5 @@ class GenomeChunkTest(unittest.TestCase):
         # exact or close to
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'GenomeChunkTest']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_iterate_chroms']
     unittest.main()

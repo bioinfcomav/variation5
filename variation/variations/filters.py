@@ -721,7 +721,7 @@ def _calc_sample_missing_rates(variations, chunk_size):
 
 def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
                                    chunk_size=SNPS_PER_CHUNK,
-                                   n_bins=DEF_NUM_BINS,
+                                   n_bins=DEF_NUM_BINS, samples=None,
                                    range_=None, do_histogram=None):
     do_histogram = _check_if_histogram_is_required(do_histogram, n_bins,
                                                    range_)
@@ -736,6 +736,12 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
         range_ = min(missing_rates), max(missing_rates)
 
     idx_to_keep = missing_rates > min_called_rate
+
+    if samples:
+        var_samples = in_vars.samples
+        samples_idx_to_keep = [sample in samples for idx, sample in enumerate(var_samples)]
+        idx_to_keep = numpy.logical_and(idx_to_keep, samples_idx_to_keep)
+
     filter_samples = SamplesFilterByIndex(idx_to_keep)
 
     if do_histogram:

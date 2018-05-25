@@ -701,7 +701,8 @@ class SampleFilter:
         return filter_samples(variations)
 
 
-def _calc_sample_missing_rates(variations, chunk_size):
+def _calc_sample_missing_rates(variations, chunk_size,
+                               min_called_rate, max_het):
 
     if chunk_size is None:
         chunks = [variations]
@@ -709,43 +710,79 @@ def _calc_sample_missing_rates(variations, chunk_size):
         chunks = variations.iterate_chunks(kept_fields=[GT_FIELD],
                                            chunk_size=chunk_size)
     missing = None
+    het_counts = None
     for chunk in chunks:
         chunk_missing = calc_called_gt(chunk, rates=False, axis=0)
-        if missing is None:
-            missing = chunk_missing
-        else:
-            missing += chunk_missing
-    rates = missing / variations.num_variations
-    return rates
+        if min_called_rate is not None:
+            if missing is None:
+                missing = chunk_missing
+            else:
+                missing += chunk_missing
+
+        if max_het is not None:
+            is_het = call_is_het(chunk[GT_FIELD])
+            chunk_het_counts = numpy.sum(is_het, axis=0)
+            if het_counts is None:
+                het_counts = chunk_het_counts
+            else:
+                het_counts += chunk_het_counts
+
+    res = {}
+    if min_called_rate is not None:
+        rates = missing / variations.num_variations
+        res['missing_rates'] = rates
+    if max_het is not None:
+        obs_hets = het_counts / variations.num_variations
+        res['obs_hets'] = obs_hets
+
+    return res
 
 
-def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
+def filter_samples_by_missing_rate(in_vars, min_called_rate=None,
+                                   max_het=None,
+                                   out_vars=None,
                                    chunk_size=SNPS_PER_CHUNK,
                                    n_bins=DEF_NUM_BINS, samples=None,
-                                   range_=None, do_histogram=None):
-    do_histogram = _check_if_histogram_is_required(do_histogram, n_bins,
-                                                   range_)
+                                   do_histogram=None):
+
     res = _get_result_if_empty_vars(in_vars, do_histogram)
     if res is not None:
         raise ValueError('No SNPs to filter')
 
     do_filtering = False if out_vars is None else True
 
-    missing_rates = _calc_sample_missing_rates(in_vars, chunk_size)
-    if do_histogram and range_ is None:
-        range_ = min(missing_rates), max(missing_rates)
+    rates = _calc_sample_missing_rates(in_vars, chunk_size,
+                                       min_called_rate, max_het)
 
-    idx_to_keep = missing_rates > min_called_rate
+    idxs = []
+    if min_called_rate is not None:
+        missing_rates = rates['missing_rates']
+        min_called_idx_to_keep = missing_rates > min_called_rate
+        idxs.append(min_called_idx_to_keep)
+        if do_histogram:
+            missing_range = min(missing_rates), max(missing_rates)
 
     if samples:
         var_samples = in_vars.samples
         samples_idx_to_keep = [sample in samples for idx, sample in enumerate(var_samples)]
-        idx_to_keep = numpy.logical_and(idx_to_keep, samples_idx_to_keep)
+        idxs.append(samples_idx_to_keep)
+
+    if max_het is not None:
+        obs_hets = rates['obs_hets']
+        max_het_idx_to_keep = obs_hets > max_het
+        idxs.append(max_het_idx_to_keep)
+
+    idx_to_keep = None
+    for idx in idxs:
+        if idx_to_keep is None:
+            idx_to_keep = idx
+        else:
+            idx_to_keep = numpy.logical_and(idx_to_keep, idx)
 
     filter_samples = SamplesFilterByIndex(idx_to_keep)
 
     if do_histogram:
-        counts, edges = histogram(missing_rates, n_bins=n_bins, range_=range_)
+        counts, edges = histogram(missing_rates, n_bins=n_bins, range_=missing_range)
 
     if chunk_size is None:
         chunks = [in_vars]
@@ -760,8 +797,11 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate, out_vars=None,
     if do_histogram:
         res[EDGES] = edges
         res[COUNTS] = counts
-    res['missing_rates'] = missing_rates
+    if min_called_rate is not None:
+        res['missing_rates'] = missing_rates
     res['selected_samples'] = idx_to_keep
+    if max_het is not None:
+        res['obs_het'] = obs_hets
     return res
 
 

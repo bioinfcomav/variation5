@@ -653,6 +653,12 @@ class FilterSamplesTest(unittest.TestCase):
                                        samples=['1_18_4_gbs', '1_19_4_gbs'])
         assert new_var.samples == ['1_18_4_gbs', '1_19_4_gbs']
 
+        # for het
+        new_var = VariationsArrays()
+        filter_samples_by_missing_rate(chunk, max_het=0.15,
+                                       out_vars=new_var)
+        assert new_var.samples == ['F1_1_gbs', 'F1_2_gbs', 'F1_4_gbs']
+
         # check that it works by chunk
         new_var = VariationsArrays()
         res = filter_samples_by_missing_rate(variations, min_called_rate=0.2,

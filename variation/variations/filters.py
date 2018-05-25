@@ -769,7 +769,7 @@ def filter_samples_by_missing_rate(in_vars, min_called_rate=None,
 
     if max_het is not None:
         obs_hets = rates['obs_hets']
-        max_het_idx_to_keep = obs_hets > max_het
+        max_het_idx_to_keep = obs_hets < max_het
         idxs.append(max_het_idx_to_keep)
 
     idx_to_keep = None

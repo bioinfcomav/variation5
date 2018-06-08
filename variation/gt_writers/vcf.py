@@ -268,7 +268,7 @@ def _get_filters_value(variations, index, filter_paths):
         raise RuntimeError(msg)
     return ';'.join(filters)
 
-INT_STR_CONVERTER = {num: str(num) for num in range(30000)}
+INT_STR_CONVERTER = {num: str(num) for num in range(40000)}
 INT_STR_CONVERTER[MISSING_INT] = '.'
 INT_STR_CONVERTER[MISSING_FLOAT] = '.'
 INT_STR_CONVERTER[MISSING_STR] = '.'

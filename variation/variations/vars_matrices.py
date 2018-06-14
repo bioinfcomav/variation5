@@ -690,6 +690,10 @@ class _VariationMatrices():
         gts012[numpy.any(gts == MISSING_INT, axis=2)] = MISSING_INT
         return gts012
 
+    def copy(self, variations, kept_fields=None):
+        chunks = self.iterate_chunks(kept_fields=kept_fields)
+        variations.put_chunks(chunks)
+
 
 def _get_hdf5_dsets(dsets, h5_or_group_or_dset, var_mat):
     if var_mat is not None:

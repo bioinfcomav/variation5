@@ -239,6 +239,15 @@ class VarMatsTests(unittest.TestCase):
             assert chunk['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(chunk['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
 
+    def test_copy(self):
+        in_snps = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
+        for klass in VAR_MAT_CLASSES:
+            out_snps = _init_var_mat(klass)
+            in_snps.copy(out_snps, kept_fields=['/calls/GT'])
+            assert '/calls/GQ' not in out_snps.keys()
+            assert out_snps['/calls/GT'].shape == (5, 3, 2)
+            assert numpy.all(out_snps['/calls/GT'][:] == in_snps['/calls/GT'])
+
     def test_iterate_wins(self):
         fpath = join(TEST_DATA_DIR, 'ril.hdf5')
         hd5 = VariationsH5(fpath, mode='r')

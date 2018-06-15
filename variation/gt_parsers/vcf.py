@@ -186,6 +186,8 @@ class VCFParser(_VarParserWithPreRead):
                 if gt == b'.':
                     continue
                 gt = gt.split(b':')[0]
+                if gt == b'.':
+                    continue
                 alleles = gt.split(b'/') if b'/' in gt else gt.split(b'|')
                 ploidy = len(alleles)
                 break
@@ -361,6 +363,7 @@ class VCFLineParser:
             max_field_lens['FILTER'] = flt_len
         info = _parse_info(info, ignored_fields, metadata, max_field_lens,
                            max_field_str_lens)
+
         calls = _parse_calls(fmt, calls, ignored_fields, kept_fields,
                              max_field_lens, metadata, empty_gt)
 

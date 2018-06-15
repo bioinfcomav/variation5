@@ -60,7 +60,7 @@ def main():
     if in_fpath.split('.')[-1] == 'gz':
         fhand = read_gzip_file(in_fpath)
     else:
-        fhand = open(in_fpath, 'rb')    
+        fhand = open(in_fpath, 'rb')
     vcf_parser = VCFParser(fhand=fhand,
                            pre_read_max_size=args['pre_read_max_size'],
                            ignored_fields=args['ignored_fields'],

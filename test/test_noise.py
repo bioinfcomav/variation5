@@ -14,7 +14,7 @@ import numpy
 
 from variation.variations.vars_matrices import VariationsArrays, VariationsH5
 from test.test_utils import TEST_DATA_DIR
-from variation.variations.noise import set_gts_to_missing
+from variation.variations.random import set_gts_to_missing, sample_variations
 from variation import GT_FIELD, MISSING_INT
 from variation.gt_parsers.vcf import VCFParser
 
@@ -66,6 +66,16 @@ class SetToMissingTest(unittest.TestCase):
         assert numpy.all(noise_gts == expected_gts)
 
         # TDO Not enough not missing
+
+
+class VariationSamplingTest(unittest.TestCase):
+
+    def test_sampling(self):
+        vars_out = VariationsArrays()
+        vars_in = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
+        numpy.random.seed(1)
+        sample_variations(vars_in, vars_out, sample_rate=0.1)
+        assert vars_out.num_variations == 94
 
 
 if __name__ == "__main__":

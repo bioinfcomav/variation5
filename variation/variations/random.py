@@ -22,3 +22,9 @@ def set_gts_to_missing(variations, percent_of_non_missing_gts_to_missing):
     gts = variations[GT_FIELD]
     gts_to_set_missing = [index[gts_to_keep] for index in index_for_non_missing_gts]
     gts[gts_to_set_missing] = MISSING_INT
+
+
+def sample_variations(in_vars, out_vars, sample_rate, chunk_size=None):
+    chunks = in_vars.iterate_chunks(chunk_size=chunk_size,
+                                    random_sample_rate=sample_rate)
+    out_vars.put_chunks(chunks)

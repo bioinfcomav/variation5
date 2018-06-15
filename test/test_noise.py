@@ -66,10 +66,9 @@ class SetToMissingTest(unittest.TestCase):
 class VariationSamplingTest(unittest.TestCase):
 
     def test_sampling(self):
-        vars_out = VariationsArrays()
         vars_in = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         numpy.random.seed(1)
-        sample_variations(vars_in, vars_out, sample_rate=0.1)
+        vars_out = sample_variations(vars_in, sample_rate=0.1)
         assert vars_out.num_variations == 94
 
 

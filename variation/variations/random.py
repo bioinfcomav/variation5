@@ -55,7 +55,11 @@ def copy_setting_gts_to_missing(in_vars, gt_rate_to_missing,
     return out_vars
 
 
-def sample_variations(in_vars, out_vars, sample_rate, chunk_size=None):
+def sample_variations(in_vars, sample_rate, out_vars=None, chunk_size=None):
+    if out_vars is None:
+        out_vars = VariationsArrays()
+
     chunks = in_vars.iterate_chunks(chunk_size=chunk_size,
                                     random_sample_rate=sample_rate)
     out_vars.put_chunks(chunks)
+    return out_vars

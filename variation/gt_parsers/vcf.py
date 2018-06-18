@@ -117,6 +117,7 @@ class VCFParser(_VarParserWithPreRead):
     def __init__(self, fhand, pre_read_max_size=None,
                  ignored_fields=None, kept_fields=None,
                  max_field_lens=None, max_n_vars=None,
+                 max_field_str_lens=None,
                  n_threads=None):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
@@ -145,6 +146,12 @@ class VCFParser(_VarParserWithPreRead):
         else:
             user_max_field_lens = max_field_lens
         self._max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
+
+        if max_field_str_lens is None:
+            user_max_field_str_lens = {}
+        else:
+            user_max_field_str_lens = max_field_str_lens
+
         self._max_field_str_lens = {'FILTER': 0, 'INFO': {},
                                     'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
         self._init_max_field_lens()
@@ -154,6 +161,13 @@ class VCFParser(_VarParserWithPreRead):
                     self._max_field_lens[key1][key2] = value2
             else:
                 self._max_field_lens[key1] = value1
+
+        for key1, value1 in user_max_field_str_lens.items():
+            if isinstance(value1, dict):
+                for key2, value2 in value1.items():
+                    self._max_field_str_lens[key1][key2] = value2
+            else:
+                self._max_field_str_lens[key1] = value1
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}

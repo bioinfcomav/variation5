@@ -54,7 +54,11 @@ class PosIndex():
         for chrom in numpy.unique(chrom_mat):
             start = bisect_left(chrom_mat, chrom)
             end = bisect_right(chrom_mat, chrom)
-            if chrom_mat[start] != chrom:
+            try:
+                chrom_start = chrom_mat[start]
+            except ValueError:
+                raise RuntimeError('Maybe SNPs are not sorted')
+            if chrom_start != chrom:
                 raise RuntimeError('Maybe SNPs are not sorted')
             idx[chrom] = {'start': start, 'end': end}
         return idx

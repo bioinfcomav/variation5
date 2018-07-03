@@ -118,6 +118,31 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         assert list(grouped_vars['/variations/info/AA'][0]) == [b'G-T', b'G-C',
                                                                 b'ATT']
 
+        # Don't remove missing
+        vcf = b'''##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	NA1	NA2	NA3
+20	10	.	G	A	29	.	.	GT	0|0	0|0	1/1
+20	20	.	T	C	3	.	.	GT	0|0	1|1	0/1
+'''
+        vcf_fhand = io.BytesIO(vcf)
+        variations = self._get_var_array(vcf_fhand)
+        blocks = [{'chrom': b'20', 'start': 10, 'stop': 21}]
+
+        var_grouper = BlocksVariationGrouper(variations, blocks,
+                                             remove_snps_with_hets_or_missing=False,
+                                             pre_read_max_size=math.inf,
+                                             variations_are_phased=True)
+        grouped_vars = VariationsArrays(ignore_undefined_fields=True)
+        grouped_vars.put_vars(var_grouper)
+        assert grouped_vars[REF_FIELD] == [b'GT']
+        assert numpy.all(grouped_vars[ALT_FIELD][0] == [b'GC', b'AT', b'AC'])
+        assert numpy.all(grouped_vars[GT_FIELD] == [[[0, 0], [1, 1], [2, 3]]])
+        assert grouped_vars[CHROM_FIELD] == [b'20']
+        assert grouped_vars[POS_FIELD] == [10]
+        assert grouped_vars['/variations/info/SN'] == [2]
+        assert list(grouped_vars['/variations/info/AA'][0]) == [b'GT', b'GC',
+                                                                b'AT', b'AC']
+
     def test_group_vars_per_block_deletion_test(self):
         blocks = [{'chrom': b'20', 'start': 10, 'stop': 21}]
         vcf = b'''##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
@@ -217,6 +242,6 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_group_vars_per_block_deletion_test']
+    # import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_group_vars_per_block_test']
     unittest.main()
 

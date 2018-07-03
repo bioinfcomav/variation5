@@ -13,21 +13,27 @@ ALIGNED_ALLELES_FIELD_NAME = b'AA'
 NUMBER_OF_SNPS_FIELD_NAME = b'SN'
 
 
-def _create_new_alleles_and_genotypes(variations):
+def _create_new_alleles_and_genotypes(variations, variations_are_phased):
 
     gts = variations[GT_FIELD]
     ref_allele = tuple([0] * variations.num_variations)
     alleles = {ref_allele: 0}
-    sample_alleles = []
+    samples_alleles = []
+    ploidy = gts.shape[2]
     for sample_idx in range(len(variations.samples)):
-        sample_gts = tuple(gts[:, sample_idx, 0]) # we're assuming homozygosity here
-        try:
-            sample_allele = alleles[sample_gts]
-        except KeyError:
-            new_allele = len(alleles)
-            alleles[sample_gts] = new_allele
-            sample_allele = new_allele
-        sample_alleles.append(sample_allele)
+        sample_gtss = [tuple(gts[:, sample_idx, allele_idx]) for allele_idx in range(ploidy)]
+        sample_gtss = gts[:, sample_idx, :]
+        sample_alleles = []
+        for allele_idx in range(ploidy):
+            sample_gts = tuple(sample_gtss[:, allele_idx])
+            try:
+                sample_allele = alleles[sample_gts]
+            except KeyError:
+                new_allele = len(alleles)
+                alleles[sample_gts] = new_allele
+                sample_allele = new_allele
+            sample_alleles.append(sample_allele)
+        samples_alleles.append(sample_alleles)
 
     refs_for_each_snp = variations[REF_FIELD]
     alt_for_each_snp = variations[ALT_FIELD]
@@ -60,8 +66,7 @@ def _create_new_alleles_and_genotypes(variations):
 
     alt_alleles = [snp_alleles_with_letters[alt_allele_number] for alt_allele_number in range(1, len(alt_allele_numbers) + 1)]
 
-    gts = numpy.repeat(sample_alleles, 2).reshape(len(variations.samples), variations.ploidy)
-
+    gts = numpy.array(samples_alleles)
     return {'ref_allele': ref_allele,
             'alt_alleles': alt_alleles,
             'gts': gts,
@@ -74,7 +79,10 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
                  remove_snps_with_hets_or_missing=False,
                  pre_read_max_size=None, max_field_lens=None,
                  max_field_str_lens=None, max_n_vars=None,
-                 n_threads=None, out_alleles_pickle_fhand=None):
+                 n_threads=None, out_alleles_pickle_fhand=None,
+                 variations_are_phased=False):
+
+        self.variations_are_phased = variations_are_phased
 
         if n_threads is not None:
             raise NotImplemented('Parallelization is not implemented')
@@ -162,11 +170,17 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
                 block_chunk = flt(block_chunk)[FLT_VARS]
             else:
                 gt_is_het, gt_is_missing = stats._call_is_het(block_chunk, min_call_dp=0)
-                het_or_missing = numpy.logical_or(gt_is_het, gt_is_missing)
-                gt_is_hom_and_not_missing = numpy.logical_not(het_or_missing)
-                all_gts_are_hom_and_not_missing = numpy.all(gt_is_hom_and_not_missing)
-                if not all_gts_are_hom_and_not_missing:
-                    raise ValueError('Missing or het genotypes found, you could use remove_snps_with_hets_or_missing=True')
+                if self.variations_are_phased:
+                    gt_is_not_missing = numpy.logical_not(gt_is_missing)
+                    all_gts_are_not_missing = numpy.all(gt_is_not_missing)
+                    if not all_gts_are_not_missing:
+                        raise ValueError('Missing genotypes found, you could use remove_snps_with_hets_or_missing=True')
+                else:
+                    het_or_missing = numpy.logical_or(gt_is_het, gt_is_missing)
+                    gt_is_hom_and_not_missing = numpy.logical_not(het_or_missing)
+                    all_gts_are_hom_and_not_missing = numpy.all(gt_is_hom_and_not_missing)
+                    if not all_gts_are_hom_and_not_missing:
+                        raise ValueError('Missing or het genotypes found, you could use remove_snps_with_hets_or_missing=True')
 
             if block_chunk.num_variations < self.min_num_vars_in_block:
                 continue
@@ -174,10 +188,11 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
             snp_id = None
             start = block_chunk[POS_FIELD][0]
 
-            alleles_and_gts = _create_new_alleles_and_genotypes(block_chunk)
+            alleles_and_gts = _create_new_alleles_and_genotypes(block_chunk,
+                                                                self.variations_are_phased)
             ref_allele = alleles_and_gts['ref_allele']
-            alt_alleles = alleles_and_gts['alt_alleles']
             gts = alleles_and_gts['gts']
+            alt_alleles = alleles_and_gts['alt_alleles']
 
             if max_field_str_lens['ref'] < len(ref_allele):
                 max_field_str_lens['ref'] = len(ref_allele)

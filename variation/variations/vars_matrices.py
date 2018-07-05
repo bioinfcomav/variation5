@@ -600,7 +600,7 @@ class _VariationMatrices():
                     # No snps for this chrom
                     break
                 idx0 = index.index_pos(chrom, pos)
-                idx1 = index.index_pos(chrom, pos + win_step)
+                idx1 = index.index_pos(chrom, pos + win_size)
                 if chrom_mat[idx0] != chrom:
                     msg = 'chroms do not match: ' + str(chrom_mat[idx0])
                     msg += ', ' + str(chrom)

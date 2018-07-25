@@ -8,6 +8,7 @@
 
 import unittest
 from os.path import join
+import math
 
 from collections import Counter
 
@@ -494,8 +495,8 @@ class SNPQualFilterTest(unittest.TestCase):
         flt_chunk = SNPQualFilter(min_qual=530, max_qual=1000)(chunk)[FLT_VARS]
         assert first(flt_chunk.values()).shape[0] > 18
 
-        flt_chunk = SNPQualFilter(min_qual=586325202)(chunk)[FLT_VARS]
-        assert first(flt_chunk.values()).shape[0] == 0
+        flt_chunk = SNPQualFilter(min_qual=math.inf)(chunk)[FLT_VARS]
+        assert first(flt_chunk.values()).shape[0] == 20
 
         flt_chunk = SNPQualFilter(max_qual=-1)(chunk)[FLT_VARS]
         assert first(flt_chunk.values()).shape[0] == 0
@@ -786,5 +787,6 @@ class FieldValueFilterTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'AnnotationFilterTest']
+
+    # import sys;sys.argv = ['', 'SNPQualFilterTest.test_filter_quality_snps']
     unittest.main()

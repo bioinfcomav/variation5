@@ -5,7 +5,6 @@
 # Missing docstring
 # pylint: disable=C0111
 
-
 from os.path import dirname, abspath, join
 import inspect
 

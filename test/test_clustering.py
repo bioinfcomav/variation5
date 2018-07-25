@@ -15,8 +15,6 @@ from variation.clustering import (do_tree, get_subtrees, annotate_tree,
                                   write_tree_to_nexus_file, FigtreeConfig)
 
 
-
-
 class ClusteringTest(unittest.TestCase):
     def test_upgma(self):
         dists = [1.45, 1.51, 1.57, 2.98, 2.94, 3.04, 7.51, 7.55, 7.39, 7.10]
@@ -95,7 +93,9 @@ class ClusteringTest(unittest.TestCase):
             write_tree_to_nexus_file(tree, test_fhand,
                                      figtree_config=figtree_config)
             test_fhand.flush()
-            test_string = open(test_fhand.name, "r").read()
+            fhand = open(test_fhand.name, "r")
+            test_string = fhand.read()
+            fhand.close()
             tree_string = test_string.split(";")[5]
             leaves = tree_string.split("],")
             assert "H:0.71[&" in leaves[0]
@@ -112,7 +112,9 @@ class ClusteringTest(unittest.TestCase):
                                      figtree_config=figtree_config,
                                      chosen_features=chosen_features)
             test_fhand.flush()
-            test_string = open(test_fhand.name, "r").read()
+            fhand = open(test_fhand.name, "r")
+            test_string = fhand.read()
+            fhand.close()
             tree_string = test_string.split(";")[5]
             leaves = tree_string.split("],")
             assert "group1=A" in leaves[2]

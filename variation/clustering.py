@@ -92,7 +92,6 @@ def _create_taxa_block(tree):
 
 def _fix_tree_format_for_figtree(tree, choose_features=None):
     if choose_features:
-        print("llll")
         features = choose_features
     else:
         features = []

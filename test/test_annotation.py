@@ -36,7 +36,7 @@ class IsVariableTest(unittest.TestCase):
         annotated_variations = result[ANNOTATED_VARS]
         field = '/variations/info/{}'.format(annot_id)
         assert annotated_variations.metadata[field]['Type'] == 'Integer'
-        assert annotated_variations.metadata[field]['Number'] == '1'
+        assert annotated_variations.metadata[field]['Number'] == 1
 
         assert field in annotated_variations.keys()
         assert annotated_variations[field][0] == 0
@@ -50,8 +50,8 @@ class IsVariableTest(unittest.TestCase):
         result = annotator(hdf5)
         annotated_variations = result[ANNOTATED_VARS]
         field = '/variations/info/{}'.format(annot_id)
-        assert annotated_variations.metadata[field]['Type'] == 'String'
-        assert annotated_variations.metadata[field]['Number'] == '1'
+        assert annotated_variations.metadata[field]['Type'] == 'Integer'
+        assert annotated_variations.metadata[field]['Number'] == 1
 
         assert field in annotated_variations.keys()
         assert annotated_variations[field][3] == FALSE_INT
@@ -66,8 +66,8 @@ class IsVariableTest(unittest.TestCase):
         result = annotator(variations)
         annotated_variations = result[ANNOTATED_VARS]
         field = '/variations/info/{}'.format(annot_id)
-        assert annotated_variations.metadata[field]['Type'] == 'String'
-        assert annotated_variations.metadata[field]['Number'] == '1'
+        assert annotated_variations.metadata[field]['Type'] == 'Integer'
+        assert annotated_variations.metadata[field]['Number'] == 1
 
         assert field in annotated_variations.keys()
         assert annotated_variations[field][3] == TRUE_INT

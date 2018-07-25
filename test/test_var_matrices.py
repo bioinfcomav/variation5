@@ -289,18 +289,8 @@ class VarMatsTests(unittest.TestCase):
                 out_snps = _init_var_mat(klass)
                 out_snps.put_chunks(var_mat.iterate_chunks())
                 assert '/variations/filter/q10' in out_snps.keys()
-                out_snps.put_chunks(var_mat.iterate_chunks())
 
             fhand.close()
-
-    def test_max_field_str_len(self):
-        fhand = gzip.open(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.vcf.gz'),
-                          'rb')
-        vcf_parser = VCFParser(fhand=fhand, pre_read_max_size=1000,
-                               max_field_lens={'alt': 5})
-        expected = {'INFO': {b'TYPE': 7, b'CIGAR': 6}, 'alt': 4, 'chrom': 10,
-                    'id': 10, 'ref': 0, 'FILTER': 0}
-        assert vcf_parser.max_field_str_lens == expected
 
     def test_vcf_to_hdf5(self):
         tmp_fhand = NamedTemporaryFile()
@@ -429,5 +419,5 @@ class GenomeChunkTest(unittest.TestCase):
         # exact or close to
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VarMatsTests.test_iterate_chroms']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_metadata']
     unittest.main()

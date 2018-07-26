@@ -8,14 +8,18 @@
 import unittest
 import shutil
 from tempfile import NamedTemporaryFile
+import tempfile
 from posixpath import join
 
 import numpy
+import h5py
 
 from variation.matrix.methods import (append_matrix, extend_matrix,
                                       append_different_size,
                                       iterate_matrix_chunks,
-                                      calc_min_max)
+                                      calc_min_max,
+                                      concat_vector, concat_matrices,
+                                      vstack, _set_matrix_by_chunks)
 from variation.variations.vars_matrices import VariationsH5
 from test.test_utils import TEST_DATA_DIR
 
@@ -107,6 +111,247 @@ class ArrayTest(unittest.TestCase):
         assert calc_min_max(mat, sample_idx=1, chunk_size=None) == (2, 5)
 
 
+class VStackTest(unittest.TestCase):
+
+    def test_vector_concat(self):
+        mat1 = numpy.array([0, 1])
+        mat2 = numpy.array([2, 3])
+        mat = concat_vector([mat1, mat2], -1)
+        assert numpy.all(mat == numpy.array([0, 1, 2, 3]))
+
+        mat = concat_matrices([mat1, mat2], -1)
+        assert numpy.all(mat == numpy.array([0, 1, 2, 3]))
+
+    def test_no_vectors(self):
+        try:
+            concat_vector([], -1)
+            self.fail('ValueError expected')
+        except ValueError:
+            pass
+
+    def test_2d_stacking(self):
+        mat1 = numpy.array([[0, 1], [2, 3]])
+        mat2 = numpy.array([[3, 4], [5, 6]])
+        mat = vstack([mat1, mat2], -1)
+        assert numpy.all(mat == [[0, 1], [2, 3], [3, 4], [5, 6]])
+
+    def test_no_matrices(self):
+        try:
+            vstack([], -1)
+            self.fail('ValueError expected')
+        except ValueError:
+            pass
+
+    def test_2d_stacking_different_shapes(self):
+        mat1 = numpy.array([[0, 1], [2, 3]])
+        mat2 = numpy.array([[3], [5], [6]])
+        mat = vstack([mat1, mat2], -1)
+        assert numpy.all(mat == [[0, 1], [2, 3], [3, -1], [5, -1], [6, -1]])
+
+        mat = vstack([mat2, mat1], -1)
+        assert numpy.all(mat == [[3, -1], [5, -1], [6, -1], [0, 1], [2, 3]])
+
+        mat1 = numpy.array([[[10, 11, 12, 13],
+                             [14, 15, 16, 17],
+                             [18, 19, 20, 21]],
+                            [[22, 23, 24, 25],
+                             [26, 27, 28, 29],
+                             [30, 31, 32, 33]]])
+        mat2 = numpy.array([[[40, 41, 42, 43],
+                             [44, 45, 46, 47]]])
+        mat3 = numpy.array([[[10, 11, 12, 13],
+                             [14, 15, 16, 17],
+                             [18, 19, 20, 21]],
+                            [[22, 23, 24, 25],
+                             [26, 27, 28, 29],
+                             [30, 31, 32, 33]],
+                            [[40, 41, 42, 43],
+                             [44, 45, 46, 47],
+                             [-1, -1, -1, -1]]])
+        mat = vstack([mat1, mat2], -1)
+        assert numpy.all(mat == mat3)
+
+        mat = concat_matrices([mat1, mat2], -1)
+        assert numpy.all(mat == mat3)
+
+    def test_str_vector_concat(self):
+        mat1 = numpy.array([b'hola'])
+        mat2 = numpy.array([b'caracola'])
+        mat = concat_vector([mat1, mat2], b'x')
+        assert numpy.all(mat == numpy.array([b'hola', b'caracola']))
+
+
+class VStackH5Test(unittest.TestCase):
+
+    def create_dset(self, mat, fillvalue, maxshape=None, path='/dset'):
+        h5_fhand = tempfile.NamedTemporaryFile(suffix='.h5')
+        h5 = h5py.File(h5_fhand.name, "w")
+        dset = h5.create_dataset(path, data=mat,
+                                 maxshape=maxshape, fillvalue=fillvalue)
+        h5_fhand.flush()
+        return h5_fhand, dset
+
+    def test_vector_concat(self):
+        mat1 = numpy.array([0, 1])
+        _, dset1 = self.create_dset(mat1, -1, maxshape=(None,))
+
+        mat2 = numpy.array([2, 3])
+        mat = concat_vector([dset1, mat2], -1)
+        assert numpy.all(mat[:] == numpy.array([0, 1, 2, 3]))
+
+        mat1 = numpy.array([0, 1])
+        _, dset1 = self.create_dset(mat1, -1)
+
+        mat2 = numpy.array([2, 3])
+        mat = concat_vector([dset1, mat2], -1)
+        assert numpy.all(mat[:] == numpy.array([0, 1, 2, 3]))
+
+        mat1 = numpy.array([b'a', b'b'])
+        _, dset1 = self.create_dset(mat1, b'x')
+
+        mat2 = numpy.array([b'c', b'd'])
+        mat = concat_vector([dset1, mat2], -1)
+        assert numpy.all(mat[:] == numpy.array([b'a', b'b', b'c', b'd']))
+
+    def test_str_vector_different_size(self):
+
+        mat1 = numpy.array([b'a', b'b'])
+        _, dset1 = self.create_dset(mat1, b'x')
+
+        mat2 = numpy.array([b'cf', b'd'])
+        mat = concat_vector([dset1, mat2], -1)
+        assert numpy.all(mat[:] == numpy.array([b'a', b'b', b'cf', b'd']))
+
+    def test_dset_replacement(self):
+        mat1 = numpy.array([0, 1])
+        _, dset1 = self.create_dset(mat1, -1,
+                                           path='/hola')
+
+        mat2 = numpy.array([2, 3])
+        mat = concat_vector([dset1, mat2], -1)
+        assert mat.name == None
+
+        _, dset1 = self.create_dset(mat1, -1,
+                                           path='/hola')
+        mat = concat_vector([dset1, mat2], -1,
+                            if_first_matrix_is_dataset_replace_it=True)
+        assert mat.name == '/hola'
+        assert mat is not dset1
+
+        _, dset1 = self.create_dset(mat1, -1, maxshape=(None,),
+                                           path='/hola')
+        mat = concat_vector([dset1, mat2], -1,
+                            if_first_matrix_is_dataset_replace_it=True)
+        assert mat.name == '/hola'
+        assert mat is dset1
+
+    def test_2d_stacking(self):
+        mat1 = numpy.array([[0, 1], [2, 3]])
+        _, dset1 = self.create_dset(mat1, -1)
+        mat2 = numpy.array([[3, 4], [5, 6]])
+        mat = vstack([dset1, mat2], -1)
+        assert numpy.all(mat[:] == [[0, 1], [2, 3], [3, 4], [5, 6]])
+
+        _, dset1 = self.create_dset(mat1, -1, maxshape=(None, 2))
+        mat = vstack([dset1, mat2], -1)
+        assert numpy.all(mat[:] == [[0, 1], [2, 3], [3, 4], [5, 6]])
+
+    def test_2d_stacking_different_shapes(self):
+        mat1 = numpy.array([[0, 1], [2, 3]])
+        _, dset1 = self.create_dset(mat1, -1)
+        mat2 = numpy.array([[3], [5], [6]])
+        mat = vstack([dset1, mat2], -1)
+        assert numpy.all(mat[:] == [[0, 1], [2, 3], [3, -1], [5, -1], [6, -1]])
+
+        h5_fhand2, dset2 = self.create_dset(mat2, -1)
+        mat = vstack([dset2, mat1], -1)
+        assert numpy.all(mat[:] == [[3, -1], [5, -1], [6, -1], [0, 1], [2, 3]])
+
+        mat1 = numpy.array([[[10, 11, 12, 13],
+                             [14, 15, 16, 17],
+                             [18, 19, 20, 21]],
+                            [[22, 23, 24, 25],
+                             [26, 27, 28, 29],
+                             [30, 31, 32, 33]]])
+        mat2 = numpy.array([[[40, 41, 42, 43],
+                             [44, 45, 46, 47]]])
+        mat3 = numpy.array([[[10, 11, 12, 13],
+                             [14, 15, 16, 17],
+                             [18, 19, 20, 21]],
+                            [[22, 23, 24, 25],
+                             [26, 27, 28, 29],
+                             [30, 31, 32, 33]],
+                            [[40, 41, 42, 43],
+                             [44, 45, 46, 47],
+                             [-1, -1, -1, -1]]])
+        _, dset1 = self.create_dset(mat1, -1)
+        mat = vstack([dset1, mat2], -1)
+        assert numpy.all(mat[:] == mat3)
+
+    def test_set_chunk_by_chunk(self):
+        mat = numpy.zeros(10, dtype=int)
+        _set_matrix_by_chunks(mat, slice(5, 9), numpy.array([1, 1, 1, 1]), chunk_size=2)
+        assert numpy.all(mat == [0, 0, 0, 0, 0, 1, 1, 1, 1, 0])
+
+        _set_matrix_by_chunks(mat, slice(4, 8), numpy.array([2, 2, 2, 2]), chunk_size=3)
+        assert numpy.all(mat == [0, 0, 0, 0, 2, 2, 2, 2, 1, 0])
+
+        mat = numpy.array([[0, 1], [2, 3], [4, 5]])
+        _set_matrix_by_chunks(mat, slice(0, 2), numpy.array([[6, 7], [8, 9]]), chunk_size=1)
+        assert numpy.all(mat == [[6, 7], [8, 9], [4, 5]])
+
+        mat = numpy.zeros(10, dtype=int)
+        _set_matrix_by_chunks(mat, slice(5, 9), numpy.array([1, 1, 1, 1]), chunk_size=20)
+        assert numpy.all(mat == [0, 0, 0, 0, 0, 1, 1, 1, 1, 0])
+
+        mat = numpy.zeros(10, dtype=int)
+        _set_matrix_by_chunks(mat, slice(-5, -1), numpy.array([1, 1, 1, 1]), chunk_size=20)
+        assert numpy.all(mat == [0, 0, 0, 0, 0, 1, 1, 1, 1, 0])
+
+    def test_3d_stacking_different_shapes(self):
+        mat1 = numpy.array([[[10, 11, 12],
+                             [14, 15, 16],
+                             [18, 19, 20]],
+                            [[22, 23, 24],
+                             [26, 27, 28],
+                             [30, 31, 32]]])
+        mat2 = numpy.array([[[40, 41, 42, 43],
+                             [44, 45, 46, 47]]])
+        mat3 = numpy.array([[[10, 11, 12, -1],
+                             [14, 15, 16, -1],
+                             [18, 19, 20, -1]],
+                            [[22, 23, 24, -1],
+                             [26, 27, 28, -1],
+                             [30, 31, 32, -1]],
+                            [[40, 41, 42, 43],
+                             [44, 45, 46, 47],
+                             [-1, -1, -1, -1]]])
+        _, dset1 = self.create_dset(mat1, -1)
+        mat = vstack([dset1, mat2], -1)
+        assert numpy.all(mat[:] == mat3)
+
+        mat1 = numpy.array([[[10, 11, 12, 13],
+                             [14, 15, 16, 17],
+                             [18, 19, 20, 21]],
+                            [[22, 23, 24, 25],
+                             [26, 27, 28, 29],
+                             [30, 31, 32, 33]]])
+        mat2 = numpy.array([[[40, 41, 42],
+                             [44, 45, 46]]])
+        mat3 = numpy.array([[[10, 11, 12, 13],
+                             [14, 15, 16, 17],
+                             [18, 19, 20, 21]],
+                            [[22, 23, 24, 25],
+                             [26, 27, 28, 29],
+                             [30, 31, 32, 33]],
+                            [[40, 41, 42, -1],
+                             [44, 45, 46, -1],
+                             [-1, -1, -1, -1]]])
+        _, dset1 = self.create_dset(mat1, -1)
+        mat = vstack([dset1, mat2], -1)
+        assert numpy.all(mat[:] == mat3)
+
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'ArrayTest.test_append_different_size']
+    # import sys;sys.argv = ['', 'VStackH5Test.test_3d_stacking_different_shapes']
     unittest.main()

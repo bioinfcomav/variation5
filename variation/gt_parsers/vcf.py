@@ -249,6 +249,7 @@ class VCFLineParser:
             flt = None
         else:
             flt = flt.split(b';')
+
         info = _parse_info(info, ignored_fields, metadata)
 
         calls = _parse_calls(fmt, calls, ignored_fields, kept_fields, metadata,

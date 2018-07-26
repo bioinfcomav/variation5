@@ -261,9 +261,8 @@ cdef _parse_gt(bytes gt, list empty_gt):
         return PARSED_GT_CACHE[gt]
     except KeyError:
         pass
-    if gt == b'.':
+    if gt == b'.' or gt == b'./.':
         c_gt = empty_gt
-
     else:
         if phased in gt:
             is_phased = True
@@ -313,22 +312,26 @@ cpdef _parse_calls(fmt, calls, list ignored_fields, list kept_fields,
     empty_call = [NOT_VALUE] * len(fmt)
     calls = [empty_call if gt == NOT_VALUE else gt.split(TWO_DOTS)
              for gt in calls]
+
     for call_data in calls:
         if len(call_data) < len(fmt):
-            call_data.append(None)
+            call_data.append(b'.')
+
     calls = zip(*calls)
     parsed_gts = []
+
     cdef int max_len
     for fmt_data, gt_data in zip(fmt, calls):
         if fmt_data[0] in ignored_fields:
             continue
         if kept_fields and fmt_data[0] not in kept_fields:
             continue
+
         if fmt_data[0] == b'GT':
             gt_data = [_parse_gt(sample_gt, empty_gt) for sample_gt in gt_data]
         else:
-            if fmt_data[2]:  # the info for a sample in this field is
-                            # or should be a list
+            if fmt_data[2]:     # the info for a sample in this field is
+                                # or should be a list
                 gt_data = _gt_data_to_list(gt_data, fmt_data[1],
                                            fmt_data[4])
             else:
@@ -337,5 +340,4 @@ cpdef _parse_calls(fmt, calls, list ignored_fields, list kept_fields,
         meta = fmt_data[3]
 
         parsed_gts.append((fmt_data[0], gt_data))
-
     return parsed_gts

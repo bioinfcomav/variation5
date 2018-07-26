@@ -1,7 +1,7 @@
 import posixpath
 import json
 import copy
-from collections import Counter
+from collections import Counter, defaultdict
 
 import numpy
 import h5py
@@ -11,7 +11,7 @@ from variation import (SNPS_PER_CHUNK, MISSING_VALUES, DEF_DSET_PARAMS,
                        MISSING_INT)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
-from variation.matrix.methods import append_matrix, is_dataset
+from variation.matrix.methods import is_dataset, concat_matrices
 from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
 from variation.gt_writers.vcf import write_vcf
@@ -19,6 +19,14 @@ from variation.gt_writers.vcf import write_vcf
 # Missing docstring
 # pylint: disable=C0111
 
+DEFAULT_FIELD_METADATA = {'/variations/id': {'dtype': numpy.bytes_},
+                          '/variations/qual': {'dtype': numpy.float16},
+                          '/variations/chrom': {'dtype': numpy.bytes_},
+                          '/variations/alt': {'dtype': numpy.bytes_},
+                          '/variations/pos': {'dtype': numpy.int32},
+                          '/variations/ref': {'dtype': numpy.bytes_},
+                          '/calls/GT': {'dtype': numpy.int16},
+                          }
 
 TYPES = {'int16': numpy.int16,
          'int32': numpy.int32,
@@ -78,11 +86,6 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
     n_samples = len(vars_parser.samples)
     ploidy = vars_parser.ploidy
 
-    if max_field_lens is None:
-        max_field_lens = vars_parser.max_field_lens
-    if max_field_str_lens is None:
-        max_field_str_lens = vars_parser.max_field_str_lens
-
     # filters
     filters = list(metadata['FILTER'].keys())
     if filters:
@@ -133,12 +136,9 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
             try:
                 if path == '/calls/GT':
                     number_dims = ploidy
-                elif path == '/calls/DP':
-                    number_dims = 1
-
-                if path in ('/variations/pos', '/variations/ref',
-                            '/variations/qual', '/variations/chrom',
-                            '/variations/id'):
+                elif path in ('/variations/pos', '/variations/ref',
+                              '/variations/qual', '/variations/chrom',
+                              '/variations/id', '/calls/DP'):
                     number_dims = 1
                 else:
                     number_dims = int(number_dims)
@@ -188,8 +188,7 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
 
 class _ChunkGenerator:
     def __init__(self, vars_parser, hdf5, vars_in_chunk, kept_fields=None,
-                 ignored_fields=None, max_field_lens=None,
-                 max_field_str_lens=None):
+                 ignored_fields=None):
         self.vars_parser = vars_parser
         self.hdf5 = hdf5
         self.vars_in_chunk = vars_in_chunk
@@ -199,8 +198,83 @@ class _ChunkGenerator:
                     'variations_processed': 0,
                     'variations_stored': 0,
                     'undefined_fields': []}
-        self.max_field_lens = max_field_lens
-        self.max_field_str_lens = max_field_str_lens
+
+    def _get_max_field_lens_from_vars(self, snps):
+        max_field_lens = {'INFO': {}, 'CALLS': {}, 'standard_fields': {}}
+        max_field_str_lens = {'INFO': {}, 'standard_fields': {}}
+
+        lens = {'standard_fields': defaultdict(list),
+                'INFO': defaultdict(list),
+                'CALLS': defaultdict(list)}
+        str_lens = {'standard_fields': defaultdict(list),
+                    'INFO': defaultdict(list),
+                    'CALLS': defaultdict(list)}
+
+        field_are_list = set()
+        field_are_str = set()
+        for snp in snps:
+            if not snp:
+                continue
+            chrom, _, id_, ref, alt, _, flt, info, calls = snp
+
+            snp_dict = {'standard_fields': {'chrom': chrom,
+                                            'id': id_,
+                                            'ref': ref,
+                                            'alt': alt,
+                                            'FILTER': flt},
+                        'CALLS': dict(calls)}
+            if info:
+                snp_dict['INFO'] = info
+
+            for field_group, fields_info in snp_dict.items():
+                str_lens_for_group = str_lens[field_group]
+                lens_for_group = lens[field_group]
+                for field, val in fields_info.items():
+                    if val is None:
+                        continue
+
+                    if field_group is 'CALLS':
+                        values = val
+                    else:
+                        values = [val]
+                    for val in values:
+                        if (field in field_are_list or
+                            isinstance(val, (list, tuple))):
+                            lens_for_group[field].append(len(val))
+                            field_are_list.add(field)
+                            if field != 'FILTER':
+                                for item in val:
+                                    if (field in field_are_str or
+                                        isinstance(item, (bytes, str))):
+                                        field_are_str.add(field)
+                                        str_lens_for_group[field].append(len(item))
+                        else:
+                            if isinstance(val, (str, bytes)):
+                                str_lens_for_group[field].append(len(val))
+
+        for field_group, str_lens_for_group in str_lens.items():
+            for field, values in str_lens_for_group.items():
+                if str_lens_for_group[field]:
+                    max_field_str_lens[field_group][field] = max(values)
+                else:
+                    max_field_str_lens[field_group][field] = None
+
+        for field_group, lens_for_group in lens.items():
+            for field, values in lens_for_group.items():
+                if values:
+                    max_field_lens[field_group][field] = max(values)
+                else:
+                    max_field_lens[field_group][field] = None
+
+        std_fields = max_field_str_lens['standard_fields']
+        del max_field_str_lens['standard_fields']
+        max_field_str_lens.update(std_fields)
+
+        std_fields = max_field_lens['standard_fields']
+        del max_field_lens['standard_fields']
+        max_field_lens.update(std_fields)
+
+        return max_field_lens, max_field_str_lens
 
     @property
     def chunks(self):
@@ -209,19 +283,20 @@ class _ChunkGenerator:
         vars_in_chunk = self.vars_in_chunk
         kept_fields = self.kept_fields
         ignored_fields = self.ignored_fields
-        max_field_lens = self.max_field_lens
-        max_field_str_lens = self.max_field_str_lens
         log = self.log
 
-        ignore_overflows = hdf5.ignore_overflows
         snps = vars_parser.variations
 
-        mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
-                                                 kept_fields, ignored_fields,
-                                                 hdf5.ignore_undefined_fields,
-                                                 log, max_field_lens,
-                                                 max_field_str_lens)
         for chunk in group_items(snps, vars_in_chunk):
+
+            max_field_lens, max_field_str_lens = self._get_max_field_lens_from_vars(chunk)
+
+            mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
+                                                     kept_fields, ignored_fields,
+                                                     hdf5.ignore_undefined_fields,
+                                                     log, max_field_lens,
+                                                     max_field_str_lens)
+
             mats = {}
             for path, struct in mat_structure.items():
                 mat = numpy.full(struct['shape'], struct['missing_value'],
@@ -281,16 +356,11 @@ class _ChunkGenerator:
                                     raise
                         elif n_dims == 2:
                             if len(item) > mat.shape[1]:
-                                if ignore_overflows:
-                                    ignore_snp = True
-                                    log['data_no_fit'][path] += 1
-                                    break
-                                else:
-                                    msg = 'Data no fit in field:'
-                                    msg += path
-                                    msg += '\n'
-                                    msg += str(item)
-                                    raise RuntimeError(msg)
+                                msg = 'Data no fit in field:'
+                                msg += path
+                                msg += '\n'
+                                msg += str(item)
+                                raise RuntimeError(msg)
                             try:
                                 mat[idx, 0:len(item)] = item
                             except (ValueError, TypeError):
@@ -301,16 +371,11 @@ class _ChunkGenerator:
 
                         elif n_dims == 3:
                             if len(item[0]) > mat.shape[2]:
-                                if ignore_overflows:
-                                    ignore_snp = True
-                                    log['data_no_fit'][path] += 1
-                                    break
-                                else:
-                                    msg = 'Data no fit in field:'
-                                    msg += path
-                                    msg += '\n'
-                                    msg += str(item)
-                                    raise RuntimeError(msg)
+                                msg = 'Data no fit in field:'
+                                msg += path
+                                msg += '\n'
+                                msg += str(item)
+                                raise RuntimeError(msg)
                             try:
                                 mat[idx, :, 0:len(item[0])] = item
                             except ValueError:
@@ -336,26 +401,24 @@ class _ChunkGenerator:
 
 
 def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
-                      ignored_fields=None, max_field_lens=None,
-                      max_field_str_lens=None):
+                      ignored_fields=None):
     chunker = _ChunkGenerator(vars_parser, hdf5, vars_in_chunk,
                               kept_fields=kept_fields,
-                              ignored_fields=ignored_fields,
-                              max_field_lens=max_field_lens,
-                              max_field_str_lens=max_field_str_lens)
+                              ignored_fields=ignored_fields)
     hdf5.put_chunks(chunker.chunks)
     return chunker.log
 
 
 class _VariationMatrices():
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False, ignore_undefined_fields=False,
+                 ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):
         self._vars_in_chunk = vars_in_chunk
-        self.ignore_overflows = ignore_overflows
         self.ignore_undefined_fields = ignore_undefined_fields
+        self._missing_value_cache = {}
         self.kept_fields = kept_fields
         self.ignored_fields = ignored_fields
+
         self._index = None
 
     @property
@@ -414,7 +477,38 @@ class _VariationMatrices():
             if shape1[2] != shape2[2]:
                 raise ValueError(msg)
 
+    def _get_dtype_for_field_path(self, path):
+        metadata = self.metadata
+        if '/filter/' in path:
+            dtype = bool
+        elif '/calls/GT' == path:
+            dtype = numpy.int16
+        else:
+            try:
+                field_metadata = metadata[path]
+            except KeyError:
+                field_metadata = DEFAULT_FIELD_METADATA[path]
+
+            try:
+                dtype = field_metadata['dtype']
+            except KeyError:
+                dtype = field_metadata['Type']
+
+        return dtype
+
+    def _get_missing_value(self, path):
+        try:
+            return self._missing_value_cache[path]
+        except KeyError:
+            pass
+
+        dtype = self._get_dtype_for_field_path(path)
+        missing_value = MISSING_VALUES[dtype]
+        self._missing_value_cache[path] = missing_value
+        return missing_value
+
     def _get_mats_for_chunk(self, variations):
+
         field_paths = variations.keys()
         diff_fields = set(self.keys()).difference(set(field_paths))
 
@@ -425,11 +519,18 @@ class _VariationMatrices():
         matrices = {}
 
         for field in field_paths:
+            # print(field)
+            missing_value = self._get_missing_value(field)
+            # print(field, dtype, missing_value)
             mat1 = variations[field]
             mat2 = self[field]
-            self._check_shape_matches(mat1, mat2, field)
-            append_matrix(mat2, mat1)
-            matrices[field] = mat2
+
+            # self._check_shape_matches(mat1, mat2, field)
+            # append_matrix(mat2, mat1)
+            mat = concat_matrices([mat2, mat1], missing_value=missing_value,
+                                  if_first_matrix_is_dataset_replace_it=False)
+
+            matrices[field] = mat
         return matrices
 
     def _create_or_get_mats_from_chunk(self, variations):
@@ -444,17 +545,21 @@ class _VariationMatrices():
             self._set_samples(variations.samples)
         return matrices
 
-    def put_chunks(self, chunks, kept_fields=None, ignored_fields=None):
-        matrices = None
+    def put_chunks(self, chunks):
         if chunks is None:
             return
+
+        matrices = {}
 
         for chunk in chunks:
             if chunk.num_variations == 0:
                 continue
-            if matrices is None:
-                matrices = self._create_or_get_mats_from_chunk(chunk)
+            if not self.keys():
+                self._create_or_get_mats_from_chunk(chunk)
                 continue
+
+            self._check_same_paths(chunk)
+
             # check all chunks have the same number of snps
             nsnps = [chunk[path].data.shape[0]
                      for path in chunk.keys()]
@@ -463,13 +568,28 @@ class _VariationMatrices():
 
             for path in chunk.keys():
                 dset_chunk = chunk[path]
-                dset = matrices[path]
-                append_matrix(dset, dset_chunk)
+                dset = self[path]
 
-        self._index = None
+                mat = concat_matrices([dset, dset_chunk],
+                                      missing_value=self._get_missing_value(path),
+                                      if_first_matrix_is_dataset_replace_it=False)
+                matrices[path] = mat
+
+        if matrices:
+            self._replace_matrices(matrices)
 
         if hasattr(self, 'flush'):
             self._h5file.flush()
+
+    def _check_same_paths(self, chunk):
+        new_paths = set(chunk.keys())
+        old_paths = set(self.keys())
+
+        if old_paths.difference(new_paths) or new_paths.difference(old_paths):
+            msg = 'Paths to replace and new paths are not the same:\n'
+            msg += 'Old: ' + ','.join(sorted(old_paths)) + '\n'
+            msg += 'New: ' + ','.join(sorted(new_paths)) + '\n'
+            raise ValueError(msg)
 
     def get_chunk(self, index, kept_fields=None, ignored_fields=None):
 
@@ -668,8 +788,6 @@ class _VariationMatrices():
                  max_field_str_lens=None):
         self._index = None
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk,
-                                 max_field_lens=max_field_lens,
-                                 max_field_str_lens=max_field_str_lens,
                                  kept_fields=self.kept_fields,
                                  ignored_fields=self.ignored_fields)
 
@@ -725,10 +843,9 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 class VariationsH5(_VariationMatrices):
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False, ignore_undefined_fields=False,
+                 ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):
         super().__init__(vars_in_chunk=vars_in_chunk,
-                         ignore_overflows=ignore_overflows,
                          ignore_undefined_fields=ignore_undefined_fields,
                          kept_fields=kept_fields,
                          ignored_fields=ignored_fields)
@@ -864,6 +981,15 @@ class VariationsH5(_VariationMatrices):
 
     samples = property(get_samples, set_samples)
 
+    def _replace_matrices(self, matrices):
+        self._check_same_paths(matrices)
+        h5file = self._h5file
+        for path in self.keys():
+            del h5file[path]
+            h5file[path] = matrices[path]
+
+        self._index = None
+
 
 def select_dset_from_chunks(chunks, dset_path):
     return (chunk[dset_path] for chunk in chunks)
@@ -871,10 +997,9 @@ def select_dset_from_chunks(chunks, dset_path):
 
 class VariationsArrays(_VariationMatrices):
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
-                 ignore_overflows=False, ignore_undefined_fields=False,
+                 ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):
         super().__init__(vars_in_chunk=vars_in_chunk,
-                         ignore_overflows=ignore_overflows,
                          ignore_undefined_fields=ignore_undefined_fields,
                          kept_fields=kept_fields,
                          ignored_fields=ignored_fields)
@@ -924,3 +1049,12 @@ class VariationsArrays(_VariationMatrices):
         array = numpy.full(shape, fillvalue, dtype)
         arrays[path] = array
         return array
+
+    def _replace_matrices(self, matrices):
+        new_paths = set(matrices.keys())
+        old_paths = set(self.keys())
+
+        assert not old_paths.difference(new_paths)
+
+        self._hArrays = matrices
+        self._index = None

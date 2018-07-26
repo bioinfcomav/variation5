@@ -43,8 +43,8 @@ def create_iupac_allele_splitter(ploidy=2):
 class CSVParser():
     def __init__(self, fhand, var_info, gt_splitter=def_gt_allele_splitter,
                  first_sample_column=1, first_gt_column=1,
-                 sample_line=0, snp_id_column=0, sep=',', max_field_lens=None,
-                 max_field_str_lens=None, ignore_empty_vars=False):
+                 sample_line=0, snp_id_column=0, sep=',',
+                 ignore_empty_vars=False):
         '''It reads genotype calls from a CSV file
 
         var_info can be either a dict or an OrderedDict with the snp_ids as
@@ -66,15 +66,6 @@ class CSVParser():
 
         self.samples = self._get_samples()
         self._determine_ploidy()
-        if max_field_lens is None:
-            self.max_field_lens = {'alt': 0}
-        else:
-            self.max_field_lens = max_field_lens
-        if max_field_str_lens is None:
-            self.max_field_str_lens = {'alt': 0,
-                                       'chrom': 0}
-        else:
-            self.max_field_str_lens = max_field_str_lens
         self.metadata = copy.deepcopy(DEF_METADATA)
         self.ignored_fields = []
         self.kept_fields = []
@@ -135,9 +126,7 @@ class CSVParser():
 
     @property
     def variations(self):
-        max_field_lens = self.max_field_lens
-        max_field_str_lens = self.max_field_str_lens
-        max_field_str_lens['ref'] = 1
+
         for line in self.fhand:
             items = line.split(self._sep)
             items[-1] = items[-1].strip()
@@ -153,17 +142,6 @@ class CSVParser():
             var_info = self._var_info[snp_id]
 
             alt_alleles = list(alleles[1:]) if len(alleles) > 1 else None
-
-            ref_allele = alleles[0]
-            if max_field_str_lens['ref'] < len(ref_allele):
-                max_field_str_lens['ref'] = len(ref_allele)
-
-            if alt_alleles:
-                if max_field_lens['alt'] < len(alt_alleles):
-                    max_field_lens['alt'] = len(alt_alleles)
-                max_len = max(len(allele) for allele in alt_alleles)
-                if max_field_str_lens['alt'] < max_len:
-                    max_field_str_lens['alt'] = max_len
 
             variation = (var_info['chrom'], var_info['pos'], snp_id,
                          alleles[0], alt_alleles, None, None, None, gts)

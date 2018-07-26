@@ -112,7 +112,7 @@ class StatsTest(unittest.TestCase):
         varis = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         mafs = calc_maf(varis, min_num_genotypes=1)
         distrib, bins = histogram(mafs, n_bins=10)
-        dist_expected = [53, 75, 74, 70, 69, 129, 73, 74, 49, 277]
+        dist_expected = [53, 72, 77, 66, 73, 129, 74, 73, 49, 277]
         bins_expected = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
                          1.]
         assert numpy.allclose(bins, bins_expected)
@@ -125,7 +125,8 @@ class StatsTest(unittest.TestCase):
 
         distrib, bins = histogram_for_chunks(varis, calc_maf_for_chunk,
                                              n_bins=10)
-        dist_expected = [53, 75, 74, 70, 69, 129, 73, 74, 49, 277]
+        dist_expected = [53, 72, 77, 66, 73, 129, 74, 73, 49, 277]
+
         bins_expected = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
                          1.]
         assert numpy.allclose(bins, bins_expected)

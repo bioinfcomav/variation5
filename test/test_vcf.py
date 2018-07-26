@@ -19,9 +19,9 @@ class VcfTest(unittest.TestCase):
     def test_vcf_detect_fields(self):
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf_fhand2 = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000,
+        vcf = VCFParser(vcf_fhand,
                         kept_fields=['/variations/qual'])
-        vcf2 = VCFParser(vcf_fhand2, pre_read_max_size=1000,
+        vcf2 = VCFParser(vcf_fhand2,
                          ignored_fields=['/variations/qual'])
         snps = VariationsArrays(ignore_undefined_fields=True)
         snps.put_vars(vcf)
@@ -31,9 +31,6 @@ class VcfTest(unittest.TestCase):
         metadata2 = snps2.metadata
         assert '/calls/HQ' in metadata.keys()
         assert '/variations/qual' not in metadata2.keys()
-        assert vcf.max_field_str_lens == {'FILTER': 0, 'alt': 5, 'ref': 4,
-                                          'chrom': 2, 'id': 10, 'INFO': {}}
-        assert vcf.max_field_str_lens == vcf2.max_field_str_lens
         vcf_fhand.close()
         vcf_fhand2.close()
 

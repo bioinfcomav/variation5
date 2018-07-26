@@ -27,8 +27,7 @@ class VcfWrittenTest(unittest.TestCase):
             header_lines = [line for line in vcf_fhand if line.startswith(b'#')]
             vcf_fhand.close()
             with open(join(TEST_DATA_DIR, file), 'rb') as vcf_fhand:
-                vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
-                                pre_read_max_size=10000)
+                vcf = VCFParser(vcf_fhand)
                 var_array = VariationsArrays(ignore_undefined_fields=True)
                 var_array.put_vars(vcf)
                 with NamedTemporaryFile(suffix='.h5') as tmp_fhand:
@@ -44,19 +43,10 @@ class VcfWrittenTest(unittest.TestCase):
         tmp_fhand = NamedTemporaryFile()
         tmp_fhand.close()
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def_exp.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, max_field_lens={'alt': 2},
-                        pre_read_max_size=10000)
-
-        max_field_lens = {'CALLS': {b'GT': 1, b'HQ': 2, b'DP': 1, b'GQ': 1},
-                          'FILTER': 1,
-                          'INFO': {b'AA': 1, b'AF': 2, b'DP': 1,
-                                   b'DB': 1, b'NS': 1, b'H2': 1}, 'alt': 2}
-        max_field_str_lens = {'INFO': {b'AA': 1}, 'alt': 5, 'chrom': 2, 'ref': 4,
-                              'id': 10, 'FILTER': 0}
+        vcf = VCFParser(vcf_fhand)
 
         variations = VariationsArrays(ignore_undefined_fields=True)
-        variations.put_vars(vcf, max_field_lens=max_field_lens,
-                            max_field_str_lens=max_field_str_lens)
+        variations.put_vars(vcf)
         vcf_fhand.close()
         with NamedTemporaryFile(mode='wb') as out_fhand:
             write_vcf(variations, out_fhand, vcf_format='VCFv4.0')
@@ -79,16 +69,9 @@ class VcfWrittenTest(unittest.TestCase):
                          'rb')
         vcf = VCFParser(vcf_fhand)
 
-        max_field_lens = {'INFO': {}, 'CALLS': {b'GQ': 1, b'GT': 1, b'HQ': 2,
-                                                b'DP': 1},
-                          'FILTER': 1, 'alt': 2}
-        max_field_str_lens = {'ref': 4, 'INFO': {}, 'id': 10, 'FILTER': 0,
-                              'alt': 5, 'chrom': 2}
-
         h5_without_info = VariationsH5(fpath=out_fpath, mode='w',
                                        ignore_undefined_fields=True)
-        h5_without_info.put_vars(vcf, max_field_lens=max_field_lens,
-                                 max_field_str_lens=max_field_str_lens)
+        h5_without_info.put_vars(vcf)
         vcf_fhand.close()
         with NamedTemporaryFile(mode='wb') as out_fhand:
             write_vcf(h5_without_info, out_fhand, vcf_format='VCFv4.0')
@@ -262,5 +245,5 @@ class FastaWriterTest(unittest.TestCase):
         assert result[1] == b'TNTC'
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'FastaWriterTest']
+    # import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf_from_h5']
     unittest.main()

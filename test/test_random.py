@@ -36,7 +36,7 @@ class SetToMissingTest(unittest.TestCase):
         assert not numpy.sum(orig_gts[mask_different_gts] == MISSING_INT)
 
         vcf_fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
+        vcf = VCFParser(vcf_fhand)
         snps = VariationsArrays(ignore_undefined_fields=True)
         snps.put_vars(vcf)
         vcf_fhand.close()

@@ -7,7 +7,6 @@ import numpy
 from variation import REF_FIELD, ALT_FIELD, POS_FIELD, GT_FIELD, DEF_METADATA
 from variation.variations import stats
 from variation.variations.filters import NoMissingGTsOrHetFilter, FLT_VARS
-from variation.gt_parsers.vcf import _VarParserWithPreRead
 
 ALIGNED_ALLELES_FIELD_NAME = b'AA'
 NUMBER_OF_SNPS_FIELD_NAME = b'SN'
@@ -73,7 +72,7 @@ def _create_new_alleles_and_genotypes(variations, variations_are_phased):
             'all_alleles_aligned': info_alleles}
 
 
-class BlocksVariationGrouper(_VarParserWithPreRead):
+class BlocksVariationGrouper():
 
     def __init__(self, variations, blocks, min_num_vars_in_block=1,
                  remove_snps_with_hets_or_missing=False,
@@ -122,8 +121,6 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
         self.blocks = iter(blocks)
         self.min_num_vars_in_block = min_num_vars_in_block
         self.remove_snps_with_hets_or_missing = remove_snps_with_hets_or_missing
-        super().__init__(pre_read_max_size=pre_read_max_size,
-                         max_n_vars=max_n_vars)
 
     @property
     def samples(self):
@@ -134,26 +131,12 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
         return self._variations_to_group.ploidy
 
     @property
-    def max_field_lens(self):
-        return self._max_field_lens
-
-    @property
-    def max_field_str_lens(self):
-        return self._max_field_str_lens
-
-    def _variations_for_cache(self):
-        for snp in self._variations():
-            yield snp
-
-    def _variations(self, n_threads=None):
+    def variations(self):
         variations = self._variations_to_group
         index = variations.pos_index
 
         if self.remove_snps_with_hets_or_missing:
             flt = NoMissingGTsOrHetFilter()
-
-        max_field_lens = self._max_field_lens
-        max_field_str_lens = self._max_field_str_lens
 
         alleles_pickle_fhand = self.out_alleles_pickle_fhand
         aligned_alleles_for_snps = {}
@@ -194,39 +177,17 @@ class BlocksVariationGrouper(_VarParserWithPreRead):
             gts = alleles_and_gts['gts']
             alt_alleles = alleles_and_gts['alt_alleles']
 
-            if max_field_str_lens['ref'] < len(ref_allele):
-                max_field_str_lens['ref'] = len(ref_allele)
-            if snp_id is not None and max_field_str_lens['id'] < len(snp_id):
-                max_field_str_lens['id'] = len(snp_id)
-
-            if alt_alleles:
-                if max_field_lens['alt'] < len(alt_alleles):
-                    max_field_lens['alt'] = len(alt_alleles)
-                max_len = max(len(allele) for allele in alt_alleles)
-                if max_field_str_lens['alt'] < max_len:
-                    max_field_str_lens['alt'] = max_len
-
             aligned_alleles = alleles_and_gts['all_alleles_aligned']
             aligned_alleles = [aligned_alleles[idx] for idx in range(len(aligned_alleles))]
 
             info = {NUMBER_OF_SNPS_FIELD_NAME: block_chunk.num_variations}
 
             if alleles_pickle_fhand is None:
-                if len(aligned_alleles) > max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
-                    max_field_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = len(aligned_alleles)
-                max_aa_len = max([len(allele) for allele in aligned_alleles])
-                if max_aa_len > max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME]:
-                    max_field_str_lens['INFO'][ALIGNED_ALLELES_FIELD_NAME] = max_aa_len
-                if len(ref_allele) > max_field_str_lens['ref']:
-                    max_field_str_lens['ref'] = len(ref_allele)
                 info[ALIGNED_ALLELES_FIELD_NAME] = aligned_alleles
             else:
                 aligned_alleles_for_snps[(chrom, start)] = aligned_alleles
                 ref_allele = None
                 alt_alleles = None
-
-            if len(chrom) > max_field_str_lens['chrom']:
-                max_field_str_lens['chrom'] = len(chrom)
 
             yield (chrom, start, snp_id, ref_allele, alt_alleles,
                    None, None, info, [(b'GT', gts)])

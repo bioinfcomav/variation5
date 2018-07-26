@@ -54,71 +54,10 @@ def _detect_fields_in_vcf(metadata, fields):
     return check_fields
 
 
-class _VarParserWithPreRead():
+class VCFParser():
 
-    def __init__(self, pre_read_max_size=None, max_n_vars=None):
-        self.pre_read_max_size = pre_read_max_size
-        self.max_n_vars = max_n_vars
-        self._variations_cache = CCache()
-        self._read_snps_in_compressed_cache()
-
-    @property
-    def max_field_lens(self):
-        if self.n_threads is not None:
-            msg = 'We do not know how to share dict between processes'
-            raise NotImplementedError(msg)
-        return self._max_field_lens
-
-    @property
-    def max_field_str_lens(self):
-        if self.n_threads is not None:
-            msg = 'We do not know how to share dict between processes'
-            raise NotImplementedError(msg)
-        return self._max_field_str_lens
-
-    def _read_snps_in_compressed_cache(self):
-        if not self.pre_read_max_size:
-            return
-
-        snps = self._variations_for_cache()
-        # we store some snps in the cache
-        self._variations_cache.put_iterable(snps,
-                                            max_size=self.pre_read_max_size)
-
-    @property
-    def variations(self):
-        if (self.pre_read_max_size is not None and
-            math.isinf(self.pre_read_max_size) and
-            (not self.max_n_vars or math.isinf(self.max_n_vars))):
-            snps = self._variations_cache.items
-        else:
-            snps = chain(self._variations_cache.items,
-                         self._variations(self.n_threads))
-        if self.max_n_vars:
-            snps = islice(snps, self.max_n_vars)
-        return snps
-
-    def _variations_for_cache(self):
-        parser_args = {'max_field_lens': self._max_field_lens,
-                       'max_field_str_lens': self._max_field_str_lens,
-                       'ignored_fields': self.ignored_fields,
-                       'kept_fields': self.kept_fields,
-                       'metadata': self.metadata,
-                       'empty_gt': self._empty_gt,
-                       }
-        line_parser = VCFLineParser(**parser_args)
-        for line in self._fhand:
-            snp = line_parser(line)
-            yield snp
-
-
-class VCFParser(_VarParserWithPreRead):
-
-    def __init__(self, fhand, pre_read_max_size=None,
-                 ignored_fields=None, kept_fields=None,
-                 max_field_lens=None, max_n_vars=None,
-                 max_field_str_lens=None,
-                 n_threads=None):
+    def __init__(self, fhand, ignored_fields=None, kept_fields=None,
+                 max_n_vars=None, n_threads=None):
         if kept_fields is not None and ignored_fields is not None:
             msg = 'kept_fields and ignored_fields can not be set at the same'
             msg += ' time'
@@ -141,52 +80,9 @@ class VCFParser(_VarParserWithPreRead):
 
         self._empty_gt = [MISSING_VALUES[int]] * self.ploidy
         self._parse_header()
-        if max_field_lens is None:
-            user_max_field_lens = {}
-        else:
-            user_max_field_lens = max_field_lens
-        self._max_field_lens = {'alt': 0, 'FILTER': 0, 'INFO': {}, 'CALLS': {}}
-
-        if max_field_str_lens is None:
-            user_max_field_str_lens = {}
-        else:
-            user_max_field_str_lens = max_field_str_lens
-
-        self._max_field_str_lens = {'FILTER': 0, 'INFO': {},
-                                    'chrom': 0, 'alt': 0, 'ref': 0, 'id': 10}
-        self._init_max_field_lens()
-        for key1, value1 in user_max_field_lens.items():
-            if isinstance(value1, dict):
-                for key2, value2 in value1.items():
-                    self._max_field_lens[key1][key2] = value2
-            else:
-                self._max_field_lens[key1] = value1
-
-        for key1, value1 in user_max_field_str_lens.items():
-            if isinstance(value1, dict):
-                for key2, value2 in value1.items():
-                    self._max_field_str_lens[key1][key2] = value2
-            else:
-                self._max_field_str_lens[key1] = value1
 
         self._parsed_gt_fmts = {}
         self._parsed_gt = {}
-        super().__init__(pre_read_max_size=pre_read_max_size,
-                         max_n_vars=max_n_vars)
-
-    def _init_max_field_lens(self):
-        meta = self.metadata
-        for section in ('INFO', 'CALLS'):
-            for field, meta_field in meta[section].items():
-
-                if isinstance(meta_field['Number'], int):
-                    self._max_field_lens[section][field] = meta_field['Number']
-                    if 'bool' in meta_field['dtype']:
-                        self._max_field_lens[section][field] = 1
-                    continue
-                self._max_field_lens[section][field] = 0
-                if 'str' in meta_field['dtype']:
-                    self._max_field_str_lens[section][field] = 0
 
     def _determine_ploidy(self):
         read_lines = []
@@ -287,7 +183,9 @@ class VCFParser(_VarParserWithPreRead):
 
         self.metadata = metadata
 
-    def _variations(self, n_threads):
+    @property
+    def variations(self):
+        n_threads = self.n_threads
         lines_chunks = group_items(self._fhand, SNPS_PER_CHUNK)
         if n_threads:
             pool = Pool(self.n_threads)
@@ -295,9 +193,7 @@ class VCFParser(_VarParserWithPreRead):
         else:
             pool = None
 
-        parser_args = {'max_field_lens': self._max_field_lens,
-                       'max_field_str_lens': self._max_field_str_lens,
-                       'ignored_fields': self.ignored_fields,
+        parser_args = {'ignored_fields': self.ignored_fields,
                        'kept_fields': self.kept_fields,
                        'metadata': self.metadata,
                        'empty_gt': self._empty_gt}
@@ -317,10 +213,7 @@ class VCFParser(_VarParserWithPreRead):
 
 class VCFLineParser:
 
-    def __init__(self, max_field_lens, max_field_str_lens, ignored_fields,
-                 kept_fields, metadata, empty_gt):
-        self.max_field_lens = max_field_lens
-        self.max_field_str_lens = max_field_str_lens
+    def __init__(self, ignored_fields, kept_fields, metadata, empty_gt):
         self.ignored_fields = ignored_fields
         self.kept_fields = kept_fields
         self.metadata = metadata
@@ -330,8 +223,6 @@ class VCFLineParser:
         if line is None:
             return None
 
-        max_field_lens = self.max_field_lens
-        max_field_str_lens = self.max_field_str_lens
         ignored_fields = self.ignored_fields
         kept_fields = self.kept_fields
         metadata = self.metadata
@@ -339,11 +230,6 @@ class VCFLineParser:
         line = line[:-1]
         items = line.split(b'\t')
         chrom, pos, id_, ref, alt, qual, flt, info, fmt = items[:9]
-        if max_field_str_lens['chrom'] < len(chrom):
-            max_field_str_lens['chrom'] = len(chrom)
-
-        if max_field_str_lens['ref'] < len(ref):
-            max_field_str_lens['ref'] = len(ref)
 
         calls = items[9:]
         pos = int(pos)
@@ -355,30 +241,17 @@ class VCFLineParser:
         if alt == [b'.']:
             alt = None
 
-        if alt is not None:
-            if max_field_lens['alt'] < len(alt):
-                max_field_lens['alt'] = len(alt)
-            max_alt_str_len = max(len(allele) for allele in alt)
-            if max_field_str_lens['alt'] < max_alt_str_len:
-                max_field_str_lens['alt'] = max_alt_str_len
-
         qual = float(qual) if qual != b'.' else None
 
         if flt == b'PASS':
             flt = []
-            flt_len = 0
         elif flt == b'.':
             flt = None
-            flt_len = 0
         else:
             flt = flt.split(b';')
-            flt_len = len(flt)
-        if max_field_lens['FILTER'] < flt_len:
-            max_field_lens['FILTER'] = flt_len
-        info = _parse_info(info, ignored_fields, metadata, max_field_lens,
-                           max_field_str_lens)
+        info = _parse_info(info, ignored_fields, metadata)
 
-        calls = _parse_calls(fmt, calls, ignored_fields, kept_fields,
-                             max_field_lens, metadata, empty_gt)
+        calls = _parse_calls(fmt, calls, ignored_fields, kept_fields, metadata,
+                             empty_gt)
 
         return chrom, pos, id_, ref, alt, qual, flt, info, calls

@@ -174,8 +174,7 @@ class MergeTest(unittest.TestCase):
         merger = VarMerger(h5_1, h5_2, max_field_lens={'alt': 3},
                            ignore_complex_overlaps=True,
                            check_ref_matches=False, ignore_non_matching=True)
-        new_vars = VariationsArrays(ignore_overflows=True,
-                                    ignore_undefined_fields=True)
+        new_vars = VariationsArrays(ignore_undefined_fields=True)
         new_vars.put_vars(merger)
         assert new_vars.num_variations == 1
 
@@ -202,8 +201,7 @@ class MergeTest(unittest.TestCase):
         merger = VarMerger(h5_1, h5_2, max_field_lens={'alt': 3},
                            ignore_complex_overlaps=True,
                            check_ref_matches=False, ignore_non_matching=True)
-        new_vars = VariationsArrays(ignore_overflows=True,
-                                    ignore_undefined_fields=True)
+        new_vars = VariationsArrays(ignore_undefined_fields=True)
 
         first_snv_merged_depth = numpy.array([1, 8, 5, 1, 8, 5],
                                              dtype=numpy.int16)
@@ -305,8 +303,7 @@ class MergeTest(unittest.TestCase):
                                   b'NA00002', b'NA00003']
         expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'expected_merged.h5'),
                                    'r')
-        new_vars = VariationsArrays(ignore_overflows=True,
-                                    ignore_undefined_fields=True)
+        new_vars = VariationsArrays(ignore_undefined_fields=True)
         new_vars.put_vars(merger)
 
         for field in new_vars.keys():
@@ -333,8 +330,7 @@ class MergeTest(unittest.TestCase):
                                   b'TS-1', b'TS-11', b'TS-21']
         expected_h5 = VariationsH5(join(TEST_DATA_DIR, 'expected_merged2.h5'),
                                    'r')
-        new_vars = VariationsArrays(ignore_overflows=True,
-                                    ignore_undefined_fields=True)
+        new_vars = VariationsArrays(ignore_undefined_fields=True)
         new_vars.put_vars(merger)
 
         for field in new_vars.keys():

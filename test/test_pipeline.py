@@ -264,5 +264,5 @@ class PipelineTest(unittest.TestCase):
         assert vars_out.num_variations == 484
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'PipelineTest.test_pipeline']
+    # import sys;sys.argv = ['', 'PipelineTest.test_snp_qual']
     unittest.main()

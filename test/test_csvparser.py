@@ -15,17 +15,17 @@ from test.test_utils import TEST_DATA_DIR
 
 class CSVParserTest(unittest.TestCase):
     def test_def_gt_allele_splitter(self):
-        assert def_gt_allele_splitter(b'-') == None
-        assert def_gt_allele_splitter(b'--') == None
-        assert def_gt_allele_splitter(b'') == None
+        assert def_gt_allele_splitter(b'-') is None
+        assert def_gt_allele_splitter(b'--') is None
+        assert def_gt_allele_splitter(b'') is None
         assert def_gt_allele_splitter(b'A-') == (ord('A'), None)
         assert def_gt_allele_splitter(b'AA') == (ord('A'), ord('A'))
 
     def test_create_iupac_splitter(self):
         spliter = create_iupac_allele_splitter()
         assert spliter(b'A') == (ord('A'), ord('A'))
-        assert spliter(b'-') == None
-        assert spliter(b'') == None
+        assert spliter(b'-') is None
+        assert spliter(b'') is None
 
     def _var_gt_to_letter(self, variation):
         gts = variation['gts']
@@ -71,7 +71,6 @@ class CSVParserTest(unittest.TestCase):
         fhand.close()
         assert parser.samples == [b'SR-9', b'SR-12', b'SR-13', b'SR-15',
                                   b'SR-18']
-        assert parser.max_field_lens['alt'] == 2
         assert parser.ploidy == 2
 
         # IUPAC file
@@ -97,7 +96,6 @@ class CSVParserTest(unittest.TestCase):
 
         fhand.close()
         assert parser.samples == [b'TS-1', b'TS-11', b'TS-21']
-        assert parser.max_field_lens['alt'] == 1
         assert parser.ploidy == 2
 
         # pandas csv
@@ -123,7 +121,6 @@ class CSVParserTest(unittest.TestCase):
         fhand.close()
         assert parser.samples == [b'SR-9', b'SR-12', b'SR-13', b'SR-15',
                                   b'SR-18']
-        assert parser.max_field_lens['alt'] == 2
         assert parser.ploidy == 2
 
     def test_put_vars_from_csv(self):
@@ -133,14 +130,11 @@ class CSVParserTest(unittest.TestCase):
                     b'3': {'chrom': b'SL2.40ch02', 'pos': 1511764}}
         parser = CSVParser(fhand_ex, var_info, first_sample_column=3,
                            first_gt_column=3, sep=b'\t',
-                           gt_splitter=create_iupac_allele_splitter(),
-                           max_field_lens={'alt': 1},
-                           max_field_str_lens={'alt': 1, 'chrom': 20,
-                                               'ref': 1})
+                           gt_splitter=create_iupac_allele_splitter())
 
         with NamedTemporaryFile(suffix='.h5') as fhand:
             os.remove(fhand.name)
-            h5 = VariationsH5(fhand.name, mode='w', ignore_overflows=True,
+            h5 = VariationsH5(fhand.name, mode='w',
                               ignore_undefined_fields=True)
             h5.put_vars(parser)
             exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
@@ -173,13 +167,9 @@ class CSVParserTest(unittest.TestCase):
                     b'2': {'chrom': b'SL2.40ch02', 'pos': 681961},
                     b'3': {'chrom': b'SL2.40ch02', 'pos': 1511764}}
         parser = CSVParser(fhand_ex, var_info, first_sample_column=3,
-                           first_gt_column=3, sep=b'\t',
-                           max_field_lens={'alt': 1},
-                           max_field_str_lens={'alt': 1, 'chrom': 20,
-                                               'ref': 1})
+                           first_gt_column=3, sep=b'\t')
 
-        h5 = VariationsArrays(ignore_overflows=True,
-                              ignore_undefined_fields=True)
+        h5 = VariationsArrays(ignore_undefined_fields=True)
         h5.put_vars(parser)
         exp = [b'SL2.40ch02', b'SL2.40ch02', b'SL2.40ch02']
         assert list(h5['/variations/chrom'][:]) == exp

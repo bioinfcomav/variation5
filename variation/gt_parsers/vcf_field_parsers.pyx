@@ -197,8 +197,7 @@ cdef _parse_gt_fmt(fmt, metadata):
 
 PARSED_INFO_TYPE_CACHE = {}
 
-cpdef _parse_info(info, ignored_fields, metadata, max_field_lens,
-                  max_field_str_lens):
+cpdef _parse_info(info, ignored_fields, metadata):
     global PARSED_INFO_TYPE_CACHE
     if NOT_VALUE == info:
         return None
@@ -242,12 +241,6 @@ cpdef _parse_info(info, ignored_fields, metadata, max_field_lens,
                 val = type_(val)
             val_to_check_len = [val]
         if not isinstance(meta['Number'], int):
-            if max_field_lens['INFO'][key] < len(val_to_check_len):
-                max_field_lens['INFO'][key] = len(val_to_check_len)
-            if 'str' in meta['dtype']:
-                max_str = max([len(val_) for val_ in val_to_check_len])
-                if max_field_str_lens['INFO'][key] < max_str:
-                    max_field_str_lens['INFO'][key] = max_str
             if not isinstance(val, list):
                 val = val_to_check_len
 
@@ -315,7 +308,6 @@ cdef list _gt_data_to_list(gt_data, mapper_function, missing_val,
 
 
 cpdef _parse_calls(fmt, calls, list ignored_fields, list kept_fields,
-                   max_field_lens,
                    metadata, empty_gt):
     fmt = _parse_gt_fmt(fmt, metadata)
     empty_call = [NOT_VALUE] * len(fmt)
@@ -343,15 +335,6 @@ cpdef _parse_calls(fmt, calls, list ignored_fields, list kept_fields,
                 gt_data = [fmt_data[1](sample_gt) for sample_gt in gt_data]
 
         meta = fmt_data[3]
-        if not isinstance(meta['Number'], int):
-            max_len = max([0 if data is None else len(data)
-                           for data in gt_data])
-            if max_field_lens['CALLS'][fmt_data[0]] < max_len:
-                max_field_lens['CALLS'][fmt_data[0]] = max_len
-            if 'str' in meta['dtype'] and fmt_data[0] != b'GT':
-                # if your file has variable length str fields you
-                # should check and fix the following part of the code
-                raise NotImplementedError('Fixme')
 
         parsed_gts.append((fmt_data[0], gt_data))
 

@@ -348,7 +348,7 @@ class SNPQualFilter(_BaseFilter):
         stat = variations['/variations/qual']
         if is_dataset(stat):
             stat = stat[:]
-        if numpy.issubdtype(stat.dtype, numpy.float):
+        if numpy.issubdtype(stat.dtype, numpy.dtype(float)):
             stat[numpy.isinf(stat)] = numpy.finfo(stat.dtype).max
         return stat
 
@@ -592,7 +592,7 @@ def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
     samples = variations.samples
     try:
         dtype = sample_cols.dtype
-        is_bool = numpy.issubdtype(dtype, numpy.bool)
+        is_bool = numpy.issubdtype(dtype, numpy.dtype(bool))
     except AttributeError:
         item = first(iter(sample_cols))
         is_bool = isinstance(item, bool)

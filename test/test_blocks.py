@@ -32,7 +32,7 @@ VCF1 = b'''##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 class GroupVarsPerBlockTest(unittest.TestCase):
 
     def _get_var_array(self, vcf_fhand):
-        vcf = VCFParser(vcf_fhand, pre_read_max_size=1000)
+        vcf = VCFParser(vcf_fhand)
         variations = VariationsArrays(ignore_undefined_fields=True)
         variations.put_vars(vcf)
         vcf_fhand.close()
@@ -45,8 +45,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         blocks = [{'chrom': b'20', 'start': 10, 'stop': 21}]
 
         var_grouper = BlocksVariationGrouper(variations, blocks,
-                                             remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=math.inf)
+                                             remove_snps_with_hets_or_missing=True)
 
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
@@ -63,8 +62,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         blocks = [{'chrom': b'20', 'start': 30, 'stop': 41}]
 
         var_grouper = BlocksVariationGrouper(variations, blocks,
-                                             remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=math.inf)
+                                             remove_snps_with_hets_or_missing=True)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'T']
@@ -84,8 +82,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 '''
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
-                                             remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=math.inf)
+                                             remove_snps_with_hets_or_missing=True)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'T']
@@ -105,8 +102,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 '''
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
-                                             remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=math.inf)
+                                             remove_snps_with_hets_or_missing=True)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'GT']
@@ -130,7 +126,6 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 
         var_grouper = BlocksVariationGrouper(variations, blocks,
                                              remove_snps_with_hets_or_missing=False,
-                                             pre_read_max_size=math.inf,
                                              variations_are_phased=True)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
@@ -152,8 +147,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 '''
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
-                                             remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=math.inf)
+                                             remove_snps_with_hets_or_missing=True)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert grouped_vars[REF_FIELD] == [b'GAT']
@@ -184,8 +178,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 '''
         variations = self._get_var_array(io.BytesIO(vcf))
         var_grouper = BlocksVariationGrouper(variations, blocks,
-                                             remove_snps_with_hets_or_missing=True,
-                                             pre_read_max_size=math.inf)
+                                             remove_snps_with_hets_or_missing=True)
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert list(grouped_vars[REF_FIELD]) == [b'GT', b'G', b'G', b'TGT']
@@ -200,26 +193,6 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         assert list(grouped_vars[CHROM_FIELD]) == [b'1', b'1', b'2', b'2']
         assert list(grouped_vars[POS_FIELD]) == [10, 30, 10, 20]
         assert list(grouped_vars['/variations/info/SN']) == [2, 1, 1, 3]
-
-    def test_field_lens(self):
-        vcf_fhand = io.BytesIO(VCF1)
-        variations = self._get_var_array(vcf_fhand)
-
-        # 20    10    .    G    A    29    .    .    GT    0|0    0|0    1/1
-        # 20    20    .    T    C    3    .    .    GT    0|0    1|1    0/0
-        # 20    40    .    T    A    47    .    .    GT    0|0    1|1    0/0
-
-        blocks = [{'chrom': b'20', 'start': 10, 'stop': 100}]
-        var_grouper = BlocksVariationGrouper(variations, blocks,
-                                             remove_snps_with_hets_or_missing=True)
-
-        list(var_grouper.variations)
-        field_lens = {'alt': 2, 'INFO': {ALIGNED_ALLELES_FIELD_NAME: 3}}
-        field_str_lens = {'alt': 3, 'chrom': 2, 'ref': 3, 'id': 0,
-                          'INFO': {b'AA': 3},
-                          }
-        assert var_grouper.max_field_lens == field_lens
-        assert var_grouper.max_field_str_lens == field_str_lens
 
     def test_alleles_json(self):
         vcf_fhand = io.BytesIO(VCF1)

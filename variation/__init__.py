@@ -26,14 +26,18 @@ INFO_FIELD = '/variations/info'
 class _MissingValues():
     def __init__(self):
         self._missing_values = {int: MISSING_INT,
+                                'Integer': MISSING_INT,
                                 float: MISSING_FLOAT,
+                                'Float': MISSING_FLOAT,
                                 str: MISSING_STR,
+                                'String': MISSING_STR,
                                 numpy.int8: MISSING_INT,
                                 numpy.int16: MISSING_INT,
                                 numpy.int32: MISSING_INT,
                                 numpy.float16: MISSING_FLOAT,
                                 numpy.float32: MISSING_FLOAT,
                                 numpy.bool_: MISSING_BOOL,
+                                numpy.bytes_: MISSING_BYTE,
                                 bool: MISSING_BOOL}
 
     def __getitem__(self, dtype):

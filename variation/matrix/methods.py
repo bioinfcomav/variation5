@@ -288,7 +288,7 @@ def _reshape_filling_dset(dset, new_shape=None, dtype=None):
 
     try:
         dset.resize(new_shape)
-    except TypeError:
+    except (TypeError, ValueError):
         dset = _copy_dset(dset, shape=new_shape, dtype=new_dtype)
     return dset
 

@@ -186,7 +186,179 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
     return structure
 
 
+def _get_max_field_lens_from_vars(snps):
+    max_field_lens = {'INFO': {}, 'CALLS': {}, 'standard_fields': {}}
+    max_field_str_lens = {'INFO': {}, 'standard_fields': {}}
+
+    lens = {'standard_fields': defaultdict(list),
+            'INFO': defaultdict(list),
+            'CALLS': defaultdict(list)}
+    str_lens = {'standard_fields': defaultdict(list),
+                'INFO': defaultdict(list),
+                'CALLS': defaultdict(list)}
+
+    for snp in snps:
+        if not snp:
+            continue
+        chrom, _, id_, ref, alt, _, flt, info, calls = snp
+
+        snp_dict = {'standard_fields': {'chrom': chrom,
+                                        'id': id_,
+                                        'ref': ref,
+                                        'alt': alt,
+                                        'FILTER': flt},
+                    'CALLS': dict(calls)}
+        if info:
+            snp_dict['INFO'] = info
+
+        for field_group, fields_info in snp_dict.items():
+            str_lens_for_group = str_lens[field_group]
+            lens_for_group = lens[field_group]
+            for field, val in fields_info.items():
+                if val is None:
+                    continue
+
+                if field_group is 'CALLS':
+                    values = val
+                else:
+                    values = [val]
+                for val in values:
+                    if isinstance(val, (list, tuple)):
+                        lens_for_group[field].append(len(val))
+                        if field != 'FILTER':
+                            for item in val:
+                                if isinstance(item, (bytes, str)):
+                                    str_lens_for_group[field].append(len(item))
+                    else:
+                        if isinstance(val, (str, bytes)):
+                            str_lens_for_group[field].append(len(val))
+
+    for field_group, str_lens_for_group in str_lens.items():
+        for field, values in str_lens_for_group.items():
+            if str_lens_for_group[field]:
+                max_field_str_lens[field_group][field] = max(values)
+            else:
+                max_field_str_lens[field_group][field] = None
+
+    for field_group, lens_for_group in lens.items():
+        for field, values in lens_for_group.items():
+            if values:
+                max_field_lens[field_group][field] = max(values)
+            else:
+                max_field_lens[field_group][field] = None
+
+    std_fields = max_field_str_lens['standard_fields']
+    del max_field_str_lens['standard_fields']
+    max_field_str_lens.update(std_fields)
+
+    std_fields = max_field_lens['standard_fields']
+    del max_field_lens['standard_fields']
+    max_field_lens.update(std_fields)
+
+    return max_field_lens, max_field_str_lens
+
+
+def _fill_chunk_with_snps(chunk, mat_structure, log):
+    mats = {}
+    for path, struct in mat_structure.items():
+        mat = numpy.full(struct['shape'], struct['missing_value'],
+                         struct['dtype'])
+        mats[path] = mat
+
+    good_snp_idxs = []
+    for idx, snp in enumerate(chunk):
+        if snp is None:
+            break
+        log['variations_processed'] += 1
+
+        filters = snp[6]
+        info = snp[7]
+        calls = snp[8]
+        info = dict(info) if info else {}
+        calls = dict(calls) if calls else {}
+        ignore_snp = False
+        for path, struct in mat_structure.items():
+            basepath = struct['basepath']
+            if path == '/variations/chrom':
+                item = snp[0]
+            elif path == '/variations/pos':
+                item = snp[1]
+            elif path == '/variations/id':
+                item = snp[2]
+            elif path == '/variations/ref':
+                item = snp[3]
+            elif path == '/variations/alt':
+                item = snp[4]
+            elif path == '/variations/qual':
+                item = snp[5]
+            elif basepath == 'FILTER':
+                if struct['field'] == b'PASS':
+                    item = True if filters == [] else False
+                else:
+                    item = struct['field'] in filters
+            elif basepath == 'INFO':
+                item = info.get(struct['field'], None)
+            elif basepath == 'CALLS':
+                item = calls.get(struct['field'], None)
+            shape = struct['shape']
+
+            if item is not None:
+                n_dims = len(shape)
+                mat = mats[path]
+                if n_dims == 1:
+                    try:
+                        mat[idx] = item
+                    except ValueError:
+                        if hasattr(item, '__len__'):
+                            if len(item) == 1:
+                                mat[idx] = item[0]
+                            else:
+                                log['data_no_fit'][path] += 1
+                                break
+                        else:
+                            raise
+                elif n_dims == 2:
+                    if len(item) > mat.shape[1]:
+                        msg = 'Data no fit in field:'
+                        msg += path
+                        msg += '\n'
+                        msg += str(item)
+                        raise DataNoFitError(msg)
+                    try:
+                        mat[idx, 0:len(item)] = item
+                    except (ValueError, TypeError):
+                        missing_val = struct['missing_value']
+                        item = [missing_val if val is None else val[0]
+                                for val in item]
+                        mat[idx, 0:len(item)] = item
+
+                elif n_dims == 3:
+                    if len(item[0]) > mat.shape[2]:
+                        msg = 'Data no fit in field:'
+                        msg += path
+                        msg += '\n'
+                        msg += str(item)
+                        raise DataNoFitError(msg)
+                    try:
+                        mat[idx, :, 0:len(item[0])] = item
+                    except ValueError:
+                        print(path, item)
+                        raise
+
+                else:
+                    raise RuntimeError('Fixme, we should not be here.')
+        if not ignore_snp:
+            good_snp_idxs.append(idx)
+            log['variations_stored'] += 1
+    return mats, good_snp_idxs
+
+
+class DataNoFitError(Exception):
+    pass
+
+
 class _ChunkGenerator:
+
     def __init__(self, vars_parser, hdf5, vars_in_chunk, kept_fields=None,
                  ignored_fields=None):
         self.vars_parser = vars_parser
@@ -199,83 +371,6 @@ class _ChunkGenerator:
                     'variations_stored': 0,
                     'undefined_fields': []}
 
-    def _get_max_field_lens_from_vars(self, snps):
-        max_field_lens = {'INFO': {}, 'CALLS': {}, 'standard_fields': {}}
-        max_field_str_lens = {'INFO': {}, 'standard_fields': {}}
-
-        lens = {'standard_fields': defaultdict(list),
-                'INFO': defaultdict(list),
-                'CALLS': defaultdict(list)}
-        str_lens = {'standard_fields': defaultdict(list),
-                    'INFO': defaultdict(list),
-                    'CALLS': defaultdict(list)}
-
-        field_are_list = set()
-        field_are_str = set()
-        for snp in snps:
-            if not snp:
-                continue
-            chrom, _, id_, ref, alt, _, flt, info, calls = snp
-
-            snp_dict = {'standard_fields': {'chrom': chrom,
-                                            'id': id_,
-                                            'ref': ref,
-                                            'alt': alt,
-                                            'FILTER': flt},
-                        'CALLS': dict(calls)}
-            if info:
-                snp_dict['INFO'] = info
-
-            for field_group, fields_info in snp_dict.items():
-                str_lens_for_group = str_lens[field_group]
-                lens_for_group = lens[field_group]
-                for field, val in fields_info.items():
-                    if val is None:
-                        continue
-
-                    if field_group is 'CALLS':
-                        values = val
-                    else:
-                        values = [val]
-                    for val in values:
-                        if (field in field_are_list or
-                            isinstance(val, (list, tuple))):
-                            lens_for_group[field].append(len(val))
-                            field_are_list.add(field)
-                            if field != 'FILTER':
-                                for item in val:
-                                    if (field in field_are_str or
-                                        isinstance(item, (bytes, str))):
-                                        field_are_str.add(field)
-                                        str_lens_for_group[field].append(len(item))
-                        else:
-                            if isinstance(val, (str, bytes)):
-                                str_lens_for_group[field].append(len(val))
-
-        for field_group, str_lens_for_group in str_lens.items():
-            for field, values in str_lens_for_group.items():
-                if str_lens_for_group[field]:
-                    max_field_str_lens[field_group][field] = max(values)
-                else:
-                    max_field_str_lens[field_group][field] = None
-
-        for field_group, lens_for_group in lens.items():
-            for field, values in lens_for_group.items():
-                if values:
-                    max_field_lens[field_group][field] = max(values)
-                else:
-                    max_field_lens[field_group][field] = None
-
-        std_fields = max_field_str_lens['standard_fields']
-        del max_field_str_lens['standard_fields']
-        max_field_str_lens.update(std_fields)
-
-        std_fields = max_field_lens['standard_fields']
-        del max_field_lens['standard_fields']
-        max_field_lens.update(std_fields)
-
-        return max_field_lens, max_field_str_lens
-
     @property
     def chunks(self):
         vars_parser = self.vars_parser
@@ -287,110 +382,36 @@ class _ChunkGenerator:
 
         snps = vars_parser.variations
 
+        max_field_lens, max_field_str_lens = None, None
+
         for chunk in group_items(snps, vars_in_chunk):
 
-            max_field_lens, max_field_str_lens = self._get_max_field_lens_from_vars(chunk)
+            chunk = list(chunk)
+            if max_field_lens is None:
+                max_field_lens, max_field_str_lens = _get_max_field_lens_from_vars(chunk)
 
             mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
                                                      kept_fields, ignored_fields,
                                                      hdf5.ignore_undefined_fields,
                                                      log, max_field_lens,
                                                      max_field_str_lens)
-
-            mats = {}
-            for path, struct in mat_structure.items():
-                mat = numpy.full(struct['shape'], struct['missing_value'],
-                                 struct['dtype'])
-                mats[path] = mat
-            good_snp_idxs = []
-            for idx, snp in enumerate(chunk):
-                if snp is None:
-                    break
-                log['variations_processed'] += 1
-
-                filters = snp[6]
-                info = snp[7]
-                calls = snp[8]
-                info = dict(info) if info else {}
-                calls = dict(calls) if calls else {}
-                ignore_snp = False
-                for path, struct in mat_structure.items():
-                    basepath = struct['basepath']
-                    if path == '/variations/chrom':
-                        item = snp[0]
-                    elif path == '/variations/pos':
-                        item = snp[1]
-                    elif path == '/variations/id':
-                        item = snp[2]
-                    elif path == '/variations/ref':
-                        item = snp[3]
-                    elif path == '/variations/alt':
-                        item = snp[4]
-                    elif path == '/variations/qual':
-                        item = snp[5]
-                    elif basepath == 'FILTER':
-                        if struct['field'] == b'PASS':
-                            item = True if filters == [] else False
-                        else:
-                            item = struct['field'] in filters
-                    elif basepath == 'INFO':
-                        item = info.get(struct['field'], None)
-                    elif basepath == 'CALLS':
-                        item = calls.get(struct['field'], None)
-                    shape = struct['shape']
-
-                    if item is not None:
-                        n_dims = len(shape)
-                        mat = mats[path]
-                        if n_dims == 1:
-                            try:
-                                mat[idx] = item
-                            except ValueError:
-                                if hasattr(item, '__len__'):
-                                    if len(item) == 1:
-                                        mat[idx] = item[0]
-                                    else:
-                                        log['data_no_fit'][path] += 1
-                                        break
-                                else:
-                                    raise
-                        elif n_dims == 2:
-                            if len(item) > mat.shape[1]:
-                                msg = 'Data no fit in field:'
-                                msg += path
-                                msg += '\n'
-                                msg += str(item)
-                                raise RuntimeError(msg)
-                            try:
-                                mat[idx, 0:len(item)] = item
-                            except (ValueError, TypeError):
-                                missing_val = struct['missing_value']
-                                item = [missing_val if val is None else val[0]
-                                        for val in item]
-                                mat[idx, 0:len(item)] = item
-
-                        elif n_dims == 3:
-                            if len(item[0]) > mat.shape[2]:
-                                msg = 'Data no fit in field:'
-                                msg += path
-                                msg += '\n'
-                                msg += str(item)
-                                raise RuntimeError(msg)
-                            try:
-                                mat[idx, :, 0:len(item[0])] = item
-                            except ValueError:
-                                print(path, item)
-                                raise
-
-                        else:
-                            raise RuntimeError('Fixme, we should not be here.')
-                if not ignore_snp:
-                    good_snp_idxs.append(idx)
-                    log['variations_stored'] += 1
+            try:
+                mats, good_snp_idxs = _fill_chunk_with_snps(chunk, mat_structure,
+                                                            log)
+            except DataNoFitError:
+                max_field_lens, max_field_str_lens = _get_max_field_lens_from_vars(chunk)
+                mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
+                                                         kept_fields, ignored_fields,
+                                                         hdf5.ignore_undefined_fields,
+                                                         log, max_field_lens,
+                                                         max_field_str_lens)
+                mats, good_snp_idxs = _fill_chunk_with_snps(chunk, mat_structure,
+                                                            log)
 
             varis = VariationsArrays()
             for path, mat in mats.items():
                 varis[path] = mat[good_snp_idxs]
+
             samples = [sample.decode() for sample in vars_parser.samples]
             varis.samples = samples
 

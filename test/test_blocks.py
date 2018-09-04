@@ -182,6 +182,7 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         grouped_vars = VariationsArrays(ignore_undefined_fields=True)
         grouped_vars.put_vars(var_grouper)
         assert list(grouped_vars[REF_FIELD]) == [b'GT', b'G', b'G', b'TGT']
+
         assert numpy.all(grouped_vars[ALT_FIELD] == [[b'GC', b'AT', b''],
                                                      [b'A', b'', b''],
                                                      [b'A', b'', b''],
@@ -215,6 +216,6 @@ class GroupVarsPerBlockTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_group_vars_per_block_test']
+    import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_slices']
     unittest.main()
 

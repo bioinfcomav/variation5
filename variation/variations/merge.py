@@ -12,14 +12,14 @@ import numpy
 from variation import MISSING_VALUES, MISSING_BYTE, DEF_METADATA
 from variation.iterutils import PeekableIterator
 from variation import (CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD,
-                       QUAL_FIELD, GT_FIELD, DP_FIELD)
+                       QUAL_FIELD, GT_FIELD)
 from variation.matrix.methods import is_dataset
 
 
 def _iterate_vars(variations):
     kept_fields = [CHROM_FIELD, POS_FIELD]
 
-    optional_fields = [REF_FIELD, ALT_FIELD, GT_FIELD, QUAL_FIELD, DP_FIELD]
+    optional_fields = [REF_FIELD, ALT_FIELD, GT_FIELD, QUAL_FIELD]
     for field in optional_fields:
         if field in variations.keys():
             kept_fields.append(field)
@@ -31,7 +31,6 @@ def _iterate_vars(variations):
         vars_ref = chunk[REF_FIELD] if REF_FIELD in chunk_keys else None
         vars_alt = chunk[ALT_FIELD] if ALT_FIELD in chunk_keys else None
         vars_qual = chunk[QUAL_FIELD] if QUAL_FIELD in chunk_keys else None
-        vars_dp = chunk[DP_FIELD] if DP_FIELD in chunk_keys else None
         vars_gts = chunk[GT_FIELD] if GT_FIELD in chunk_keys else None
 
         if is_dataset(vars_chrom):
@@ -43,8 +42,6 @@ def _iterate_vars(variations):
                 vars_alt = vars_alt[:]
             if vars_qual is not None:
                 vars_qual = vars_qual[:]
-            if vars_dp is not None:
-                vars_dp = vars_dp[:]
             if vars_gts is not None:
                 vars_gts = vars_gts[:]
 
@@ -64,8 +61,6 @@ def _iterate_vars(variations):
 
             var_ = {'chrom': chrom, 'pos': pos, 'ref': ref, 'alt': alts,
                     'qual': qual, 'gts': gts}
-            if vars_dp is not None:
-                var_['dp'] = vars_dp[var_idx]
             yield var_
 
 
@@ -296,8 +291,6 @@ class VarMerger():
             raise ValueError('Ploidies should match')
         self.ploidy = variations1.ploidy
         metadata = copy.deepcopy(DEF_METADATA)
-        if DP_FIELD in variations1.keys() and DP_FIELD in variations2.keys():
-            metadata['CALLS'][b'DP'] = {'Description': 'Depth', 'dtype': 'int'}
         self.metadata = metadata
         self.ignored_fields = []
         self.kept_fields = []
@@ -444,14 +437,6 @@ class VarMerger():
         else:
             return min([qual1, qual2])
 
-    def _merge_depth(self, snp1, snp2):
-        dp1 = snp1.get('dp', None)
-        dp2 = snp2.get('dp', None)
-        if dp1 is None or dp2 is None:
-            return None
-        else:
-            return numpy.append(dp1, dp2, axis=0)
-
     def _snp_info_msg(self, short_snp, long_snp, position):
         msg = 'short_snp["pos"]: ' + str(short_snp['pos'])
         msg += '\nshort_snp["ref"]: ' + str(short_snp['ref'])
@@ -528,10 +513,8 @@ class VarMerger():
 
         if vars1_first:
             merged_gts = numpy.append(snp1['gts'], new_short_gts, axis=0)
-            merged_dp = self._merge_depth(snp1, snp2)
         else:
             merged_gts = numpy.append(new_short_gts, snp2['gts'], axis=0)
-            merged_dp = self._merge_depth(snp2, snp1)
         qual = self._get_qual(snp1, snp2)
         alt = alleles_merged[1:]
         if not alt:
@@ -539,6 +522,4 @@ class VarMerger():
         var_ = {'chrom': long_snp['chrom'], 'pos': long_snp['pos'],
                 'ref': alleles_merged[0], 'alt': alt, 'gts': merged_gts,
                 'qual': qual}
-        if merged_dp is not None:
-            var_['dp'] = merged_dp
         return var_

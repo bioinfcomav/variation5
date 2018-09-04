@@ -20,9 +20,7 @@ from variation.plot import (_calc_boxplot_stats, plot_boxplot_from_distribs,
                             write_curlywhirly, _look_for_first_different,
                             _estimate_percentiles_from_distrib, plot_hists,
                             plot_stacked_histograms, plot_sample_dp_hits,
-                            plot_sample_missing_het_stats,
-                            plot_sample_dp_het_hom,
-                            plot_matrix_heatmap)
+                            plot_sample_missing_het_stats)
 from variation.variations.plot import pairwise_ld
 from variation.variations import VariationsH5
 from test.test_utils import TEST_DATA_DIR
@@ -248,21 +246,6 @@ class BoxplotsTests(unittest.TestCase):
         with NamedTemporaryFile(suffix='.png') as fhand:
             plot_sample_dp_hits(sample_stats, fhand=fhand,
                                 log_axis_for_hists=True)
-        with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_sample_dp_het_hom(sample_stats, min_dp=5, fhand=fhand)
-
-
-class MatrixHeatmapTest(unittest.TestCase):
-
-    def test_matrix_heapmap_plot(self):
-        array = [[1, 2, 3],
-                 [4, 5, 6],
-                 [7, 8, 9]]
-
-        with NamedTemporaryFile(suffix='.png') as fhand:
-            plot_matrix_heatmap(array, ['a', 'b', 'c'], ['d', 'e', 'f'],
-                                fhand=fhand)
-            input(fhand.name)
 
 
 if __name__ == "__main__":

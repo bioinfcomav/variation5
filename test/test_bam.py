@@ -29,12 +29,12 @@ class BamParserTest(unittest.TestCase):
         snps = VariationsArrays(ignore_undefined_fields=True)
         snps.put_vars(parser)
         assert snps.ploidy
-        assert list(snps.chroms) == [b'ref']
+        assert list(snps.chroms) == ['ref']
         assert snps.num_variations == 4
         assert len(snps[REF_FIELD]) == 4
         assert len(snps[REF_FIELD][0]) == 4
 
-        assert list(snps[CHROM_FIELD]) == [b'ref', b'ref', b'ref', b'ref']
+        assert list(snps[CHROM_FIELD]) == ['ref', 'ref', 'ref', 'ref']
         assert list(snps[POS_FIELD]) == [15, 16, 17, 36]
         assert AD_FIELD in snps
         assert GT_FIELD in snps

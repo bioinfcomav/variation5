@@ -272,22 +272,6 @@ class VarMatsTests(unittest.TestCase):
         assert '/calls/GT' not in snps.keys()
         vcf_fhand.close()
 
-    def test_metadata(self):
-        for klass in VAR_MAT_CLASSES:
-            fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
-            vcf_parser = VCFParser(fhand=fhand, kept_fields=['/calls/GT'])
-            var_mat = _init_var_mat(klass)
-            var_mat.put_vars(vcf_parser)
-            metadata = var_mat.metadata
-            assert '/variations/filter/q10' in metadata.keys()
-
-            for klass in VAR_MAT_CLASSES:
-                out_snps = _init_var_mat(klass)
-                out_snps.put_chunks(var_mat.iterate_chunks())
-                assert '/variations/filter/q10' in out_snps.keys()
-
-            fhand.close()
-
     def test_vcf_to_hdf5(self):
         tmp_fhand = NamedTemporaryFile()
         path = tmp_fhand.name
@@ -314,23 +298,21 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GQ'][0, :] == expected)
 
         # Variations filters fields
-        expected = numpy.array([False, True, False, False, False])
+        expected = numpy.array([1, 0, 1, 1, 1])
         assert numpy.all(h5['/variations/filter/q10'][:] == expected)
         expected = numpy.array([False, False, False, False, False])
+        expected = numpy.array([1, 1, 1, 1, 1])
         assert numpy.all(h5['/variations/filter/s50'][:] == expected)
-        expected = [True, False, True, True, True]
-        assert numpy.all(h5['/variations/filter/PASS'][:] == expected)
 
         # Variations info fields
-        expected = remove_nans(numpy.array([[0.5, numpy.nan],
-                                            [0.01699829, numpy.nan],
-                                            [0.33300781, 0.66699219],
-                                            [numpy.nan, numpy.nan],
-                                            [numpy.nan, numpy.nan]],
-                                           dtype=numpy.float16))
+        expected = numpy.array([[0.5, numpy.nan],
+                                [0.01699829, numpy.nan],
+                                [0.33300781, 0.66699219],
+                                [numpy.nan, numpy.nan],
+                                [numpy.nan, numpy.nan]])
 
-        af = remove_nans(h5['/variations/info/AF'][:])
-        assert numpy.all(af == expected)
+        af = h5['/variations/info/AF'][:]
+        assert numpy.allclose(af, expected, equal_nan=True, atol=0.01)
         expected = numpy.array([3, 3, 2, 3, 3])
         assert numpy.all(h5['/variations/info/NS'][:] == expected)
         expected = numpy.array([14, 11, 10, 13, 9])
@@ -357,6 +339,19 @@ class VarMatsTests(unittest.TestCase):
         assert numpy.all(h5['/calls/GT'][1, 12] == [1, 1])
         assert numpy.all(h5['/calls/GL'][0, 0, 0] == 0)
         os.remove(path)
+
+    def test_by_chunks(self):
+        fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+        vcf_parser = VCFParser(fhand=fhand, n_threads=None)
+        snps = VariationsArrays()
+        snps.put_vars(vcf_parser)
+        fhand.close()
+
+        fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
+        vcf_parser = VCFParser(fhand=fhand, n_threads=None)
+        snps = VariationsArrays(vars_in_chunk=1)
+        snps.put_vars(vcf_parser)
+        fhand.close()
 
 
 class Mat012Test(unittest.TestCase):
@@ -414,5 +409,5 @@ class GenomeChunkTest(unittest.TestCase):
         # exact or close to
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VcfH5Test.test_put_vars_hdf5_from_vcf']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
     unittest.main()

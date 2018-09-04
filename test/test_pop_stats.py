@@ -24,7 +24,6 @@ from variation.variations.pop_stats import (calc_number_of_alleles,
                                             _get_original_function_name,
                                             create_pop_stats_report,
                                             STAT_FUNCTION_METADATA,
-                                            calc_pop_pairwise_unbiased_nei_dists
                                             )
 
 

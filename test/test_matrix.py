@@ -17,7 +17,7 @@ import h5py
 from variation.matrix.methods import (append_matrix, extend_matrix,
                                       append_different_size,
                                       iterate_matrix_chunks,
-                                      calc_min_max,
+                                      calc_min_max, resize_array,
                                       concat_vector, concat_matrices,
                                       vstack, _set_matrix_by_chunks)
 from variation.variations.vars_matrices import VariationsH5
@@ -290,22 +290,27 @@ class VStackH5Test(unittest.TestCase):
 
     def test_set_chunk_by_chunk(self):
         mat = numpy.zeros(10, dtype=int)
-        _set_matrix_by_chunks(mat, slice(5, 9), numpy.array([1, 1, 1, 1]), chunk_size=2)
+        _set_matrix_by_chunks(mat, slice(5, 9), numpy.array([1, 1, 1, 1]),
+                              chunk_size=2)
         assert numpy.all(mat == [0, 0, 0, 0, 0, 1, 1, 1, 1, 0])
 
-        _set_matrix_by_chunks(mat, slice(4, 8), numpy.array([2, 2, 2, 2]), chunk_size=3)
+        _set_matrix_by_chunks(mat, slice(4, 8), numpy.array([2, 2, 2, 2]),
+                              chunk_size=3)
         assert numpy.all(mat == [0, 0, 0, 0, 2, 2, 2, 2, 1, 0])
 
         mat = numpy.array([[0, 1], [2, 3], [4, 5]])
-        _set_matrix_by_chunks(mat, slice(0, 2), numpy.array([[6, 7], [8, 9]]), chunk_size=1)
+        _set_matrix_by_chunks(mat, slice(0, 2), numpy.array([[6, 7], [8, 9]]),
+                              chunk_size=1)
         assert numpy.all(mat == [[6, 7], [8, 9], [4, 5]])
 
         mat = numpy.zeros(10, dtype=int)
-        _set_matrix_by_chunks(mat, slice(5, 9), numpy.array([1, 1, 1, 1]), chunk_size=20)
+        _set_matrix_by_chunks(mat, slice(5, 9), numpy.array([1, 1, 1, 1]),
+                              chunk_size=20)
         assert numpy.all(mat == [0, 0, 0, 0, 0, 1, 1, 1, 1, 0])
 
         mat = numpy.zeros(10, dtype=int)
-        _set_matrix_by_chunks(mat, slice(-5, -1), numpy.array([1, 1, 1, 1]), chunk_size=20)
+        _set_matrix_by_chunks(mat, slice(-5, -1), numpy.array([1, 1, 1, 1]),
+                              chunk_size=20)
         assert numpy.all(mat == [0, 0, 0, 0, 0, 1, 1, 1, 1, 0])
 
     def test_3d_stacking_different_shapes(self):
@@ -350,6 +355,16 @@ class VStackH5Test(unittest.TestCase):
         _, dset1 = self.create_dset(mat1, -1)
         mat = vstack([dset1, mat2], -1)
         assert numpy.all(mat[:] == mat3)
+
+
+class ResizeTest(unittest.TestCase):
+
+    def test_resize(self):
+        mat = numpy.array([[1, 1]])
+        mat = resize_array(mat, shape=[2, 3], missing_value=-1)
+        expected = [[1, 1, -1],
+                    [-1, -1, -1]]
+        assert numpy.all(mat == expected)
 
 
 if __name__ == "__main__":

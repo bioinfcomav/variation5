@@ -8,10 +8,11 @@ import h5py
 
 
 from variation import (SNPS_PER_CHUNK, MISSING_VALUES, DEF_DSET_PARAMS,
-                       MISSING_INT)
+                       MISSING_INT, CHROM_FIELD, POS_FIELD, ID_FIELD,
+                       REF_FIELD, ALT_FIELD, QUAL_FIELD)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
-from variation.matrix.methods import is_dataset, concat_matrices
+from variation.matrix.methods import is_dataset, concat_matrices, resize_array
 from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
 from variation.gt_writers.vcf import write_vcf
@@ -126,7 +127,7 @@ def _build_matrix_structures(vars_parser, vars_in_chunk, kept_fields,
                 except KeyError:
                     if not ignore_undefined_fields:
                         msg = 'No str len defined for field: {}'.format(field)
-                        raise RuntimeError(msg)
+                        raise NoLenDefinedError(msg)
                     log['undefined_fields'].append(path)
                     continue
                 dtype = numpy.dtype((bytes, str_len))
@@ -357,6 +358,10 @@ class DataNoFitError(Exception):
     pass
 
 
+class NoLenDefinedError(Exception):
+    pass
+
+
 class _ChunkGenerator:
 
     def __init__(self, vars_parser, hdf5, vars_in_chunk, kept_fields=None,
@@ -371,52 +376,231 @@ class _ChunkGenerator:
                     'variations_stored': 0,
                     'undefined_fields': []}
 
+    def _snp_tuple_to_dict(self, snp, field_paths, filter_field_names):
+        chrom, pos, id_, ref, alt, qual, flt, info, calls = snp
+        snp_dict = {CHROM_FIELD: chrom,
+                    POS_FIELD: pos,
+                    ID_FIELD: id_,
+                    REF_FIELD: ref,
+                    QUAL_FIELD: qual,
+                    }
+
+        debug_path = None
+
+        if not isinstance(alt, list):
+            alt = [alt]
+        snp_dict[ALT_FIELD] = alt
+
+        filters_failed_in_this_snp = flt
+        if filters_failed_in_this_snp:
+            filter_field_names.update(flt)
+
+        if filters_failed_in_this_snp is None:
+            all_values = MISSING_INT
+        elif not filters_failed_in_this_snp:
+            all_values = 1
+        else:
+            all_values = None
+
+        for field_name in filter_field_names:
+            try:
+                path = field_paths['filter'][field_name]
+            except KeyError:
+                path = '/variations/filter/' + field_name.decode()
+                field_paths['filter'][field_name] = path
+            if all_values is None:
+                snp_dict[path] = int(field_name not in filters_failed_in_this_snp)
+            else:
+                snp_dict[path] = all_values
+
+        if info is None:
+            info = {}
+        for field_name, value in info.items():
+            try:
+                path = field_paths['info'][field_name]
+            except KeyError:
+                path = '/variations/info/' + field_name.decode()
+                field_paths['info'][field_name] = path
+
+            if debug_path == path:
+                print(path, value)
+
+            snp_dict[path] = value
+
+        for call in calls:
+            field_name, call_matrix = call
+            try:
+                path = field_paths['calls'][field_name]
+            except KeyError:
+                path = '/calls/' + field_name.decode()
+                field_paths['calls'][field_name] = path
+            snp_dict[path] = call_matrix
+        return snp_dict
+
+    def _create_matrix_from_snp_matrix(self, snp_mat, is_list,
+                                       n_snps_in_chunk, missing_values):
+        if is_list:
+            mat_shape = tuple([n_snps_in_chunk] + list(snp_mat.shape))
+        else:
+            mat_shape = tuple([n_snps_in_chunk] + list(snp_mat.shape[1:]))
+        # print('mat_shape', mat_shape)
+
+        dtype = snp_mat.dtype
+        try:
+            missing_value = missing_values[dtype]
+        except KeyError:
+            missing_value = MISSING_VALUES[dtype]
+            missing_values[dtype] = missing_value
+
+        mat = numpy.full(mat_shape, missing_value, dtype)
+        return mat
+
+    def _put_snp_in_matrices(self, matrices, snp, snp_idx, n_snps_in_chunk,
+                             missing_values, exemplar_matrices_for_metadata):
+
+        debug_field = None
+
+        for field_path, value in snp.items():
+            if debug_field and debug_field == field_path:
+                print('snp_idx', snp_idx)
+                print('field_path, value:', field_path, value)
+
+            is_list = True
+            snp_mat = numpy.array(value)
+            if not snp_mat.shape:
+                is_list = False
+                snp_mat = numpy.array([value])
+
+            if snp_mat.dtype == numpy.object:
+                continue
+
+            if debug_field and debug_field == field_path:
+                print('snp_mat', snp_mat)
+
+            try:
+                mat = matrices[field_path]
+            except KeyError:
+                if field_path in exemplar_matrices_for_metadata:
+                    exemplar_mat = exemplar_matrices_for_metadata[mat]
+                    mat = numpy.full_like(exemplar_mat,
+                                          missing_values[exemplar_mat.dtype])
+                else:
+                    mat = self._create_matrix_from_snp_matrix(snp_mat, is_list,
+                                                              n_snps_in_chunk,
+                                                              missing_values)
+                matrices[field_path] = mat
+
+            if False and debug_field and debug_field == field_path:
+                print('mat', mat[:6, ...])
+
+            mat_shape = mat.shape
+            snp_mat_shape = snp_mat.shape
+
+            if (len(mat_shape) == len(snp_mat_shape) + 1
+                and mat_shape[-1] < snp_mat_shape[-1]):
+
+                if debug_field and debug_field == field_path:
+                    print('resizing_mat')
+                    print('mat', mat.dtype)
+                    print(mat)
+
+                # print('snp_matrix is bigger')
+                # print('shapes: ', mat_shape, snp_mat_shape)
+                # print('snp_mat:', snp_mat)
+                new_mat_shape = list(mat_shape)
+                new_mat_shape[-1] = snp_mat_shape[-1]
+                # print('new_mat_shape', new_mat_shape)
+                try:
+                    missing_val = missing_values[mat.dtype]
+                except KeyError:
+                    missing_val = MISSING_VALUES[mat.dtype]
+                    missing_values[mat.dtype] = missing_val
+
+                mat = resize_array(mat, new_mat_shape, missing_val)
+                matrices[field_path] = mat
+                if debug_field and debug_field == field_path:
+                    print('after resizing mat')
+                    print('mat', mat.dtype)
+                    print(mat)
+
+            if snp_mat.dtype.itemsize > mat.dtype.itemsize:
+                if debug_field and debug_field == field_path:
+                    print('Doing a type casting')
+                    print('types', snp_mat.dtype, mat.dtype)
+                    print('types_size', snp_mat.dtype.itemsize,
+                          mat.dtype.itemsize)
+                    print(mat)
+                # This happens when a long string appears
+                mat = mat.astype(snp_mat.dtype)
+                if debug_field and debug_field == field_path:
+                    print('after type casting')
+                    print('mat', mat.dtype)
+                    print(mat)
+                matrices[field_path] = mat
+
+            snp_idx_slice = slice(snp_idx, snp_idx + 1)
+            if len(mat_shape) == len(snp_mat_shape) + 1:
+                slice_ = [snp_idx_slice]
+                for dim_size in snp_mat_shape:
+                    slice_.append(slice(None, dim_size))
+            elif len(mat_shape) == 1 and len(snp_mat_shape) == 1:
+                slice_ = snp_idx_slice
+
+            # print('shapes: ', mat_shape, snp_mat_shape)
+            # print('slice: ', slice_)
+            # print('snp_mat:', snp_mat)
+
+            mat[slice_] = snp_mat
+
+            if debug_field and debug_field == field_path:
+                print('mat_after', mat[:6, ...])
+
     @property
     def chunks(self):
         vars_parser = self.vars_parser
-        hdf5 = self.hdf5
         vars_in_chunk = self.vars_in_chunk
         kept_fields = self.kept_fields
         ignored_fields = self.ignored_fields
         log = self.log
-
+        # metadata = vars_parser.metadata
         snps = vars_parser.variations
 
-        max_field_lens, max_field_str_lens = None, None
+        field_paths = {'filter': {}, 'calls': {}, 'info': {}}
+        missing_values = {}
+        filter_field_names = set(getattr(vars_parser, 'metadata', {}).get('FILTER', {}).keys())
 
+        exemplar_matrices_for_metadata = {}
+        n_non_none_snps = 0
         for chunk in group_items(snps, vars_in_chunk):
-
             chunk = list(chunk)
-            if max_field_lens is None:
-                max_field_lens, max_field_str_lens = _get_max_field_lens_from_vars(chunk)
+            n_snps_in_chunk = len(chunk)
+            matrices = {}
+            for snp in chunk:
+                if snp is None:
+                    continue
+                snp_dict = self._snp_tuple_to_dict(snp, field_paths,
+                                                   filter_field_names)
+                self._put_snp_in_matrices(matrices, snp_dict, n_non_none_snps,
+                                          n_snps_in_chunk, missing_values,
+                                          exemplar_matrices_for_metadata)
+                n_non_none_snps += 1
 
-            mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
-                                                     kept_fields, ignored_fields,
-                                                     hdf5.ignore_undefined_fields,
-                                                     log, max_field_lens,
-                                                     max_field_str_lens)
-            try:
-                mats, good_snp_idxs = _fill_chunk_with_snps(chunk, mat_structure,
-                                                            log)
-            except DataNoFitError:
-                max_field_lens, max_field_str_lens = _get_max_field_lens_from_vars(chunk)
-                mat_structure = _build_matrix_structures(vars_parser, vars_in_chunk,
-                                                         kept_fields, ignored_fields,
-                                                         hdf5.ignore_undefined_fields,
-                                                         log, max_field_lens,
-                                                         max_field_str_lens)
-                mats, good_snp_idxs = _fill_chunk_with_snps(chunk, mat_structure,
-                                                            log)
+            # cut the empty snps from the end
+            if n_non_none_snps < n_snps_in_chunk:
+                matrices = {path: mat[:n_non_none_snps, ...] for path, mat in matrices.items()}
 
             varis = VariationsArrays()
-            for path, mat in mats.items():
-                varis[path] = mat[good_snp_idxs]
+            for path, mat in matrices.items():
+                varis[path] = mat
 
             samples = [sample.decode() for sample in vars_parser.samples]
             varis.samples = samples
 
-            metadata = _prepare_metadata(vars_parser.metadata)
-            varis._set_metadata(metadata)
+            try:
+                metadata = _prepare_metadata(vars_parser.metadata)
+                varis._set_metadata(metadata)
+            except AttributeError:
+                pass
 
             yield varis
 
@@ -439,7 +623,6 @@ class _VariationMatrices():
         self._missing_value_cache = {}
         self.kept_fields = kept_fields
         self.ignored_fields = ignored_fields
-
         self._index = None
 
     @property
@@ -481,8 +664,6 @@ class _VariationMatrices():
 
     def write_vcf(self, vcf_fhand):
         write_vcf(self, vcf_fhand)
-#         for line in _to_vcf(self):
-#             vcf_fhand.write(line + '\n')
 
     @staticmethod
     def _check_shape_matches(mat1, mat2, field):
@@ -570,8 +751,6 @@ class _VariationMatrices():
         if chunks is None:
             return
 
-        matrices = {}
-
         for chunk in chunks:
             if chunk.num_variations == 0:
                 continue
@@ -579,38 +758,44 @@ class _VariationMatrices():
                 self._create_or_get_mats_from_chunk(chunk)
                 continue
 
-            self._check_same_paths(chunk)
-
-            # check all chunks have the same number of snps
+            # check all matrices have the same number of snps
             nsnps = [chunk[path].data.shape[0]
                      for path in chunk.keys()]
             num_snps = nsnps[0]
             assert all(num_snps == nsnp for nsnp in nsnps)
 
-            for path in chunk.keys():
-                dset_chunk = chunk[path]
-                dset = self[path]
+            paths = set(self.keys())
+            paths.update(chunk.keys())
+
+            for path in paths:
+                try:
+                    dset_chunk = chunk[path]
+                except KeyError:
+                    # In the chunk to add a field present in the old matrices
+                    # is missing
+                    missing_value = self._get_missing_value(path)
+                    dset = self[path]
+                    shape = list(dset.shape)
+                    shape[0] = num_snps
+                    dset_chunk = numpy.full(shape, missing_value, dset.dtype)
+
+                try:
+                    dset = self[path]
+                except KeyError:
+                    # In the chunk to add there is a new field not present
+                    # in any previous chunk
+                    dset = self._create_matrix_from_matrix(path, dset_chunk)
+                    # dset = numpy.full(shape, missing_value, dset_chunk.dtype)
 
                 mat = concat_matrices([dset, dset_chunk],
                                       missing_value=self._get_missing_value(path),
                                       if_first_matrix_is_dataset_replace_it=False)
-                matrices[path] = mat
-
-        if matrices:
-            self._replace_matrices(matrices)
+                if mat is not dset:
+                    self._replace_matrix(path, mat)
 
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
-    def _check_same_paths(self, chunk):
-        new_paths = set(chunk.keys())
-        old_paths = set(self.keys())
-
-        if old_paths.difference(new_paths) or new_paths.difference(old_paths):
-            msg = 'Paths to replace and new paths are not the same:\n'
-            msg += 'Old: ' + ','.join(sorted(old_paths)) + '\n'
-            msg += 'New: ' + ','.join(sorted(new_paths)) + '\n'
-            raise ValueError(msg)
 
     def get_chunk(self, index, kept_fields=None, ignored_fields=None):
 
@@ -880,7 +1065,11 @@ class VariationsH5(_VariationMatrices):
         self._h5file = h5py.File(fpath, mode)
 
     def __getitem__(self, path):
-        return self._h5file[path]
+        try:
+            return self._h5file[path]
+        except KeyError:
+            msg = 'field not found: ' + path
+            raise KeyError(msg)
 
     def keys(self):
         dsets = []
@@ -1011,6 +1200,14 @@ class VariationsH5(_VariationMatrices):
 
         self._index = None
 
+    def _replace_matrix(self, path, new_matrix):
+        h5file = self._h5file
+
+        del h5file[path]
+        h5file[path] = new_matrix
+
+        self._index = None
+
 
 def select_dset_from_chunks(chunks, dset_path):
     return (chunk[dset_path] for chunk in chunks)
@@ -1078,4 +1275,9 @@ class VariationsArrays(_VariationMatrices):
         assert not old_paths.difference(new_paths)
 
         self._hArrays = matrices
+        self._index = None
+
+    def _replace_matrix(self, path, new_matrix):
+        self._hArrays[path] = new_matrix
+
         self._index = None

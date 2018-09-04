@@ -422,3 +422,11 @@ def concat_matrices(matrices, missing_value=None,
     else:
         return vstack(matrices, missing_value=missing_value,
                       if_first_matrix_is_dataset_replace_it=if_first_matrix_is_dataset_replace_it)
+
+
+def resize_array(array, shape, missing_value):
+    assert len(array.shape) == len(shape)
+    slice_ = tuple(slice(0, dim_len) for dim_len in array.shape)
+    mat = numpy.full(shape, missing_value, dtype=array.dtype)
+    mat[slice_] = array
+    return mat

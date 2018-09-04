@@ -11,6 +11,7 @@ FALSE_INT = 0
 
 GT_FIELD = '/calls/GT'
 GQ_FIELD = '/calls/GQ'
+ID_FIELD = '/variations/id'
 ALT_FIELD = '/variations/alt'
 REF_FIELD = '/variations/ref'
 QUAL_FIELD = '/variations/qual'
@@ -63,6 +64,8 @@ class _MissingValues():
             return MISSING_BOOL
         elif str_dtype[:2] == '|S':
             return MISSING_BYTE
+        elif str_dtype[:2] == '<U':
+            return MISSING_STR
         else:
             raise ValueError('No missing type defined for type: ' + str(dtype))
 

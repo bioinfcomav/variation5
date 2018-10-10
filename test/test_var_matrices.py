@@ -22,7 +22,7 @@ from test.test_utils import TEST_DATA_DIR
 from variation.utils.misc import remove_nans
 from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
-from variation import SNPS_PER_CHUNK, POS_FIELD, CHROM_FIELD
+from variation import SNPS_PER_CHUNK, POS_FIELD, CHROM_FIELD, GT_FIELD
 
 VAR_MAT_CLASSES = (VariationsH5, VariationsArrays)
 
@@ -235,6 +235,15 @@ class VarMatsTests(unittest.TestCase):
             chunk = chunks[0]
             assert chunk['/calls/GT'].shape == (5, 3, 2)
             assert numpy.all(chunk['/calls/GT'][1] == [[0, 0], [0, 1], [0, 0]])
+
+        fpath = join(TEST_DATA_DIR, 'ril.vcf.gz')
+        kwargs = {'ignored_fields': {'/calls/GL'}}
+        for var_mats in _create_var_mat_objs_from_vcf(fpath, kwargs=kwargs):
+            chunks1 = list(var_mats.iterate_chunks(chunk_size=200))
+            chunks2 = var_mats.iterate_chunks(start=200, chunk_size=200)
+
+            for chunk1, chunk2 in zip(chunks1[1:], chunks2):
+                assert numpy.all(chunk1[GT_FIELD] == chunk2[GT_FIELD])
 
     def test_copy(self):
         in_snps = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')

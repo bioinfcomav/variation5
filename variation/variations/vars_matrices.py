@@ -865,9 +865,10 @@ class _VariationMatrices():
             paths = set(paths).difference(ignored_fields)
         return paths
 
-    def _create_iterate_chunk_slices(self, chunk_size, random_sample_rate=1):
+    def _create_iterate_chunk_slices(self, chunk_size, start=0,
+                                     random_sample_rate=1):
         nsnps = self.num_variations
-        for start in range(0, nsnps, chunk_size):
+        for start in range(start, nsnps, chunk_size):
 
             stop = start + chunk_size
             if stop > nsnps:
@@ -889,11 +890,12 @@ class _VariationMatrices():
             yield slice_
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None,
-                       chunk_size=None, random_sample_rate=1):
+                       chunk_size=None, random_sample_rate=1, start=0):
         if chunk_size is None:
             chunk_size = self._vars_in_chunk
 
-        slices = self._create_iterate_chunk_slices(chunk_size=chunk_size,
+        slices = self._create_iterate_chunk_slices(start=start,
+                                                   chunk_size=chunk_size,
                                                    random_sample_rate=random_sample_rate)
         for slice_ in slices:
             yield self.get_chunk(slice_, kept_fields=kept_fields,

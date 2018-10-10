@@ -61,6 +61,22 @@ class GroupVarsPerBlockTest(unittest.TestCase):
         assert list(grouped_vars['/variations/info/AA'][0]) == [b'GT', b'GC',
                                                                 b'AT']
 
+        blocks = [{'chrom': b'20', 'start_idx': 0, 'stop_idx': 2}]
+
+        var_grouper = BlocksVariationGrouper(variations, blocks,
+                                             remove_snps_with_hets_or_missing=True)
+
+        grouped_vars = VariationsArrays(ignore_undefined_fields=True)
+        grouped_vars.put_vars(var_grouper)
+        assert grouped_vars[REF_FIELD] == [b'GT']
+        assert numpy.all(grouped_vars[ALT_FIELD] == [[b'GC', b'AT']])
+        assert numpy.all(grouped_vars[GT_FIELD] == [[[0, 0], [1, 1], [2, 2]]])
+        assert grouped_vars[CHROM_FIELD] == [b'20']
+        assert grouped_vars[POS_FIELD] == [10]
+        assert grouped_vars['/variations/info/SN'] == [2]
+        assert list(grouped_vars['/variations/info/AA'][0]) == [b'GT', b'GC',
+                                                                b'AT']
+
         # het
         blocks = [{'chrom': b'20', 'start': 30, 'stop': 41}]
 
@@ -644,6 +660,6 @@ class BlockGenerationTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_slices']
+    import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_group_vars_per_block_test']
     unittest.main()
 

@@ -148,8 +148,15 @@ class BlocksVariationGrouper():
 
         for block in self.blocks:
             chrom = block['chrom']
-            start_idx = index.index_pos(chrom, block['start'])
-            stop_idx = index.index_pos(chrom, block['stop'])
+            try:
+                start_idx = block['start_idx']
+            except KeyError:
+                start_idx = index.index_pos(chrom, block['start'])
+            try:
+                stop_idx = block['stop_idx']
+            except KeyError:
+                stop_idx = index.index_pos(chrom, block['stop'])
+
             block_chunk = variations.get_chunk(slice(start_idx, stop_idx))
             if block_chunk.num_variations < self.min_num_vars_in_block:
                 continue

@@ -18,7 +18,6 @@ from variation.matrix.methods import is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import row_value_counter_fact
 
-
 COUNTS = 'counts'
 EDGES = 'edges'
 FLT_VARS = 'flt_vars'
@@ -206,6 +205,7 @@ class IndelFilter():
 
 
 class MinCalledGTsFilter(_BaseFilter):
+
     def __init__(self, min_called=None, rates=True, **kwargs):
         self.rates = rates
         self.min = min_called
@@ -216,6 +216,7 @@ class MinCalledGTsFilter(_BaseFilter):
 
 
 class NoMissingGTsFilter(_BaseFilter):
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -258,6 +259,7 @@ class NoMissingGTsFilter(_BaseFilter):
 
 
 class NoMissingGTsOrHetFilter(NoMissingGTsFilter):
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -285,6 +287,7 @@ class NoMissingGTsOrHetFilter(NoMissingGTsFilter):
 
 
 class MafFilter(_BaseFilter):
+
     def __init__(self, min_maf=None, max_maf=None,
                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
                  **kwargs):
@@ -300,6 +303,7 @@ class MafFilter(_BaseFilter):
 
 
 class MacFilter(_BaseFilter):
+
     def __init__(self, min_mac=None, max_mac=None,
                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT, **kwargs):
         self.min = min_mac
@@ -313,6 +317,7 @@ class MacFilter(_BaseFilter):
 
 
 class ObsHetFilter(_BaseFilter):
+
     def __init__(self, min_het=None, max_het=None,
                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
                  min_call_dp=0, **kwargs):
@@ -333,6 +338,7 @@ class ObsHetFilter(_BaseFilter):
 
 
 class SNPQualFilter(_BaseFilter):
+
     def __init__(self, min_qual=None, max_qual=None, **kwargs):
         self.min = min_qual
         self.max = max_qual
@@ -354,6 +360,7 @@ class SNPQualFilter(_BaseFilter):
 
 
 class _GTsToMissingSetter:
+
     def __init__(self, min_, field_path, do_histogram=True, range_=None,
                  do_filtering=True, n_bins=DEF_NUM_BINS):
         self.min = min_
@@ -392,6 +399,7 @@ class _GTsToMissingSetter:
 
 
 class LowDPGTsToMissingSetter(_GTsToMissingSetter):
+
     def __init__(self, min_dp, **kwargs):
         kwargs['min_'] = min_dp
         kwargs['field_path'] = DP_FIELD
@@ -399,6 +407,7 @@ class LowDPGTsToMissingSetter(_GTsToMissingSetter):
 
 
 class LowQualGTsToMissingSetter(_GTsToMissingSetter):
+
     def __init__(self, min_qual, **kwargs):
         kwargs['min_'] = min_qual
         kwargs['field_path'] = GQ_FIELD
@@ -408,10 +417,11 @@ class LowQualGTsToMissingSetter(_GTsToMissingSetter):
 class NonBiallelicFilter(_BaseFilter):
 
     def __init__(self, samples=None, report_selection=False,
-                 keep_monomorphic=False):
+                 keep_monomorphic=False, reverse=False):
         self.keep_monomorphic = keep_monomorphic
         self._samples = samples
         self.report_selection = report_selection
+        self.reverse = reverse
 
     @property
     def do_filtering(self):
@@ -456,6 +466,9 @@ class NonBiallelicFilter(_BaseFilter):
         vars_for_stat = self._filter_samples_for_stats(variations)
 
         selected_rows = self._select_mono(vars_for_stat)
+
+        if self.reverse:
+            selected_rows = numpy.logical_not(selected_rows)
 
         result = {}
 
@@ -565,6 +578,7 @@ def _count_gts(variations):
 
 
 class Chi2GtFreqs2SampleSetsFilter(_BaseFilter):
+
     def __init__(self, samples1, samples2, min_pval, **kwargs):
         self.min = min_pval
         self.samples1 = samples1
@@ -646,6 +660,7 @@ class FieldFilter:
 
 
 class SamplesFilterByIndex:
+
     def __init__(self, samples_col_idxs, reverse=False):
         self.samples_col_idxs = samples_col_idxs
         self.reverse = reverse
@@ -665,6 +680,7 @@ class SamplesFilterByIndex:
 
 
 class SampleFilter:
+
     def __init__(self, samples, reverse=False):
         self.samples = samples
         self.reverse = reverse
@@ -1014,6 +1030,7 @@ class PseudoHetDuplicationFilter2(_BaseFilter):
 
 
 class OrFilter:
+
     def __init__(self, filters):
         self.filters = filters
         for flt in filters:
@@ -1050,6 +1067,7 @@ class OrFilter:
 
 
 class FieldValueFilter(_BaseFilter):
+
     def __init__(self, field_path, value, **kwargs):
         super().__init__(**kwargs)
         self._field = field_path

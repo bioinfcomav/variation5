@@ -19,8 +19,6 @@ from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5)
 from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR
-from variation.utils.misc import remove_nans
-from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
 from variation import SNPS_PER_CHUNK, POS_FIELD, CHROM_FIELD, GT_FIELD
 
@@ -416,6 +414,28 @@ class GenomeChunkTest(unittest.TestCase):
         # middle and after
         # middle and middle
         # exact or close to
+
+
+class ChunkPairsTest(unittest.TestCase):
+    def test_chunk_pairs(self):
+        poss = [5, 7, 8, 10, 11, 12]
+        chroms = ['c1'] * len(poss)
+        poss = numpy.array(poss)
+        chroms = numpy.array(chroms)
+        varis = VariationsArrays()
+        varis[POS_FIELD] = poss
+        varis[CHROM_FIELD] = chroms
+
+        pairs = list(varis.iterate_chunk_pairs(max_dist=3, chunk_size=2))
+        pos_pairs = [(pair['chunk1'][POS_FIELD][0], pair['chunk2'][POS_FIELD][0]) for pair in pairs]
+        expected = [(5, 5), (5, 8), (8, 8), (8, 11), (11, 11)]
+        assert pos_pairs == expected
+
+        pairs = list(varis.iterate_chunk_pairs(max_dist=4, chunk_size=2))
+        pos_pairs = [(pair['chunk1'][POS_FIELD][0], pair['chunk2'][POS_FIELD][0]) for pair in pairs]
+        expected = [(5, 5), (5, 8), (5, 11), (8, 8), (8, 11), (11, 11)]
+        assert pos_pairs == expected
+
 
 if __name__ == "__main__":
     # import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']

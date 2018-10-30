@@ -796,7 +796,6 @@ class _VariationMatrices():
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
-
     def get_chunk(self, index, kept_fields=None, ignored_fields=None):
 
         paths = self._filter_fields(kept_fields=kept_fields,
@@ -889,7 +888,7 @@ class _VariationMatrices():
                     slice_ = slice(slice_[0], slice_[0] + 1)
             yield slice_
 
-    def iterate_chunks(self, kept_fields=None, ignored_fields=None,
+    def _iterate_chunks(self, kept_fields=None, ignored_fields=None,
                        chunk_size=None, random_sample_rate=1, start=0):
         if chunk_size is None:
             chunk_size = self._vars_in_chunk
@@ -898,8 +897,16 @@ class _VariationMatrices():
                                                    chunk_size=chunk_size,
                                                    random_sample_rate=random_sample_rate)
         for slice_ in slices:
-            yield self.get_chunk(slice_, kept_fields=kept_fields,
-                                 ignored_fields=ignored_fields)
+            yield slice_, self.get_chunk(slice_, kept_fields=kept_fields,
+                                         ignored_fields=ignored_fields)
+
+    def iterate_chunks(self, kept_fields=None, ignored_fields=None,
+                       chunk_size=None, random_sample_rate=1, start=0):
+        return (chunk for _, chunk in self._iterate_chunks(kept_fields=kept_fields,
+                                                           ignored_fields=ignored_fields,
+                                                           chunk_size=chunk_size,
+                                                           random_sample_rate=random_sample_rate,
+                                                           start=start))
 
     @property
     def pos_index(self):
@@ -954,6 +961,27 @@ class _VariationMatrices():
             yield chrom, self.get_chunk(slice(chrom_start, chrom_end + 1),
                                         kept_fields=kept_fields,
                                         ignored_fields=ignored_fields)
+
+    def iterate_chunk_pairs(self, max_dist, kept_fields=None,
+                            ignored_fields=None, chunk_size=None):
+
+        for chunk1_slice, chunk1 in self._iterate_chunks(kept_fields=kept_fields,
+                                                         ignored_fields=ignored_fields,
+                                                         chunk_size=chunk_size):
+            chunk1_end_pos = chunk1[POS_FIELD][-1]
+            chunk1_end_chrom = chunk1[CHROM_FIELD][-1]
+
+            for chunk2 in self.iterate_chunks(kept_fields=kept_fields,
+                                              ignored_fields=ignored_fields,
+                                              chunk_size=chunk_size,
+                                              start=chunk1_slice.start):
+                chunk2_start_chrom = chunk2[CHROM_FIELD][0]
+                if chunk1_end_chrom != chunk2_start_chrom:
+                    break
+                chunk2_start_pos = chunk2[POS_FIELD][0]
+                if chunk2_start_pos - chunk1_end_pos > max_dist:
+                    break
+                yield {'chunk1': chunk1, 'chunk2': chunk2}
 
     @property
     def chroms(self):

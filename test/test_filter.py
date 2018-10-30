@@ -41,6 +41,7 @@ from variation.variations.annotation import IsVariableAnnotator, ANNOTATED_VARS
 
 
 class IndelTest(unittest.TestCase):
+
     def test_filter_indels(self):
         variations = VariationsArrays()
         alt = [['A', 'T', 'CG'], ['A', '', ''], ['C', '', ''], ['G', '', '']]
@@ -152,6 +153,7 @@ class FilterTest(unittest.TestCase):
 
 
 class MinCalledGTTest(unittest.TestCase):
+
     def test_filter_called_gt(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
@@ -197,6 +199,7 @@ class MinCalledGTTest(unittest.TestCase):
 
 
 class NoMissingTest(unittest.TestCase):
+
     def test_filter_snps_missing_gts(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
@@ -573,6 +576,14 @@ class MonoBiallelicFilterTest(unittest.TestCase):
         assert flt_chunk[FLT_STATS][N_FILTERED_OUT] == SNPS_PER_CHUNK - kept
         assert flt_chunk[SELECTED_VARS].shape
 
+        flt_chunk = NonBiallelicFilter(report_selection=True, reverse=True)(chunk)
+        kept = flt_chunk[FLT_VARS][GT_FIELD].shape[0]
+        assert flt_chunk[FLT_VARS][GT_FIELD].shape[1:] == (153, 2)
+        assert flt_chunk[FLT_STATS][N_KEPT] == kept
+        assert flt_chunk[FLT_STATS][TOT] == SNPS_PER_CHUNK
+        assert flt_chunk[FLT_STATS][N_FILTERED_OUT] == SNPS_PER_CHUNK - kept
+        assert flt_chunk[SELECTED_VARS].shape
+
 
 class Chi2GtFilterTest(unittest.TestCase):
 
@@ -603,6 +614,7 @@ class Chi2GtFilterTest(unittest.TestCase):
 
 
 class FieldFilterTest(unittest.TestCase):
+
     def test_field_filter(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         orig_keys = hdf5.keys()
@@ -681,6 +693,7 @@ class FilterSamplesTest(unittest.TestCase):
 
 
 class HetDupFilterTest(unittest.TestCase):
+
     def test_filter_samples_by_missing(self):
         snps = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
 
@@ -787,6 +800,5 @@ class FieldValueFilterTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
-    # import sys;sys.argv = ['', 'SNPQualFilterTest.test_filter_quality_snps']
+    #  import sys;sys.argv = ['', 'MonoBiallelicFilterTest']
     unittest.main()

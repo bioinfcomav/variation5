@@ -1,7 +1,6 @@
 import os
 import subprocess
 import gzip
-import pickle
 from multiprocessing import Pool
 from tempfile import NamedTemporaryFile
 from functools import partial
@@ -32,12 +31,9 @@ def get_vcf_lines_for_chrom(chrom, vcf_fpath, header=True):
         yield line
 
 
-def _parse_vcf(chrom, vcf_fpath, tmp_dir, max_field_lens, max_field_str_lens,
-               kept_fields, ignored_fields):
+def _parse_vcf(chrom, vcf_fpath, tmp_dir, kept_fields, ignored_fields):
     tmp_h5_fhand = NamedTemporaryFile(prefix=chrom.decode() + '.',
                                       suffix='.tmp.h5', dir=tmp_dir)
-    max_field_lens = pickle.loads(max_field_lens)
-    max_field_str_lens = pickle.loads(max_field_str_lens)
 
     tmp_h5_fpath = tmp_h5_fhand.name
     tmp_h5_fhand.close()
@@ -48,23 +44,10 @@ def _parse_vcf(chrom, vcf_fpath, tmp_dir, max_field_lens, max_field_str_lens,
 
     vcf_parser = VCFParser(get_vcf_lines_for_chrom(chrom, vcf_fpath),
                            kept_fields=kept_fields,
-                           ignored_fields=ignored_fields,
-                           max_field_lens=max_field_lens)
-
-    tmp_h5.put_vars(vcf_parser, max_field_lens=max_field_lens,
-                    max_field_str_lens=max_field_str_lens)
-    return tmp_h5_fpath
-
-
-def _get_max_field(vcf_fpath, preread_nvars, kept_fields, ignored_fields):
-    vcf_parser = VCFParser(gzip.open(vcf_fpath, 'rb'),
-                           max_n_vars=preread_nvars, kept_fields=kept_fields,
                            ignored_fields=ignored_fields)
-    for var in vcf_parser.variations:
-        var
-    max_field_lens = pickle.dumps(vcf_parser.max_field_lens)
-    max_field_str_lens = pickle.dumps(vcf_parser.max_field_str_lens)
-    return max_field_lens, max_field_str_lens
+
+    tmp_h5.put_vars(vcf_parser)
+    return tmp_h5_fpath
 
 
 def _merge_h5(h5_chroms_fpaths, out_h5_fpath):
@@ -80,21 +63,15 @@ def _remove_temp_chrom_h5s(h5_chroms_fpaths):
             os.remove(h5_chrom_fpath)
 
 
-def vcf_to_h5(vcf_fpath, out_h5_fpath, n_threads, preread_nvars, tmp_dir,
-              kept_fields=None, ignored_fields=None):
+def vcf_to_h5(vcf_fpath, out_h5_fpath, n_threads, tmp_dir, kept_fields=None,
+              ignored_fields=None):
     if not os.path.exists(tmp_dir):
         os.mkdir(tmp_dir)
 
     chroms = get_chroms_in_vcf(vcf_fpath)
-    max_field_lens, max_field_str_lens = _get_max_field(vcf_fpath,
-                                                        preread_nvars,
-                                                        kept_fields=kept_fields,
-                                                        ignored_fields=ignored_fields)
 
     partial_parse_vcf = partial(_parse_vcf, vcf_fpath=vcf_fpath,
                                 tmp_dir=tmp_dir,
-                                max_field_lens=max_field_lens,
-                                max_field_str_lens=max_field_str_lens,
                                 kept_fields=kept_fields,
                                 ignored_fields=ignored_fields)
     with Pool(n_threads) as pool:

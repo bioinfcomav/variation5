@@ -6,7 +6,6 @@ from collections import Counter, defaultdict
 import numpy
 import h5py
 
-
 from variation import (SNPS_PER_CHUNK, MISSING_VALUES, DEF_DSET_PARAMS,
                        MISSING_INT, CHROM_FIELD, POS_FIELD, ID_FIELD,
                        REF_FIELD, ALT_FIELD, QUAL_FIELD)
@@ -615,6 +614,7 @@ def _put_vars_in_mats(vars_parser, hdf5, vars_in_chunk, kept_fields=None,
 
 
 class _VariationMatrices():
+
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
                  ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):
@@ -1020,8 +1020,7 @@ class _VariationMatrices():
         one_mat = self[one_path]
         return one_mat.shape[0]
 
-    def put_vars(self, var_parser, max_field_lens=None,
-                 max_field_str_lens=None):
+    def put_vars(self, var_parser):
         self._index = None
         return _put_vars_in_mats(var_parser, self, self._vars_in_chunk,
                                  kept_fields=self.kept_fields,
@@ -1078,6 +1077,7 @@ def _get_hdf5_dset_paths(dsets, h5_or_group_or_dset):
 
 
 class VariationsH5(_VariationMatrices):
+
     def __init__(self, fpath, mode, vars_in_chunk=SNPS_PER_CHUNK,
                  ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):
@@ -1244,6 +1244,7 @@ def select_dset_from_chunks(chunks, dset_path):
 
 
 class VariationsArrays(_VariationMatrices):
+
     def __init__(self, vars_in_chunk=SNPS_PER_CHUNK,
                  ignore_undefined_fields=False,
                  kept_fields=None, ignored_fields=None):

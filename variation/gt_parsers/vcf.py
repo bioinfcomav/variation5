@@ -1,11 +1,9 @@
-from itertools import chain, islice
+from itertools import chain
 import re
 import subprocess
 from multiprocessing import Pool
-import math
 
 from variation import (MISSING_VALUES, SNPS_PER_CHUNK)
-from variation.utils.compressed_queue import CCache
 from variation.iterutils import group_items
 
 # The following functions have to be compiled with

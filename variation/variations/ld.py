@@ -161,5 +161,3 @@ def calc_ld_along_genome(variations, max_dist, min_num_gts=10,
     for result in itertools.chain.from_iterable(_calc_ld_between_chunks(chunk_pair, min_num_gts=min_num_gts) for chunk_pair in chunk_pairs):
         for ld, physical_dist in result:
             yield ld, physical_dist
-
-

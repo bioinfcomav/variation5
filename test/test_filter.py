@@ -32,7 +32,8 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           OrFilter, DISCARDED_VARS,
                                           IndelFilter, FieldValueFilter,
                                           NoMissingGTsFilter,
-                                          NoMissingGTsOrHetFilter)
+                                          NoMissingGTsOrHetFilter,
+                                          SNPPositionFilter)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
@@ -503,6 +504,33 @@ class SNPQualFilterTest(unittest.TestCase):
 
         flt_chunk = SNPQualFilter(max_qual=-1)(chunk)[FLT_VARS]
         assert first(flt_chunk.values()).shape[0] == 0
+
+
+class SNPQualFilterTest(unittest.TestCase):
+
+    def test_filter_by_pos(self):
+        variations = VariationsArrays()
+        pos = numpy.array([5, 10, 15, 20, 25])
+        chrom = numpy.array(['1'] * len(pos))
+        variations[POS_FIELD] = pos
+        variations[CHROM_FIELD] = chrom
+
+        regions = [('1', 5, 10)]
+
+        filtered = SNPPositionFilter(regions)(variations)
+        assert filtered[FLT_VARS][POS_FIELD] == [5]
+
+        regions = [('2', 5, 10)]
+        filtered = SNPPositionFilter(regions)(variations)
+        assert not filtered[FLT_VARS][POS_FIELD].size
+
+        regions = [('1', 23, 30), ('2', 5, 10)]
+        filtered = SNPPositionFilter(regions)(variations)
+        assert filtered[FLT_VARS][POS_FIELD] == [25]
+
+        regions = [('1', 23, 30), ('2', 5, 10)]
+        filtered = SNPPositionFilter(regions, reverse=True)(variations)
+        assert numpy.all(filtered[FLT_VARS][POS_FIELD] == [5, 10, 15, 20])
 
 
 class MissingGTSettersTest(unittest.TestCase):

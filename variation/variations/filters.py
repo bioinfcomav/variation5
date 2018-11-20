@@ -13,7 +13,8 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         histogram, DEF_NUM_BINS,
                                         call_is_het)
 from variation.variations.vars_matrices import VariationsArrays
-from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT, ALT_FIELD)
+from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT, ALT_FIELD,
+    CHROM_FIELD, POS_FIELD)
 from variation.matrix.methods import is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import row_value_counter_fact
@@ -357,6 +358,56 @@ class SNPQualFilter(_BaseFilter):
         if numpy.issubdtype(stat.dtype, numpy.dtype(float)):
             stat[numpy.isinf(stat)] = numpy.finfo(stat.dtype).max
         return stat
+
+
+class SNPPositionFilter(_BaseFilter):
+
+    def __init__(self, regions, reverse=False, **kwargs):
+        self.regions = regions
+        self.reverse = reverse
+
+        super().__init__(**kwargs)
+
+    def _in_any_region(self, variations):
+        chroms = variations[CHROM_FIELD]
+        poss = variations[POS_FIELD]
+
+        in_any_region = None
+        for region in self.regions:
+            in_this_region = numpy.logical_and(chroms == region[0],
+                                               numpy.logical_and(region[1] <= poss, poss < region[2]))
+            if in_any_region is None:
+                in_any_region = in_this_region
+            else:
+                in_any_region = numpy.logical_or(in_any_region,
+                                                 in_this_region)
+        return in_any_region
+
+    def __call__(self, variations):
+
+        if variations.num_variations == 0:
+            raise ValueError('No SNPs to filter')
+
+        in_any_region = self._in_any_region(variations)
+        if self.reverse:
+            selected_rows = numpy.logical_not(in_any_region)
+        else:
+            selected_rows = in_any_region
+        result = {}
+
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
+
+        if self.do_filtering:
+            flt_vars = variations.get_chunk(selected_rows)
+            result[FLT_VARS] = flt_vars
+
+            if self.return_discarded:
+                discarded_rows = numpy.logical_not(selected_rows)
+                discarded_vars = variations.get_chunk(discarded_rows)
+                result[DISCARDED_VARS] = discarded_vars
+
+        return result
 
 
 class _GTsToMissingSetter:

@@ -374,8 +374,10 @@ class SNPPositionFilter(_BaseFilter):
 
         in_any_region = None
         for region in self.regions:
-            in_this_region = numpy.logical_and(chroms == region[0],
-                                               numpy.logical_and(region[1] <= poss, poss < region[2]))
+            in_this_region = chroms == region[0]
+            if len(region) > 1:
+                in_this_region = numpy.logical_and(in_this_region,
+                                                   numpy.logical_and(region[1] <= poss, poss < region[2]))
             if in_any_region is None:
                 in_any_region = in_this_region
             else:

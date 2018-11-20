@@ -532,6 +532,10 @@ class SNPQualFilterTest(unittest.TestCase):
         filtered = SNPPositionFilter(regions, reverse=True)(variations)
         assert numpy.all(filtered[FLT_VARS][POS_FIELD] == [5, 10, 15, 20])
 
+        regions = [('2',)]
+        filtered = SNPPositionFilter(regions)(variations)
+        assert not filtered[FLT_VARS][POS_FIELD].size
+
 
 class MissingGTSettersTest(unittest.TestCase):
 

@@ -506,7 +506,7 @@ class SNPQualFilterTest(unittest.TestCase):
         assert first(flt_chunk.values()).shape[0] == 0
 
 
-class SNPQualFilterTest(unittest.TestCase):
+class SNPPosFilterTest(unittest.TestCase):
 
     def test_filter_by_pos(self):
         variations = VariationsArrays()

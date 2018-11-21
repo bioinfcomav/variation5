@@ -151,7 +151,10 @@ def _calc_ld_between_chunks(chunk_pair, min_num_gts=10):
 
     physical_dist[chrom1_repeated != chrom2_repeated] = numpy.nan
 
-    yield zip(lds_for_pair.flat, physical_dist.flat)
+    positions = list(zip(chrom1_repeated.flat, pos1_repeated.flat,
+                         chrom2_repeated.flat, pos2_repeated.flat))
+
+    yield zip(lds_for_pair.flat, physical_dist.flat, positions)
 
 
 def calc_ld_along_genome(variations, max_dist, min_num_gts=10,
@@ -159,5 +162,5 @@ def calc_ld_along_genome(variations, max_dist, min_num_gts=10,
     chunk_pairs = variations.iterate_chunk_pairs(max_dist=max_dist,
                                                  chunk_size=chunk_size)
     for result in itertools.chain.from_iterable(_calc_ld_between_chunks(chunk_pair, min_num_gts=min_num_gts) for chunk_pair in chunk_pairs):
-        for ld, physical_dist in result:
-            yield ld, physical_dist
+        for ld, physical_dist, positions in result:
+            yield ld, physical_dist, positions

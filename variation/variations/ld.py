@@ -116,17 +116,18 @@ def _calc_rogers_huff_r2_no_nans(gts1, gts2, debug=False):
 
 def calc_rogers_huff_r(gts1, gts2, min_num_gts=10, debug=False):
     if not (numpy.any(gts1 == MISSING_INT) or numpy.any(gts2 == MISSING_INT)):
-        return _calc_rogers_huff_r2_no_nans(gts1, gts2, debug=debug)
-
-    rogers_huff_r = numpy.empty((gts1.shape[0], gts2.shape[0]),
-                                dtype=numpy.float16)
-    for idx1, gts1_snp_gts in enumerate(gts1):
-        for idx2, gts2_snp_gts in enumerate(gts2):
-            result = _calc_rogers_huff_r_for_snp_pair(gts1_snp_gts,
-                                                      gts2_snp_gts,
-                                                      min_num_gts=min_num_gts,
-                                                      debug=debug)
-            rogers_huff_r[idx1, idx2] = result
+        rogers_huff_r = _calc_rogers_huff_r2_no_nans(gts1, gts2, debug=debug)
+    else:
+        rogers_huff_r = numpy.empty((gts1.shape[0], gts2.shape[0]),
+                                    dtype=numpy.float16)
+        for idx1, gts1_snp_gts in enumerate(gts1):
+            for idx2, gts2_snp_gts in enumerate(gts2):
+                result = _calc_rogers_huff_r_for_snp_pair(gts1_snp_gts,
+                                                          gts2_snp_gts,
+                                                          min_num_gts=min_num_gts,
+                                                          debug=debug)
+                rogers_huff_r[idx1, idx2] = result
+    rogers_huff_r = numpy.abs(rogers_huff_r)
     return rogers_huff_r
 
 

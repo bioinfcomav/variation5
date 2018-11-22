@@ -20,7 +20,8 @@ class TestLD(unittest.TestCase):
 
     def test_ld_along_genome(self):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
-        ld = calc_ld_along_genome(hdf5, max_dist=100000000, chunk_size=3)
+        ld = calc_ld_along_genome(hdf5, max_dist=100000000, chunk_size=3,
+                                  min_num_gts=1, max_maf=1.1)
         assert list(ld)[0:1] == [(0.0, 2960.0, (b'20', 14370, b'20', 17330))]
 
     def test_ld_calculation(self):

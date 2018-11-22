@@ -4,6 +4,7 @@ import math
 import itertools
 
 from variation import MISSING_INT, SNPS_PER_CHUNK, POS_FIELD, CHROM_FIELD
+from variation.variations.stats import calc_maf
 
 
 def _bivmom(vec0, vec1):
@@ -45,7 +46,14 @@ def _get_r(Y, Z):
     Uses the method of Rogers and Huff 2008.
     """
     mY, vY, mZ, vZ, cov = _bivmom(Y, Z)
+    if False:
+        print('cov', cov)
+        print('vY', vY)
+        print('vZ', vZ)
     return cov / math.sqrt(vY * vZ)
+
+
+DDOF = 1
 
 
 def _calc_rogers_huff_r_for_snp_pair(gts_snp1, gts_snp2, min_num_gts=10,
@@ -58,7 +66,7 @@ def _calc_rogers_huff_r_for_snp_pair(gts_snp1, gts_snp2, min_num_gts=10,
     if gts.shape[1] < min_num_gts:
         result = numpy.nan
     else:
-        covar = numpy.cov(gts, ddof=0)
+        covar = numpy.cov(gts, ddof=DDOF)
         variances = numpy.diag(covar)
         covar = covar[0, 1]
         result = covar / numpy.sqrt(variances[0] * variances[1])
@@ -68,7 +76,7 @@ def _calc_rogers_huff_r_for_snp_pair(gts_snp1, gts_snp2, min_num_gts=10,
 def _calc_rogers_huff_r(gts, debug=False):
     # means = numpy.nanmean(gts, axis=1)
     # var = numpy.nanvar(gts, axis=1)
-    covar = numpy.cov(gts, ddof=0)
+    covar = numpy.cov(gts, ddof=DDOF)
     variances = numpy.diag(covar)
     covar_indices = numpy.tril_indices(covar.shape[0], -1)
     covars = covar[covar_indices]
@@ -89,7 +97,7 @@ def _calc_rogers_huff_r2_no_nans(gts1, gts2, debug=False):
     # means = numpy.nanmean(gts, axis=1)
     # var = numpy.nanvar(gts, axis=1)
 
-    covars = numpy.cov(gts1, gts2, ddof=0)
+    covars = numpy.cov(gts1, gts2, ddof=DDOF)
     n_vars1 = gts1.shape[0]
     n_vars2 = gts2.shape[0]
     if debug:
@@ -131,9 +139,17 @@ def calc_rogers_huff_r(gts1, gts2, min_num_gts=10, debug=False):
     return rogers_huff_r
 
 
-def _calc_ld_between_chunks(chunk_pair, min_num_gts=10):
+def _calc_ld_between_chunks(chunk_pair, min_num_gts=10, max_maf=0.95):
     chunk1 = chunk_pair['chunk1']
     chunk2 = chunk_pair['chunk2']
+
+    maf1 = calc_maf(chunk1, min_num_genotypes=min_num_gts, chunk_size=None)
+    maf2 = calc_maf(chunk2, min_num_genotypes=min_num_gts, chunk_size=None)
+    if (numpy.any(numpy.isnan(maf1)) or numpy.any(maf1 > max_maf) or
+        numpy.any(numpy.isnan(maf2)) or numpy.any(maf2 > max_maf)):
+        msg = 'Not enough genotypes or MAF below allowed maximum, Rogers Huff calculations known to go wrong for very high maf'
+        raise RuntimeError(msg)
+
     lds_for_pair = calc_rogers_huff_r(chunk1.gts_as_mat012,
                                       chunk2.gts_as_mat012,
                                       min_num_gts=min_num_gts)
@@ -159,10 +175,10 @@ def _calc_ld_between_chunks(chunk_pair, min_num_gts=10):
 
 
 def calc_ld_along_genome(variations, max_dist, min_num_gts=10,
-                         chunk_size=SNPS_PER_CHUNK):
+                         chunk_size=SNPS_PER_CHUNK, max_maf=0.95):
     chunk_pairs = variations.iterate_chunk_pairs(max_dist=max_dist,
                                                  chunk_size=chunk_size)
-    for result in itertools.chain.from_iterable(_calc_ld_between_chunks(chunk_pair, min_num_gts=min_num_gts) for chunk_pair in chunk_pairs):
+    for result in itertools.chain.from_iterable(_calc_ld_between_chunks(chunk_pair, min_num_gts=min_num_gts, max_maf=max_maf) for chunk_pair in chunk_pairs):
         for ld, physical_dist, positions in result:
             if positions[1] == positions[3] and positions[0] == positions[2]:
                 continue

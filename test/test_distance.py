@@ -54,6 +54,29 @@ class IndividualDistTest(unittest.TestCase):
         distance = abs_distance / n_snps
         assert distance == 0.45
 
+    def test_kosman_missing(self):
+        a = numpy.array([[-1, -1], [0, 0], [0, 1],
+                         [0, 0], [0, 0], [0, 1], [0, 1],
+                         [0, 1], [0, 0], [0, 0], [0, 1]])
+        b = numpy.array([[1, 1], [-1, -1], [0, 0],
+                         [0, 0], [1, 1], [0, 1], [1, 0],
+                         [1, 0], [1, 0], [0, 1], [1, 1]])
+        gts = numpy.stack((a, b), axis=1)
+        abs_distance, n_snps = _kosman(gts, 0, 1, {})
+        distance_ab = abs_distance / n_snps
+
+        a = numpy.array([[-1, -1], [-1, -1], [0, 1],
+                         [0, 0], [0, 0], [0, 1], [0, 1],
+                         [0, 1], [0, 0], [0, 0], [0, 1]])
+        b = numpy.array([[-1, -1], [-1, -1], [0, 0],
+                         [0, 0], [1, 1], [0, 1], [1, 0],
+                         [1, 0], [1, 0], [0, 1], [1, 1]])
+        gts = numpy.stack((a, b), axis=1)
+        abs_distance, n_snps = _kosman(gts, 0, 1, {})
+        distance_cd = abs_distance / n_snps
+
+        assert distance_ab == distance_cd
+
     def test_kosman_pairwise(self):
         a = numpy.array([[-1, -1], [0, 0], [0, 1],
                          [0, 0], [0, 0], [0, 1], [0, 1],
@@ -72,6 +95,8 @@ class IndividualDistTest(unittest.TestCase):
         expected = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
         assert numpy.allclose(distance, expected)
 
+        abs_distance, n_snps = _indi_pairwise_dist(varis, {})
+
     def test_kosman_pairwise_by_chunk(self):
         a = numpy.array([[-1, -1], [0, 0], [0, 1],
                          [0, 0], [0, 0], [0, 1], [0, 1],
@@ -86,11 +111,16 @@ class IndividualDistTest(unittest.TestCase):
         variations = VariationsArrays()
         variations['/calls/GT'] = gts
         expected = [0.33333333, 0.75, 0.75, 0.45, 0.45, 0.]
-        distance = calc_pairwise_distance(variations, chunk_size=None)
+        distance = calc_pairwise_distance(variations, chunk_size=None,
+                                          min_num_snps=1)
         assert numpy.allclose(distance, expected)
 
         distance = calc_pairwise_distance(variations, chunk_size=2)
         assert numpy.allclose(distance, expected)
+
+        distance = calc_pairwise_distance(variations, chunk_size=None,
+                                          min_num_snps=11)
+        assert numpy.sum(numpy.isnan(distance)) == 5
 
         # With all missing
         a = numpy.full(shape=(10, 2), fill_value=-1, dtype=numpy.int16)

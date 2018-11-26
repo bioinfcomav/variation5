@@ -117,11 +117,15 @@ def _kosman(gts, sample_i, sample_j, indi_cache):
 _PAIRWISE_DISTANCES = {'kosman': _kosman, 'matching': _gt_matching}
 
 
-def _calc_matching_pairwise_distance(variations, chunk_size=None):
+def _calc_matching_pairwise_distance(variations, chunk_size=None,
+                                     min_num_snps=None):
     '''This is a very naive distance
 
     It is implemented just because we were asked to do it in a project
     '''
+
+    if min_num_snps is not None:
+        raise NotImplemented("It's easy, really, just copy the kosman implementation")
 
     abs_distances, n_snps_matrix = None, None
     for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
@@ -135,6 +139,7 @@ def _calc_matching_pairwise_distance(variations, chunk_size=None):
         else:
             abs_distances = numpy.add(abs_distances, chunk_abs_distances)
             n_snps_matrix = numpy.add(n_snps_matrix, n_snps_chunk)
+
     with numpy.errstate(invalid='ignore'):
         return abs_distances / n_snps_matrix
 
@@ -154,7 +159,8 @@ def _indi_pairwise_dist(variations, indi_cache, method='kosman'):
     return dists, n_snps_matrix
 
 
-def _calc_kosman_pairwise_distance_by_chunk(variations, chunk_size):
+def _calc_kosman_pairwise_distance_by_chunk(variations, chunk_size,
+                                            min_num_snps=None):
 
     abs_distances, n_snps_matrix = None, None
     for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
@@ -168,11 +174,16 @@ def _calc_kosman_pairwise_distance_by_chunk(variations, chunk_size):
         else:
             abs_distances = numpy.add(abs_distances, chunk_abs_distances)
             n_snps_matrix = numpy.add(n_snps_matrix, n_snps_chunk)
+
+    if min_num_snps:
+        n_snps_matrix[n_snps_matrix < min_num_snps] = numpy.nan
+
     with numpy.errstate(invalid='ignore'):
         return abs_distances / n_snps_matrix
 
 
-def _calc_kosman_pairwise_distance(variations, chunk_size=None):
+def _calc_kosman_pairwise_distance(variations, chunk_size=None,
+                                   min_num_snps=None):
     '''It calculates the distance between individuals using the Kosman
     distance.
 
@@ -180,10 +191,13 @@ def _calc_kosman_pairwise_distance(variations, chunk_size=None):
     '''
     if chunk_size:
         distance = _calc_kosman_pairwise_distance_by_chunk(variations,
-                                                           chunk_size)
+                                                           chunk_size,
+                                                           min_num_snps=min_num_snps)
     else:
         abs_dist, n_snps = _indi_pairwise_dist(variations, {},
                                                method='kosman')
+        if min_num_snps is not None:
+            n_snps[n_snps < min_num_snps] = numpy.nan
         with numpy.errstate(invalid='ignore'):
             distance = abs_dist / n_snps
     return distance
@@ -274,7 +288,8 @@ def calc_gst_per_loci(variations, populations, chunk_size=None,
         allele_freq_averages = numpy.sum(allele_freqs_by_pop, axis=0) / len(allele_freqs_by_pop)
         ht = 1 - numpy.sum(allele_freq_averages ** 2, axis=1)
 
-        gst_ = (ht - hs) / ht
+        with numpy.errstate(invalid='ignore'):
+            gst_ = (ht - hs) / ht
         gst_ = numpy.nan_to_num(gst_)
         gst = numpy.append(gst, gst_)
 
@@ -458,7 +473,8 @@ def _calc_pop_pairwise_unbiased_nei_dists(variations, populations=None,
         if Jxy[pop_id1][pop_id2] is None:
             unbiased_nei_identity = math.nan
         else:
-            unbiased_nei_identity = Jxy[pop_id1][pop_id2] / math.sqrt(uJx[pop_id1][pop_id2] * uJy[pop_id1][pop_id2])
+            with numpy.errstate(invalid='ignore'):
+                unbiased_nei_identity = Jxy[pop_id1][pop_id2] / math.sqrt(uJx[pop_id1][pop_id2] * uJy[pop_id1][pop_id2])
         nei_unbiased_distance = -math.log(unbiased_nei_identity)
         if nei_unbiased_distance < 0:
             nei_unbiased_distance = 0
@@ -474,8 +490,10 @@ DISTANCES = {'kosman': _calc_kosman_pairwise_distance,
              'gst_per_loci': calc_gst_per_loci}
 
 
-def calc_pairwise_distance(variations, chunk_size=None, method='kosman'):
-    return DISTANCES[method](variations, chunk_size=chunk_size)
+def calc_pairwise_distance(variations, chunk_size=None, method='kosman',
+                           min_num_snps=None):
+    return DISTANCES[method](variations, chunk_size=chunk_size,
+                             min_num_snps=min_num_snps)
 
 
 def calc_pop_distance(variations, populations, method, chunk_size=None,

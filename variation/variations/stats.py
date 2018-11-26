@@ -717,7 +717,8 @@ def calc_allele_freq(variations, alleles=None,
     if allele_counts is None:
         raise ValueError('No alleles, everything is missing data')
     total_counts = numpy.sum(allele_counts, axis=1)
-    allele_freq = allele_counts / total_counts[:, None]
+    with numpy.errstate(invalid='ignore'):
+        allele_freq = allele_counts / total_counts[:, None]
     _mask_stats_with_few_samples(allele_freq, variations, min_num_genotypes)
     return allele_freq
 

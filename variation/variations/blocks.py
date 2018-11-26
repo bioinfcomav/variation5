@@ -443,7 +443,11 @@ def generate_blocks(variations, difference_rate_allowed=0.05,
             print('first_not_correlated_idx:', first_not_correlated_idx)
             print('stop_idx_due_to_lack_of_correlation:', stop_idx_due_to_lack_of_correlation)
 
-        not_enough_info = numpy.concatenate([numpy.logical_not(array_chunk['enough_information']) for array_chunk in highly_correlated2])
+        enough_information_chunks = [numpy.logical_not(array_chunk['enough_information']) for array_chunk in highly_correlated2]
+        if enough_information_chunks:
+            not_enough_info = numpy.concatenate(enough_information_chunks)
+        else:
+            not_enough_info = numpy.array([])
 
         try:
             last_with_no_info_before_first_non_correlated_idx_rel_to_offset2 = find_last(not_enough_info[:first_not_correlated_idx])

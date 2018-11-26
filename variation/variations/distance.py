@@ -484,10 +484,10 @@ def calc_pop_distance(variations, populations, method, chunk_size=None,
                              min_num_genotypes=min_num_genotypes)
 
 
-def filter_dist_matrix(dists, idxs_to_keep):
-    dists = squareform(dists)
+def filter_dist_matrix(dists, idxs_to_keep, squareform_checks=True):
+    dists = squareform(dists, checks=squareform_checks)
     dists = dists[:, idxs_to_keep][idxs_to_keep, :]
-    dists = squareform(dists)
+    dists = squareform(dists, checks=squareform_checks)
     return dists
 
 

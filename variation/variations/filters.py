@@ -370,7 +370,7 @@ class SNPPositionFilter(_BaseFilter):
 
     def _in_any_region(self, variations):
         chroms = variations[CHROM_FIELD]
-        poss = variations[POS_FIELD]
+        poss = variations[POS_FIELD][:]
 
         in_any_region = None
         for region in self.regions:

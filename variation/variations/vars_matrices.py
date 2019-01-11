@@ -2,17 +2,17 @@ import posixpath
 import json
 import copy
 from collections import Counter, defaultdict
+import warnings
 
 import numpy
 import h5py
 
 from variation import (SNPS_PER_CHUNK, MISSING_VALUES, DEF_DSET_PARAMS,
                        MISSING_INT, CHROM_FIELD, POS_FIELD, ID_FIELD,
-                       REF_FIELD, ALT_FIELD, QUAL_FIELD)
+                       REF_FIELD, ALT_FIELD, QUAL_FIELD, GT_FIELD)
 from variation.iterutils import first, group_items
 from variation.matrix.stats import counts_by_row
 from variation.matrix.methods import is_dataset, concat_matrices, resize_array
-from variation.variations.stats import GT_FIELD
 from variation.variations.index import PosIndex
 from variation.gt_writers.vcf import write_vcf
 
@@ -454,9 +454,11 @@ class _ChunkGenerator:
         mat = numpy.full(mat_shape, missing_value, dtype)
         return mat
 
-    def _put_snp_in_matrices(self, matrices, snp, snp_idx, n_snps_in_chunk,
+    def _put_snp_in_matrices(self, chunk_matrices, snp, snp_idx, n_snps_in_chunk,
                              missing_values, exemplar_matrices_for_metadata):
 
+        warnings.simplefilter("error")
+        debug_field = GT_FIELD
         debug_field = None
 
         for field_path, value in snp.items():
@@ -474,23 +476,27 @@ class _ChunkGenerator:
                 continue
 
             if debug_field and debug_field == field_path:
-                print('snp_mat', snp_mat)
+                print('snp_mat unique', numpy.unique(snp_mat))
 
             try:
-                mat = matrices[field_path]
+                mat = chunk_matrices[field_path]
             except KeyError:
                 if field_path in exemplar_matrices_for_metadata:
-                    exemplar_mat = exemplar_matrices_for_metadata[mat]
+                    exemplar_mat = exemplar_matrices_for_metadata[field_path]
                     mat = numpy.full_like(exemplar_mat,
                                           missing_values[exemplar_mat.dtype])
                 else:
                     mat = self._create_matrix_from_snp_matrix(snp_mat, is_list,
                                                               n_snps_in_chunk,
                                                               missing_values)
-                matrices[field_path] = mat
+                    exemplar_matrices_for_metadata[field_path] = mat
+                    # print('You should update the exemplar matrices when there is a resize. CHECK THIS.')
+                if debug_field and debug_field == field_path:
+                    print('chunk_mat created shape', mat.shape)
+                chunk_matrices[field_path] = mat
 
-            if False and debug_field and debug_field == field_path:
-                print('mat', mat[:6, ...])
+            if debug_field and debug_field == field_path:
+                print('mat2 unique', numpy.unique(mat))
 
             mat_shape = mat.shape
             snp_mat_shape = snp_mat.shape
@@ -516,7 +522,7 @@ class _ChunkGenerator:
                     missing_values[mat.dtype] = missing_val
 
                 mat = resize_array(mat, new_mat_shape, missing_val)
-                matrices[field_path] = mat
+                chunk_matrices[field_path] = mat
                 if debug_field and debug_field == field_path:
                     print('after resizing mat')
                     print('mat', mat.dtype)
@@ -535,24 +541,26 @@ class _ChunkGenerator:
                     print('after type casting')
                     print('mat', mat.dtype)
                     print(mat)
-                matrices[field_path] = mat
+                chunk_matrices[field_path] = mat
 
             snp_idx_slice = slice(snp_idx, snp_idx + 1)
             if len(mat_shape) == len(snp_mat_shape) + 1:
                 slice_ = [snp_idx_slice]
                 for dim_size in snp_mat_shape:
                     slice_.append(slice(None, dim_size))
+                slice_ = tuple(slice_)
             elif len(mat_shape) == 1 and len(snp_mat_shape) == 1:
                 slice_ = snp_idx_slice
 
-            # print('shapes: ', mat_shape, snp_mat_shape)
-            # print('slice: ', slice_)
-            # print('snp_mat:', snp_mat)
+            if False:
+                print('shapes: ', mat_shape, snp_mat_shape)
+                print('slice: ', slice_)
+                # print('snp_mat:', snp_mat)
 
             mat[slice_] = snp_mat
 
             if debug_field and debug_field == field_path:
-                print('mat_after', mat[:6, ...])
+                print('mat_after unique', numpy.unique(mat))
 
     @property
     def chunks(self):
@@ -569,11 +577,11 @@ class _ChunkGenerator:
         filter_field_names = set(getattr(vars_parser, 'metadata', {}).get('FILTER', {}).keys())
 
         exemplar_matrices_for_metadata = {}
-        n_non_none_snps = 0
         for chunk in group_items(snps, vars_in_chunk):
             chunk = list(chunk)
             n_snps_in_chunk = len(chunk)
             matrices = {}
+            n_non_none_snps = 0
             for snp in chunk:
                 if snp is None:
                     continue
@@ -583,6 +591,7 @@ class _ChunkGenerator:
                                           n_snps_in_chunk, missing_values,
                                           exemplar_matrices_for_metadata)
                 n_non_none_snps += 1
+            # print(numpy.unique(matrices[GT_FIELD]))
 
             # cut the empty snps from the end
             if n_non_none_snps < n_snps_in_chunk:
@@ -600,7 +609,8 @@ class _ChunkGenerator:
                 varis._set_metadata(metadata)
             except AttributeError:
                 pass
-
+            # print('unique in chunkers', numpy.unique(varis[GT_FIELD]))
+            # print('chunk', varis[GT_FIELD][:4, 12, ...])
             yield varis
 
 

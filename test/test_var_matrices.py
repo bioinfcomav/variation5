@@ -13,7 +13,7 @@ from os.path import join
 
 import h5py
 import numpy
-import scipy
+from scipy.stats import ttest_ind
 
 from variation.variations.vars_matrices import (VariationsArrays,
                                                 VariationsH5)
@@ -111,8 +111,8 @@ class VcfH5Test(unittest.TestCase):
         hdf5 = VariationsH5(join(TEST_DATA_DIR, 'ril.hdf5'), mode='r')
         hdf5_2 = VariationsArrays()
         hdf5_2.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.2))
-        _, prob = scipy.stats.ttest_ind(hdf5['/variations/pos'][:],
-                                        hdf5_2['/variations/pos'][:])
+        _, prob = ttest_ind(hdf5['/variations/pos'][:],
+                            hdf5_2['/variations/pos'][:])
         assert prob > 0.05
         assert hdf5_2.num_variations / hdf5.num_variations - 0.2 < 0.1
         chrom = hdf5_2['/variations/chrom'][0]
@@ -143,14 +143,16 @@ class VcfH5Test(unittest.TestCase):
         hdf5_3.put_chunks(hdf5.iterate_chunks(random_sample_rate=0.01))
 
 
-def _init_var_mat(klass):
+def _init_var_mat(klass, vars_in_chunk=SNPS_PER_CHUNK):
     if klass is VariationsH5:
         fhand = NamedTemporaryFile(suffix='.h5')
         fpath = fhand.name
         fhand.close()
-        var_mat = klass(fpath, mode='w', ignore_undefined_fields=True)
+        var_mat = klass(fpath, mode='w', ignore_undefined_fields=True,
+                        vars_in_chunk=vars_in_chunk)
     else:
-        var_mat = klass(ignore_undefined_fields=True)
+        var_mat = klass(ignore_undefined_fields=True,
+                        vars_in_chunk=vars_in_chunk)
     return var_mat
 
 
@@ -286,7 +288,8 @@ class VarMatsTests(unittest.TestCase):
 
         fhand = open(join(TEST_DATA_DIR, 'format_def.vcf'), 'rb')
         vcf_parser = VCFParser(fhand=fhand, n_threads=None)
-        h5 = VariationsH5(path, mode='w', ignore_undefined_fields=True)
+        h5 = VariationsH5(path, mode='w', ignore_undefined_fields=True,
+                          vars_in_chunk=2)
         h5.put_vars(vcf_parser)
         fhand.close()
 

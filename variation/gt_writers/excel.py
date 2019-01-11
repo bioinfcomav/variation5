@@ -2,13 +2,16 @@
 import numpy
 
 from openpyxl import Workbook
-from openpyxl.writer.write_only import WriteOnlyCell
-from openpyxl.styles import PatternFill
+# depens on openpyxl version
+try:
+    from openpyxl.writer.write_only import WriteOnlyCell
+except ImportError:
+    from openpyxl.cell.cell import WriteOnlyCell
 
+from openpyxl.styles import PatternFill
 
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD,
                        MISSING_INT)
-
 
 COLORS = {'red': 'FFFF0000', 'green': 'FF00FF00', 'yellow': 'FFFFFF00',
           'blue': 'FF0000FF', 'purple': 'FFFF00FF', 'light_blue': 'FF00FFFF',
@@ -17,7 +20,6 @@ COLORS = {'red': 'FFFF0000', 'green': 'FF00FF00', 'yellow': 'FFFFFF00',
 COLORS = {color: PatternFill(start_color=value, end_color=value,
                              fill_type='solid')
           for color, value in COLORS.items()}
-
 
 GT_COLORS = {(0, 0): COLORS['red'], (1, 1): COLORS['green'],
              (0, 1): COLORS['yellow'], (0, 1): COLORS['yellow'],

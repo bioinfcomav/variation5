@@ -59,7 +59,7 @@ def calc_number_of_alleles_and_number_called_gts(variations, populations=None,
                                                                  min_num_genotypes,
                                                                  masking_value=0)
         num_alleles_per_snp[pop_id] = chunk_num_alleles_per_snp
-        num_called_gt[pop_id] = calc_called_gt(vars_for_pop)
+        num_called_gt[pop_id] = calc_called_gt(vars_for_pop, rates=False)
     return num_alleles_per_snp, num_called_gt
 
 

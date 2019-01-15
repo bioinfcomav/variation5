@@ -46,6 +46,7 @@ def _parse_vcf(chrom, vcf_fpath, tmp_dir, kept_fields, ignored_fields):
                            ignored_fields=ignored_fields)
 
     tmp_h5.put_vars(vcf_parser)
+    tmp_h5.close()
     return tmp_h5_fpath
 
 
@@ -54,6 +55,8 @@ def _merge_h5(h5_chroms_fpaths, out_h5_fpath):
     for h5_chrom_fpath in h5_chroms_fpaths:
         inh5 = VariationsH5(h5_chrom_fpath, 'r')
         outh5.put_chunks(inh5.iterate_chunks())
+        inh5.close()
+    outh5.close()
 
 
 def _remove_temp_chrom_h5s(h5_chroms_fpaths):

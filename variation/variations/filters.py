@@ -374,7 +374,10 @@ class SNPPositionFilter(_BaseFilter):
 
         in_any_region = None
         for region in self.regions:
-            in_this_region = chroms[:] == region[0]
+            desired_chrom = region[0]
+            if isinstance(desired_chrom, (tuple, list)):
+                raise ValueError('Malformed region: ' + str(region))
+            in_this_region = chroms[:] == desired_chrom
             if len(region) > 1:
                 in_this_region = numpy.logical_and(in_this_region,
                                                    numpy.logical_and(region[1] <= poss, poss < region[2]))

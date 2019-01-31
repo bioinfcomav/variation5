@@ -182,6 +182,39 @@ def _calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     return _mask_stats_with_few_samples(mafs_gt, variations, min_num_genotypes)
 
 
+def _calc_allele_observation_based_maf(variations):
+    allele_depths = variations[AD_FIELD]
+    allele_depths[allele_depths == MISSING_INT] = 0
+
+    if not allele_depths.size:
+        return numpy.array([])
+
+    allele_depths_allele_counts_for_snps = numpy.sum(allele_depths, axis=1)
+    major_allele_count_by_snp = numpy.max(allele_depths_allele_counts_for_snps,
+                                          axis=1)
+    tot_allele_count_by_snp = numpy.sum(allele_depths_allele_counts_for_snps,
+                                        axis=1)
+    # To avoid problems with zero division
+    with numpy.errstate(invalid='ignore'):
+        maf_by_snp = major_allele_count_by_snp / tot_allele_count_by_snp
+    return maf_by_snp
+
+
+def _calc_allele_observation_based_maf_by_chunk(variations,
+                                                chunk_size=SNPS_PER_CHUNK):
+    mafs = None
+    for chunk in variations.iterate_chunks(kept_fields=[AD_FIELD],
+                                           chunk_size=chunk_size):
+        chunk_maf = _calc_allele_observation_based_maf(chunk)
+        if mafs is None:
+            mafs = chunk_maf
+        else:
+            mafs = numpy.append(mafs, chunk_maf)
+    if mafs is None:
+        return numpy.array([])
+    return mafs
+
+
 def _calc_mac_by_chunk(variations,
                        min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
                        chunk_size=SNPS_PER_CHUNK):
@@ -228,6 +261,14 @@ def calc_maf(variations, min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
         return _calc_maf(variations, min_num_genotypes=min_num_genotypes)
     else:
         return _calc_maf_by_chunk(variations, min_num_genotypes, chunk_size)
+
+
+def calc_allele_observation_based_maf(variations, chunk_size=SNPS_PER_CHUNK):
+    if not chunk_size:
+        return _calc_allele_observation_based_maf(variations)
+    else:
+        return _calc_allele_observation_based_maf_by_chunk(variations,
+                                                           chunk_size)
 
 
 def calc_depth(variations):

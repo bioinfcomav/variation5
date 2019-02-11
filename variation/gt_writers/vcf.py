@@ -4,14 +4,15 @@ from multiprocessing import Pool
 import os
 from tempfile import NamedTemporaryFile
 
-import numpy as np
+import numpy
+import re
+from collections import OrderedDict
+
 from variation import (VCF_FORMAT, MISSING_FLOAT, MISSING_STR, MISSING_INT,
                        MISSING_VALUES)
 from variation.utils.file_utils import remove_temp_file_in_dir
 from variation.utils.misc import remove_nans
 
-
-# from variation.gt_writers.vcf_field_writer import cy_create_snv_line
 GROUP_FIELD_MAPPING = {'/variations/info': 'INFO', '/calls': 'FORMAT',
                        '/variations/filter': 'FILTER', '/other/alt': 'ALT',
                        '/other/contig': 'contig', '/other/sample': 'SAMPLE',
@@ -34,6 +35,14 @@ ONEDATA_FIELD_GROUP_MAPPING = {'CHROM': {'path': '/variations/chrom',
                                         'missing': MISSING_FLOAT},
                                'ID': {'path': '/variations/id',
                                       'missing': MISSING_STR, 'dtype': 'str'}}
+
+str_type_regex = re.compile('\|S')
+int_type_regex = re.compile('[\|<]i')
+float_type_regex = re.compile('<f')
+bool_type_regex = re.compile('\|b')
+consecutive_digits_regex = re.compile('\d+')
+
+_CACHE_WITH_SEP_MATRICES = {}
 
 
 def _write_header_line(_id, record, group=None):
@@ -140,71 +149,10 @@ def write_vcf(variations, out_fhand, vcf_format=VCF_FORMAT):
 
 
 def _write_snvs(variations, out_fhand, grouped_paths):
-    metadata = variations.metadata
-    for var_index in range(variations['/calls/GT'][:].shape[0]):
-        line = _create_snv_line(variations, var_index, grouped_paths, metadata)
-        out_fhand.write(line.encode())
-
-
-def _create_snv_line(variations, var_index, grouped_paths, metadata):
-    var = {}
-    for field, data in ONEDATA_FIELD_GROUP_MAPPING.items():
-        path = data['path']
-        if path in variations.keys():
-            value = variations[path][var_index]
-            if not value or value == data['missing']:
-                value = '.'
-            elif data['dtype'] == 'str':
-                value = value.decode()
-            else:
-                value = str(value)
-            var[field] = value
-        else:
-            var[field] = '.'
-    if '/variations/alt' in variations:
-        alt = [x.decode() for x in variations['/variations/alt'][var_index]
-               if x.decode() != MISSING_STR]
-        num_alt = len(alt)
-        var['ALT'] = '.' if num_alt == 0 else ','.join(alt)
-    else:
-        var['ALT'] = '.'
-        num_alt = 0
-
-    if grouped_paths['filter']:
-        var['FILTER'] = _get_filters_value(variations, var_index,
-                                           grouped_paths['filter'])
-    else:
-        var['FILTER'] = '.'
-
-    if grouped_paths['info']:
-        var['INFO'] = _get_info_value(variations, var_index,
-                                      grouped_paths['info'], metadata,
-                                      num_alt)
-    else:
-        var['INFO'] = '.'
-
-    new_paths = _preprocess_format_calls_paths(variations, var_index,
-                                               grouped_paths['calls'])
-
-    new_calls_paths, new_format_paths = new_paths
-    var['FORMAT'] = ':'.join(new_format_paths)
-    var['CALLS'] = _get_calls_samples(variations, var_index,
-                                      new_calls_paths, num_alt,
-                                      metadata, variations.ploidy)
-    snp_line = '\t'.join([var[field] for field in VCF_FIELDS]) + '\n'
-    return snp_line
-
-
-def _preprocess_format_calls_paths(variations, var_index, calls_paths):
-
-    new_format_paths, new_calls_paths = [], []
-    for key in calls_paths:
-        values = remove_nans(variations[key][var_index])
-        if (not np.all(values == MISSING_VALUES[values.dtype]) and
-                values.shape[0] != 0):
-            new_calls_paths.append(key)
-            new_format_paths.append(key.split('/')[-1])
-    return new_calls_paths, new_format_paths
+    VCF_body_lines = _get_VCF_body_lines(variations)
+    for line in VCF_body_lines:
+        #print(line)
+        out_fhand.write(line + b"\n")
 
 
 def _get_info_value(variations, index, info_paths, metadata, num_alt):
@@ -223,7 +171,7 @@ def _get_info_value(variations, index, info_paths, metadata, num_alt):
                 value = value[:num_alt]
             except IndexError:
                 if num_alt == 1:
-                    value = np.array(value)
+                    value = numpy.array(value)
                 else:
                     raise
             if '|S' in dtype:
@@ -239,7 +187,7 @@ def _get_info_value(variations, index, info_paths, metadata, num_alt):
             else:
                 value = str(value)
         elif meta_number > 1:
-            value = [str(val) for val in value if not np.isnan(val)]
+            value = [str(val) for val in value if not numpy.isnan(val)]
             value = ','.join(value) if value else None
         elif not value:
             value = None
@@ -250,118 +198,6 @@ def _get_info_value(variations, index, info_paths, metadata, num_alt):
             info.append('{}={}'.format(field_key, value))
 
     return ';'.join(info)
-
-
-def _get_filters_value(variations, index, filter_paths):
-    filters = None
-    for key in filter_paths:
-        if filters is None:
-            filters = []
-        if variations[key][index]:
-            filters.append(key.split('/')[-1])
-
-    if filters is None:
-        return '.'
-
-    if 'PASS' in filters and len(filters) > 1:
-        msg = "FILTER value is wrong. PASS not allowed with another filter"
-        raise RuntimeError(msg)
-    return ';'.join(filters)
-
-INT_STR_CONVERTER = {num: str(num) for num in range(40000)}
-INT_STR_CONVERTER[MISSING_INT] = '.'
-INT_STR_CONVERTER[MISSING_FLOAT] = '.'
-INT_STR_CONVERTER[MISSING_STR] = '.'
-
-POSSIBLE_GENOS_CACHE = {1: {}, 2: {}, 3: {}}
-
-
-def _possible_genotypes(num_alleles, ploidy):
-    try:
-        return POSSIBLE_GENOS_CACHE[ploidy][num_alleles]
-    except KeyError:
-        possible_geno = factorial(num_alleles + ploidy - 1)
-        possible_geno /= (factorial(ploidy) * factorial(num_alleles - 1))
-        possible_geno = int(possible_geno)
-        POSSIBLE_GENOS_CACHE[ploidy][num_alleles] = possible_geno
-        return possible_geno
-
-
-def _get_calls_per_sample(calls_data, n_sample, calls_path, num_alt, metadata,
-                          ploidy):
-    calls_sample = []
-    for key in calls_path:
-        value = calls_data[key][n_sample]
-
-        format_data_number = metadata[key]['Number']
-        if format_data_number == 'A':
-
-            try:
-                value = value[:num_alt]
-            except IndexError:
-                print(key, value, format_data_number, num_alt)
-                if num_alt == 1:
-                    value = [value]
-                else:
-                    raise
-
-            if 'AO' in key:
-                value = [INT_STR_CONVERTER[val] for val in value]
-            else:
-                value = [str(val) for val in value]
-            value = ','.join(value)
-
-        elif format_data_number == 'G':
-            value = value[:_possible_genotypes(num_alt + 1, ploidy)]
-            value = [str(val) for val in value]
-            value = ','.join(value)
-        elif format_data_number == 'R':
-            value = ",".join([str(val) for val in value if val != -1])
-        elif format_data_number not in ('A', 'G', 'R', 1):
-            value = [str(x) if MISSING_VALUES[value.dtype] != x else '.'
-                     for x in value[:format_data_number]]
-            value = ','.join(value)
-        elif format_data_number == 1:
-            if 'GT' in key:
-                is_missing = True if np.all(value == [-1] * ploidy) else False
-
-                value = [INT_STR_CONVERTER[x] for x in value]
-                value = '/'.join(value)
-
-                if is_missing:
-                    return value
-
-            elif value == MISSING_VALUES[value.dtype]:
-                value = '.'
-            elif key in ['/calls/DP', '/calls/RO']:
-                try:
-                    value = INT_STR_CONVERTER[value]
-                except KeyError:
-                    value = str(value)
-            else:
-                value = str(value)
-        else:
-            raise NotImplemented('We dont know this vcf format number')
-
-        if not value or value is None:
-            value = '.'
-
-        calls_sample.append(value)
-
-    return ':'.join(calls_sample)
-
-
-def _get_calls_samples(h5, var_index, calls_paths, num_alt, metadata, ploidy):
-    calls_samples = []
-    call_data = {}
-    for key in calls_paths:
-        call_data[key] = h5[key][var_index]
-
-    for n_sample in range(len(h5.samples)):
-        calls_samples.append(_get_calls_per_sample(call_data, n_sample,
-                                                   calls_paths, num_alt,
-                                                   metadata, ploidy))
-    return '\t'.join(calls_samples)
 
 
 def _group_variations_paths(variations):
@@ -380,3 +216,268 @@ def _group_variations_paths(variations):
         elif 'filter' in key:
             grouped_paths['filter'].append(key)
     return grouped_paths
+
+
+def _join_value(master_data, detail_data, separator=b'', detail_is_sliced=False,
+                index=0):
+    #use index only if data is 3d
+    if detail_is_sliced:
+        detail_data = detail_data[...,index]
+    #add separator before all elements except first
+    if index != 0:
+        chararray_separator = numpy.full(master_data.shape, separator.encode())
+        master_data = numpy.char.add(master_data, chararray_separator)
+    #add detail
+    master_data = numpy.char.add(master_data, detail_data)
+    return master_data
+
+
+def _get_str_mask_from_bool_array(bool_ndarray):
+    int_mask = bool_ndarray.astype('int')
+    str_mask = int_mask.astype('|S1')
+    return str_mask
+
+
+def _stringify_array(data):
+    data_type = data.dtype.str
+    data = data[...].copy()
+
+    #check type before casting
+    if str_type_regex.match(data_type):
+        stringified_data = data
+        bool_mask = data == MISSING_STR.encode()
+        stringified_data[bool_mask] = '.'
+    elif int_type_regex.match(data_type):
+        byte_depth = int(consecutive_digits_regex.search(data_type).group(0))
+        number_length = len(str(2**(byte_depth*8)))
+        target_type = '|S' + str(number_length)
+        int_data = data
+        stringified_data = data.astype(target_type)
+        stringified_data[int_data == MISSING_INT] = b'.'
+    elif float_type_regex.match(data_type):
+        #float data is rounded to make sure it fits a 16bytes string
+        rounded_data = data.astype(numpy.float128).round(decimals=4)
+        stringified_data = rounded_data[()].astype('|S16')
+        if numpy.isnan(MISSING_FLOAT):
+            stringified_data[numpy.isnan(data)] = b'.'
+        else:
+            raise RuntimeError('FIXME I used to work with nan as misssing float')
+    elif bool_type_regex.match(data_type):
+        stringified_data = _get_str_mask_from_bool_array(data)
+
+    return stringified_data
+
+
+def _get_group_variations_paths(variations):
+    grouped_paths = {'filter': [], 'info': [], 'format': [], 'calls': []}
+
+    if '/calls/GT' in variations.keys():
+        grouped_paths['format'] = ['GT']
+        grouped_paths['calls'] = ['/calls/GT']
+    for key in sorted(variations.keys()):
+        if 'calls' in key:
+            if 'GT' not in key:
+                grouped_paths['format'].append(key.split('/')[-1])
+                grouped_paths['calls'].append(key)
+        elif 'info' in key:
+            grouped_paths['info'].append(key)
+        elif 'filter' in key:
+            grouped_paths['filter'].append(key)
+    return grouped_paths
+
+
+def _sum_str_arrays(str_arrays, sep=None):
+    concatenated_result = str_arrays[0]
+    if sep is not None:
+        sep_matrix = numpy.full(concatenated_result.shape, sep)
+    for str_array in str_arrays[1:]:
+        if sep is not None:
+            concatenated_result = numpy.char.add(concatenated_result, sep_matrix)
+        concatenated_result = numpy.char.add(concatenated_result, str_array)
+
+    return concatenated_result
+
+
+def _join_str_array_along_axis0(str_array, sep=None,
+                                the_str_array_has_newlines=True):
+    if the_str_array_has_newlines:
+        raise NotImplementedError('If you want newlinex fix the implementation')
+
+    num_snps = str_array.shape[0]
+    if sep:
+        shape = str_array.shape
+        key = shape, sep
+        if key in _CACHE_WITH_SEP_MATRICES:
+            sep_matrix = _CACHE_WITH_SEP_MATRICES[key]
+        else:
+            sep_matrix = numpy.full(shape, sep)
+            sep_matrix[:, -1] = b''
+            _CACHE_WITH_SEP_MATRICES[key] = sep_matrix
+
+        str_array = _sum_str_arrays([str_array, sep_matrix])
+
+    new_line_column = numpy.full((str_array.shape[0], 1), b'\n')
+    str_array = numpy.hstack((str_array, new_line_column))
+    str_array_by_snp = numpy.array(str_array.tobytes().replace(b'\x00', b'').split(b'\n')[:-1])
+    assert str_array_by_snp.shape[0] == num_snps
+
+    return str_array_by_snp
+
+
+def _alt_array_to_str_array(variations):
+    if '/variations/alt' in variations:
+        alt_array = _stringify_array(variations['/variations/alt'])
+        alt_field_data = _join_str_array_along_axis0(alt_array,
+                                                 sep=b',',
+                                                 the_str_array_has_newlines=False)
+        return numpy.char.replace(alt_field_data, b',.', b'')
+    else:
+        return numpy.full((variations.num_variations,), b'.')
+
+
+def _filter_arrays_to_str_array(variations):
+    grouped_paths = _get_group_variations_paths(variations)
+    if grouped_paths['filter']:
+        filter_str_arrays = []
+        for filter_path in grouped_paths['filter']:
+            if not variations[filter_path].any():
+                continue
+            filter_name = filter_path.split('/')[-1]
+            filter_str_array = numpy.full((variations.num_variations,), b'.')
+            filter_bool_array = variations[filter_path]
+            filter_str_array[filter_bool_array] = filter_name
+            filter_str_arrays.append(filter_str_array)
+
+        filter_field_data = _sum_str_arrays(filter_str_arrays, sep=b';')
+        filter_field_data = numpy.char.replace(filter_field_data, b';.', b'')
+        return filter_field_data
+    else:
+        return numpy.full((variations.num_variations,), b'.')
+
+
+def _info_arrays_to_str_array(variations):
+    grouped_paths = _get_group_variations_paths(variations)
+    if not grouped_paths['info']:
+        return numpy.full((variations.num_variations,), b'.')
+
+    info_field_data = numpy.full((variations.num_variations,), b'')
+    for i, info_path in enumerate(grouped_paths['info']):
+        if variations[info_path] is not None:
+            dtype = str(variations[info_path].dtype)
+            field_data_holder = numpy.full((variations.num_variations,), b'.')
+            field_key = info_path.split('/')[-1]
+
+            #boolean info is translated to <id> by masking
+            if 'bool' in dtype:
+                if variations[info_path] is not None:
+                    bool_mask = variations[info_path]
+                    field_data_holder = numpy.full(bool_mask.shape, field_key.encode())
+                    field_data_holder[~bool_mask] = '.'
+
+            #non boolean info is preceded by <id>=
+            elif 'bool' not in dtype:
+                info_data = _stringify_array(variations[info_path])
+                bool_mask = info_data == b'.'
+                info_equals_string = field_key + '='
+                field_data_holder = numpy.full((info_data.shape[0],), info_equals_string.encode())
+
+                #info containing single values is retrieved
+                if info_data.ndim == 1:
+                    field_data_holder = _sum_str_arrays([field_data_holder, info_data])
+                    field_data_holder[bool_mask] = '.'
+
+                #info containing several values is collapsed into a coma separated string
+                elif info_data.ndim == 2:
+                    for index in range(0, info_data.shape[-1]):
+                        info_data_slice = info_data[..., index]
+                        bool_mask_slice = bool_mask[..., index]
+                        info_data_slice[bool_mask_slice] = '.'
+                        field_data_holder = _sum_str_arrays([field_data_holder, info_data_slice], sep=b',')
+                    field_data_holder = numpy.char.replace(field_data_holder, b',.', b'')
+                    field_data_holder = numpy.char.replace(field_data_holder, b'=,', b'=')
+
+            #data is collapsed into a semicolon separated string
+            if i == 0:
+                info_field_data = _sum_str_arrays([info_field_data, field_data_holder])
+            else:
+                info_field_data = _sum_str_arrays([info_field_data, field_data_holder], sep=b';')
+
+    #return numpy.char.replace(info_field_data, b';.', b'')
+    return numpy.char.replace(info_field_data, b';.', b'')
+
+
+def _format_arrays_to_str_array(variations):
+    grouped_paths = _get_group_variations_paths(variations)
+    if grouped_paths['format']:
+        format_string = ':'.join(grouped_paths['format'])
+
+        return numpy.full((variations.num_variations,), format_string.encode())
+    else:
+        return numpy.full((variations.num_variations,), b'.')
+
+
+def _calls_arrays_to_str_array(variations):
+    sample_quantity = len(variations.samples)
+    grouped_paths = _get_group_variations_paths(variations)
+    if grouped_paths['calls']:
+
+        call_2d_matrices = []
+        for i, calls_path in enumerate(grouped_paths['calls']):
+
+            if variations[calls_path] is None:
+                continue
+            calls_data_uncollapsed = _stringify_array(variations[calls_path])
+            data_id = calls_path.split('/')[-1]
+
+            if calls_data_uncollapsed.ndim == 2:
+                str_array_for_field = calls_data_uncollapsed
+            elif calls_data_uncollapsed.ndim == 3:
+                str_array_for_field = calls_data_uncollapsed[..., 0]
+                sep = b'|' if data_id == 'GT' else b','
+                for chromosome_set in range(1, calls_data_uncollapsed.shape[-1]):
+                    str_array_for_field = _sum_str_arrays([str_array_for_field, calls_data_uncollapsed[..., chromosome_set]], sep)
+
+            call_2d_matrices.append(str_array_for_field)
+
+        field_str_array_by_sample = _sum_str_arrays(call_2d_matrices, b':')
+        calls_field_data = _join_str_array_along_axis0(field_str_array_by_sample, sep=b'\t',
+                                                 the_str_array_has_newlines=False)
+        return numpy.char.replace(calls_field_data, b',.', b'')
+    else:
+        return numpy.full((variations.num_variations,), b'.')
+
+
+def _one_field_array_to_str_array(variations, field_path):
+    if field_path in variations.keys():
+        one_field_data = _stringify_array(variations[field_path])
+    else:
+        one_field_data = numpy.full((variations.num_variations,), b'.')
+    return one_field_data
+
+
+def _get_VCF_body_lines(variations):
+    to_str_arrays = (('/variations/chrom', partial(_one_field_array_to_str_array,
+                                                  field_path='/variations/chrom')),
+                     ('/variations/pos', partial(_one_field_array_to_str_array,
+                                                                  field_path='/variations/pos')),
+                     ('/variations/id', partial(_one_field_array_to_str_array,
+                                                                field_path='/variations/id')),
+                     ('/variations/ref', partial(_one_field_array_to_str_array,
+                                                                 field_path='/variations/ref')),
+                     ('/variations/alt', _alt_array_to_str_array),
+                     ('/variations/qual', partial(_one_field_array_to_str_array,
+                                                                 field_path='/variations/qual')),
+                     ('/variations/filter', _filter_arrays_to_str_array),
+                     ('/variations/info', _info_arrays_to_str_array),
+                     ('/variations/format', _format_arrays_to_str_array),
+                     ('/variations/calls', _calls_arrays_to_str_array),
+                     )
+    to_str_arrays = OrderedDict(to_str_arrays)
+
+    VCF_body_stringified_fields = OrderedDict()
+    for field_path in to_str_arrays.keys():
+        VCF_body_stringified_fields[field_path] = to_str_arrays[field_path](variations)
+
+    vcf_lines_array = _sum_str_arrays(list(VCF_body_stringified_fields.values()), sep=b'\t')
+
+    return vcf_lines_array

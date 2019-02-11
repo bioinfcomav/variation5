@@ -2,6 +2,7 @@ import unittest
 from os.path import join
 from tempfile import NamedTemporaryFile
 import io
+import re
 
 import numpy
 
@@ -38,106 +39,46 @@ class VcfWrittenTest(unittest.TestCase):
                         for line in retmp_fhand:
                             assert line in header_lines
 
-    def test_write_vcf(self):
-        # With all fields available
-        tmp_fhand = NamedTemporaryFile()
-        tmp_fhand.close()
-        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def_exp.vcf'), 'rb')
-        vcf = VCFParser(vcf_fhand)
 
-        variations = VariationsArrays(ignore_undefined_fields=True)
-        variations.put_vars(vcf)
-        vcf_fhand.close()
-        with NamedTemporaryFile(mode='wb') as out_fhand:
-            write_vcf(variations, out_fhand, vcf_format='VCFv4.0')
-            vcf_fpath = join(TEST_DATA_DIR, 'format_def_exp.vcf')
-            with open(vcf_fpath, 'r') as exp_fhand:
-                exp_lines = list(exp_fhand)
-                out_fhand.seek(0)
-                with open(out_fhand.name) as refhand:
-                    for line in refhand:
-                        try:
-                            assert line in exp_lines
-                        except AssertionError:
-                            print('aa', line)
+    def test_generated_vcf_feed_outputs_equal_vcfs(self):
+        h5_vars = VariationsH5(join(TEST_DATA_DIR,
+                                      'tomato.apeki_gbs.calmd.1stchunk.h5'), "r")
+        with NamedTemporaryFile(mode='wb') as vcf_vars_from_h5:
+            write_vcf(h5_vars, vcf_vars_from_h5)
+            vcf_vars_from_h5.flush()
+            vcf_fhand = open(vcf_vars_from_h5.name, 'rb')
+            vcf = VCFParser(vcf_fhand)
+            vcf_vars_parsed = VariationsArrays()
+            vcf_vars_parsed.put_vars(vcf)
+            with NamedTemporaryFile(mode='wb') as vcf_vars_from_vcf:
+                vcf_vars_parsed.write_vcf(vcf_vars_from_vcf)
+                vcf_vars_from_vcf.flush()
+                vcf_from_h5_fhand = open(vcf_vars_from_h5.name, 'rb')
+                vcf_from_vcf_fhand = open(vcf_vars_from_vcf.name, 'rb')
+                for line_parsed_from_h5, line_parsed_from_vcf in zip(vcf_from_h5_fhand, vcf_from_vcf_fhand):
+                    assert line_parsed_from_h5 == line_parsed_from_vcf, "when importing from a generated VCF and exporting to a new VCF both files must be the same"
 
-        # With missing info in variations
-        tmp_fhand = NamedTemporaryFile()
-        out_fpath = tmp_fhand.name
-        tmp_fhand.close()
-        vcf_fhand = open(join(TEST_DATA_DIR, 'format_def_without_info.vcf'),
-                         'rb')
-        vcf = VCFParser(vcf_fhand)
-
-        h5_without_info = VariationsH5(fpath=out_fpath, mode='w',
-                                       ignore_undefined_fields=True)
-        h5_without_info.put_vars(vcf)
-        vcf_fhand.close()
-        with NamedTemporaryFile(mode='wb') as out_fhand:
-            write_vcf(h5_without_info, out_fhand, vcf_format='VCFv4.0')
-            vcf_fpath = join(TEST_DATA_DIR, 'format_def_without_info_exp.vcf')
-            with open(vcf_fpath, 'r') as exp_fhand:
-                exp_lines = list(exp_fhand)
-                out_fhand.seek(0)
-                with open(out_fhand.name) as refhand:
-                    for line in refhand:
-                        try:
-                            assert line in exp_lines
-                        except AssertionError:
-                            print(line)
-
-    def test_write_vcf_from_h5(self):
-        # With hdf5 file
-        tomato_h5 = VariationsH5(join(TEST_DATA_DIR,
-                                      'tomato.apeki_gbs.calmd.h5'), "r")
-        exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "rb")
-        with NamedTemporaryFile(mode='wb') as tmp_fhand:
-            write_vcf(tomato_h5, tmp_fhand)
-            # only checking snps
-            exp_lines = list(exp_fhand)
-            exp_lines = [line for line in exp_lines
-                             if not line.startswith(b'#')]
-            with open(tmp_fhand.name, 'rb') as refhand:
-                i = 0
-                for line in refhand:
-                    if line.startswith(b'#'):
-                        continue
-                    try:
-                        assert line == exp_lines[i]
-                    except AssertionError:
-                        print(line.decode())
-                        print(exp_lines[i].decode())
-                    i += 1
-                    if i > 42:
-                        break
-        exp_fhand.close()
 
     def test_parallel_vcf_write(self):
         tomato_h5 = VariationsH5(join(TEST_DATA_DIR,
-                                      'tomato.apeki_gbs.calmd.h5'), "r")
-
-        exp_fhand = open(join(TEST_DATA_DIR, "tomato.apeki_100_exp.vcf"), "rb")
+                                      'tomato.apeki_gbs.calmd.1stchunk.h5'),
+                                      "r")
         with NamedTemporaryFile(mode='wb') as tmp_fhand:
             write_vcf_parallel(tomato_h5, tmp_fhand, n_threads=4,
                                tmp_dir='/tmp')
-            # only checking snps
-            exp_lines = list(exp_fhand)
-            exp_lines = [line for line in exp_lines
-                             if not line.startswith(b'#')]
-            with open(tmp_fhand.name, 'rb') as refhand:
-                i = 0
-                for line in refhand:
-                    if line.startswith(b'#'):
-                        continue
-                    try:
-                        assert line == exp_lines[i]
-                    except AssertionError:
-                        print(line.decode())
-                        print(exp_lines[i].decode())
-                    i += 1
-                    if i > 42:
-                        break
-        exp_fhand.close()
+            vcf_line_regex = re.compile('(.*\t){9}.*\n')
+            tmp_fhand.flush()
+            vcf_from_tmp_fhand = open(tmp_fhand.name, 'rb')
+            i = 0
+            for line in vcf_from_tmp_fhand:
+                if line.startswith(b'#'):
+                    continue
+                assert vcf_line_regex.match(line.decode())
+                i += 1
+                if i > 42:
+                    break
+            tmp_fhand.close()
+            vcf_from_tmp_fhand.close()
 
 
     def xtest_real_file(self):

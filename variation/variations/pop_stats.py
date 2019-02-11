@@ -40,13 +40,14 @@ def _prepare_pop_sample_filters(populations, pop_sample_filters=None):
     return pop_sample_filters
 
 
-def calc_number_of_alleles(variations, populations=None,
-                           pop_sample_filters=None,
-                           min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+def calc_number_of_alleles_and_number_called_gts(variations, populations=None,
+                                                 pop_sample_filters=None,
+                                                 min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     pop_sample_filters = _prepare_pop_sample_filters(populations,
                                                      pop_sample_filters)
 
     num_alleles_per_snp = {}
+    num_called_gt = {}
     for pop_id, pop_sample_filter in pop_sample_filters.items():
         vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
 
@@ -58,7 +59,17 @@ def calc_number_of_alleles(variations, populations=None,
                                                                  min_num_genotypes,
                                                                  masking_value=0)
         num_alleles_per_snp[pop_id] = chunk_num_alleles_per_snp
-    return num_alleles_per_snp
+        num_called_gt[pop_id] = calc_called_gt(vars_for_pop, rates=False)
+    return num_alleles_per_snp, num_called_gt
+
+
+def calc_number_of_alleles(variations, populations=None,
+                           pop_sample_filters=None,
+                           min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    return calc_number_of_alleles_and_number_called_gts(variations,
+                                                        populations=populations,
+                                                        pop_sample_filters=pop_sample_filters,
+                                                        min_num_genotypes=min_num_genotypes)[0]
 
 
 def _count_alleles_per_allele_and_snp(variations, alleles=None):

@@ -490,7 +490,7 @@ class _ChunkGenerator:
                                                               n_snps_in_chunk,
                                                               missing_values)
                     exemplar_matrices_for_metadata[field_path] = mat
-                    # print('You should update the exemplar matrices when there is a resize. CHECK THIS.')
+                    print('You should update the exemplar matrices when there is a resize. CHECK THIS.')
                 if debug_field and debug_field == field_path:
                     print('chunk_mat created shape', mat.shape)
                 chunk_matrices[field_path] = mat

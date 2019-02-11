@@ -12,6 +12,7 @@ from io import StringIO
 
 import numpy
 
+from variation import AD_FIELD
 from variation.variations.vars_matrices import VariationsH5, VariationsArrays
 from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         histogram_for_chunks,
@@ -39,7 +40,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         histograms_for_columns,
                                         write_stats_by_sample,
                                         calc_expected_het,
-                                        calc_unbias_expected_het)
+                                        calc_unbias_expected_het,
+                                        calc_allele_observation_based_maf)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -56,6 +58,33 @@ class StatsTest(unittest.TestCase):
         cum_distrib = calc_cum_distrib(distrib)
         exp = [3, 2, 2, 2, 2, 2, 1, 1, 1, 1]
         assert numpy.all(cum_distrib == [exp, exp])
+
+    def test_allele_observation_based_maf(self):
+        allele_depths = numpy.array([])
+        varis = VariationsArrays()
+        varis[AD_FIELD] = allele_depths
+        maf = calc_allele_observation_based_maf(varis, chunk_size=None)
+        assert not list(maf)
+
+        allele_depths_snp1 = [[10, 0, 1], # Allele Obervation in sample1
+                              [4, 6, 1]] # Allele Obervation in sample2
+        allele_depths_snp2 = [[10, 0, 0], # Allele Obervation in sample1
+                              [0, 5, 7]] # Allele Obervation in sample2
+        allele_depths_snp3 = [[-1, -1, -1], # Allele Obervation in sample1
+                              [-1, -1, -1]] # Allele Obervation in sample2
+
+        allele_depths = numpy.array([allele_depths_snp1,
+                                     allele_depths_snp2,
+                                     allele_depths_snp3])
+        varis = VariationsArrays()
+        varis[AD_FIELD] = allele_depths
+        maf = calc_allele_observation_based_maf(varis, chunk_size=None)
+        expected = [0.63636364, 0.45454545, numpy.nan]
+        assert numpy.allclose(maf, expected, equal_nan=True)
+
+        maf = calc_allele_observation_based_maf(varis, chunk_size=1)
+        expected = [0.63636364, 0.45454545, numpy.nan]
+        assert numpy.allclose(maf, expected, equal_nan=True)
 
     def test_maf(self):
         gts = numpy.array([])
@@ -864,5 +893,5 @@ class SampleStatsTest(unittest.TestCase):
         assert numpy.allclose(expected_edges, edges)
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'SampleStatsTest.test_stasts_per_sample']
+    # import sys;sys.argv = ['', 'StatsTest.test_allele_observation_based_maf']
     unittest.main()

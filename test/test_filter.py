@@ -15,6 +15,7 @@ from collections import Counter
 import numpy
 
 from test.test_utils import TEST_DATA_DIR
+from variation import AD_FIELD
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
@@ -33,7 +34,8 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           IndelFilter, FieldValueFilter,
                                           NoMissingGTsFilter,
                                           NoMissingGTsOrHetFilter,
-                                          SNPPositionFilter)
+                                          SNPPositionFilter,
+                                          AlleleObservationBasedMafFilter)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
@@ -385,6 +387,31 @@ class MafFilterTest(unittest.TestCase):
         filtered = MacFilter(min_mac=130, max_mac=150)(variations)
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert counts == {-1: 64530, 0: 36977, 1: 18716, 2: 35}
+
+    def test_filter_allele_depth_based_maf(self):
+        allele_depths_snp1 = [[10, 0, 1], # Allele Obervation in sample1
+                              [4, 6, 1]] # Allele Obervation in sample2
+        allele_depths_snp2 = [[10, 0, 0], # Allele Obervation in sample1
+                              [0, 5, 7]] # Allele Obervation in sample2
+        allele_depths_snp3 = [[-1, -1, -1], # Allele Obervation in sample1
+                              [-1, -1, -1]] # Allele Obervation in sample2
+
+        allele_depths = numpy.array([allele_depths_snp1,
+                                     allele_depths_snp2,
+                                     allele_depths_snp3])
+        varis = VariationsArrays()
+        varis[AD_FIELD] = allele_depths
+        filtered_vars = AlleleObservationBasedMafFilter(max_maf=0.8)(varis)[FLT_VARS]
+        assert filtered_vars.num_variations == 2
+
+        filtered_vars = AlleleObservationBasedMafFilter(max_maf=0.5)(varis)[FLT_VARS]
+        expected = numpy.array([allele_depths_snp2])
+        assert numpy.all(filtered_vars[AD_FIELD] == expected)
+
+        filtered_vars = AlleleObservationBasedMafFilter(min_maf=0.8)(varis)[FLT_VARS]
+        assert not filtered_vars.num_variations
+        expected = numpy.array([allele_depths_snp2])
+        assert numpy.all(filtered_vars[AD_FIELD] == expected)
 
 
 class ObsHetFiltterTest(unittest.TestCase):

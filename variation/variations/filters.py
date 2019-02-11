@@ -11,10 +11,11 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         MIN_NUM_GENOTYPES_FOR_POP_STAT,
                                         calc_mac, calc_snp_density,
                                         histogram, DEF_NUM_BINS,
-                                        call_is_het)
+                                        call_is_het,
+                                        calc_allele_observation_based_maf)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT, ALT_FIELD,
-    CHROM_FIELD, POS_FIELD)
+                       CHROM_FIELD, POS_FIELD)
 from variation.matrix.methods import is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import row_value_counter_fact
@@ -303,6 +304,20 @@ class MafFilter(_BaseFilter):
                         chunk_size=None)
 
 
+class AlleleObservationBasedMafFilter(_BaseFilter):
+
+    def __init__(self, min_maf=None, max_maf=None,
+                 **kwargs):
+        self.min = min_maf
+        self.max = max_maf
+
+        super().__init__(**kwargs)
+
+    def _calc_stat(self, variations):
+        return calc_allele_observation_based_maf(variations,
+                                                 chunk_size=None)
+
+
 class MacFilter(_BaseFilter):
 
     def __init__(self, min_mac=None, max_mac=None,
@@ -374,7 +389,10 @@ class SNPPositionFilter(_BaseFilter):
 
         in_any_region = None
         for region in self.regions:
-            in_this_region = chroms[:] == region[0]
+            desired_chrom = region[0]
+            if isinstance(desired_chrom, (tuple, list)):
+                raise ValueError('Malformed region: ' + str(region))
+            in_this_region = chroms[:] == desired_chrom
             if len(region) > 1:
                 in_this_region = numpy.logical_and(in_this_region,
                                                    numpy.logical_and(region[1] <= poss, poss < region[2]))

@@ -433,7 +433,7 @@ def _calls_arrays_to_str_array(variations):
                 str_array_for_field = calls_data_uncollapsed
             elif calls_data_uncollapsed.ndim == 3:
                 str_array_for_field = calls_data_uncollapsed[..., 0]
-                sep = b'|' if data_id == 'GT' else b','
+                sep = b'/' if data_id == 'GT' else b','
                 for chromosome_set in range(1, calls_data_uncollapsed.shape[-1]):
                     str_array_for_field = _sum_str_arrays([str_array_for_field, calls_data_uncollapsed[..., chromosome_set]], sep)
 

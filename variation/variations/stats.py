@@ -1724,7 +1724,10 @@ def calc_tajima_d_and_pi(variations,
     e2 = (b2 - (n + 2) / (a1 * n) + (a2 / (a1 * a1))) / ((a1 * a1) + a2)
 
     numerator = tot_exp_het - tot_theta
-    denominator = numpy.sqrt((e1 * S) + (e2 * S * (S - 1)))
+    denominator2 = (e1 * S) + (e2 * S * (S - 1))
+    if denominator2 < 0:
+        raise ValueError('Error when calculating tajima, sqrt of a negative number')
+    denominator = numpy.sqrt(denominator2)
 
     tajima_d = numerator / denominator
 

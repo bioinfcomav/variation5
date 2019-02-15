@@ -263,9 +263,12 @@ def calc_tajima_d_and_pi_for_pops(variations, populations=None, pop_sample_filte
     theta = {}
     for pop_id, pop_sample_filter in pop_sample_filters.items():
         vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
-        res = calc_tajima_d_and_pi(vars_for_pop,
-                                   min_num_genotypes=min_num_genotypes,
-                                   min_num_segregating_variations=min_num_segregating_variations)
+        try:
+            res = calc_tajima_d_and_pi(vars_for_pop,
+                                       min_num_genotypes=min_num_genotypes,
+                                       min_num_segregating_variations=min_num_segregating_variations)
+        except ValueError:
+            continue
         tajima_d[pop_id] = res['tajima_d']
         pi[pop_id] = res['pi']
         theta[pop_id] = res['theta']

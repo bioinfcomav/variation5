@@ -9,6 +9,7 @@ import unittest
 from os.path import join
 from functools import partial
 from io import StringIO
+import math
 
 import numpy
 
@@ -41,7 +42,8 @@ from variation.variations.stats import (calc_maf, calc_mac, histogram,
                                         write_stats_by_sample,
                                         calc_expected_het,
                                         calc_unbias_expected_het,
-                                        calc_allele_observation_based_maf)
+                                        calc_allele_observation_based_maf,
+                                        _calc_a1, calc_tajima_d_and_pi)
 from variation import DP_FIELD
 from test.test_utils import TEST_DATA_DIR
 
@@ -892,6 +894,75 @@ class SampleStatsTest(unittest.TestCase):
         assert numpy.allclose(expected_cnts, counts)
         assert numpy.allclose(expected_edges, edges)
 
+
+class TajimaDTest(unittest.TestCase):
+
+    def test_calc_1_div_i(self):
+        num_seqs_with_data = numpy.array([1, 2, 3, 4, 5, 0])
+        res = _calc_a1(num_seqs_with_data)
+        a1_per_site, a2_per_site = res
+        expected = [0, 1, 1.5, 1.83333, 2.08333, numpy.nan]
+        assert numpy.allclose(a1_per_site, expected, equal_nan=True)
+        expected = [0, 1, 1.25, 1.36111111, 1.42361111, numpy.nan]
+        assert numpy.allclose(a2_per_site, expected, equal_nan=True)
+
+    def print_phy(self, gts):
+
+        numbers_to_letter = {0: 'A', 1: 'T', -1: 'N'}
+
+        seqs = numpy.array(gts)[:, :, 0].T
+        fhand = open('/home/jose/soft/variscan-2.0.3/VSexamples/examples/jose.phy', 'wt')
+        if False:
+            import sys
+            fhand = sys.stdout
+        fhand.write('{} {}\n'.format(*seqs.shape))
+        for seq_idx in range(seqs.shape[0]):
+            seq_number_haplotype = seqs[seq_idx, :]
+            seq_letters = ''.join([numbers_to_letter[gt] for gt in seq_number_haplotype])
+            fhand.write('seq_{}    {}\n'.format(seq_idx, seq_letters))
+        fhand.close()
+
+    def test_calc_tajima(self):
+
+        snp_gt = [[0, 0], [0, 0], [0, 0], [0, 0], [1, 1]]
+        gts = [snp_gt] * 100
+        varis = {GT_FIELD: numpy.array(gts)}
+
+        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2)
+        assert math.isclose(res['tajima_d'], -1.266621394662836)
+        assert math.isclose(res['pi'], 0.4)
+        assert math.isclose(res['theta'], 0.48)
+
+        snp_gt = [[0, 0], [0, 0], [0, 0], [-1, -1], [1, 1]]
+        gts = [snp_gt] * 100
+        varis = {GT_FIELD: numpy.array(gts)}
+
+        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2)
+        assert math.isclose(res['tajima_d'], -0.871839964837347)
+        assert math.isclose(res['pi'], 0.5)
+        assert math.isclose(res['theta'], 0.5454545454545454)
+
+        snp_gt = [[0, 0], [1, 1], [0, 0], [-1, -1], [1, 1]]
+        gts = [snp_gt] * 100
+        varis = {GT_FIELD: numpy.array(gts)}
+        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2)
+        # print(res)
+        # self.print_phy(gts)
+        assert math.isclose(res['tajima_d'], 2.3249065728995997)
+        assert math.isclose(res['pi'], 0.6666666666666669)
+        assert math.isclose(res['theta'], 0.5454545454545454)
+
+        snp_gt = [[0, 0], [1, 1], [0, 0], [-1, -1], [1, 1]]
+        gts = [snp_gt] * 100
+        varis = {GT_FIELD: numpy.array(gts)}
+        try:
+            res = calc_tajima_d_and_pi(varis, min_num_genotypes=10)
+            self.fail('ValueError expected')
+        except ValueError:
+            pass
+
+
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'StatsTest.test_allele_observation_based_maf']
+    #import sys; sys.argv = ['', 'StatsTest']
+    # import sys;sys.argv = ['', 'TajimaDTest']
     unittest.main()

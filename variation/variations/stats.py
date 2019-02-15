@@ -467,8 +467,8 @@ def _mask_stats_with_few_samples(stats, variations, min_num_genotypes,
                                  num_called_gts=None, masking_value=numpy.NaN):
     if min_num_genotypes:
         mask = _get_mask_for_masking_samples_with_few_gts(variations,
-                                                      min_num_genotypes,
-                                                      num_called_gts=num_called_gts)
+                                                          min_num_genotypes,
+                                                          num_called_gts=num_called_gts)
         stats[mask] = masking_value
     return stats
 
@@ -794,9 +794,25 @@ def calc_unbias_expected_het(variations,
                              min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     exp_het = calc_expected_het(variations,
                                 min_num_genotypes=min_num_genotypes)
-    gts = variations[GT_FIELD]
-    num_samples = gts.shape[1]
+
+    num_called_gts = calc_called_gt(variations, rates=False)
+    num_samples = num_called_gts.astype(float)
+    num_samples[num_samples < min_num_genotypes] = numpy.nan
+
     unbiased_exp_het = (2 * num_samples / (2 * num_samples - 1)) * exp_het
+    return unbiased_exp_het
+
+
+def calc_unbias_expected_het2(variations,
+                              min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+    exp_het = calc_expected_het(variations,
+                                min_num_genotypes=min_num_genotypes)
+
+    num_called_gts = calc_called_gt(variations, rates=False)
+    num_samples = num_called_gts.astype(float)
+    num_samples[num_samples < min_num_genotypes] = numpy.nan
+
+    unbiased_exp_het = (num_samples / (num_samples - 1)) * exp_het
     return unbiased_exp_het
 
 
@@ -1591,3 +1607,125 @@ def calc_depth_mean_by_sample(variations, chunk_size=SNPS_PER_CHUNK):
             sums += chunk_sums
     means = sums / dps.shape[0]
     return means
+
+
+@lru_cache(maxsize=128)
+def _get_vector_with_1_div_i(vector_length, idx):
+    value_i = 1 / idx
+    value_ii = 1 / (idx ** 2)
+    return (numpy.full(vector_length, value_i),
+            numpy.full(vector_length, value_ii))
+
+
+def _calc_a1(num_seqs_with_data):
+    max_num_seqs_with_data = max(num_seqs_with_data)
+
+    cum_i_result = numpy.ones_like(num_seqs_with_data, dtype=float)
+    cum_ii_result = numpy.ones_like(num_seqs_with_data, dtype=float)
+    for idx in range(2, max_num_seqs_with_data):
+        res = _get_vector_with_1_div_i(cum_i_result.shape[0], idx)
+
+        value_i_to_sum, value_ii_to_sum = res
+        pos_with_lower_value_than_idx = num_seqs_with_data < idx + 1
+        value_i_to_sum[pos_with_lower_value_than_idx] = 0
+        value_ii_to_sum[pos_with_lower_value_than_idx] = 0
+
+        cum_i_result += value_i_to_sum
+        cum_ii_result += value_ii_to_sum
+
+    cum_i_result[num_seqs_with_data == 0] = numpy.nan
+    cum_i_result[num_seqs_with_data == 1] = 0
+    cum_ii_result[num_seqs_with_data == 0] = numpy.nan
+    cum_ii_result[num_seqs_with_data == 1] = 0
+
+    return cum_i_result, cum_ii_result
+
+
+def calc_tajima_d_and_pi(variations,
+                         min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                         debug=False,
+                         min_num_segregating_variations=10):
+    # Implemented following: Genome-wide DNA polymorphism analyses using VariScan
+    # https://doi.org/10.1186/1471-2105-7-409
+
+    gts = variations[GT_FIELD]
+
+    random_index_for_ploidy = numpy.random.randint(gts.shape[2],
+                                                   size=gts.shape[1])
+
+    # choose one haplotype at random for every sample
+    seqs_choice = [gts[:, :, idx] for idx in range(gts.shape[2])]
+    seqs = numpy.choose(random_index_for_ploidy, seqs_choice)
+
+    # print(seqs)
+    # print(seqs.shape)
+
+    non_missing_gts = seqs != MISSING_INT
+    num_seqs_with_data_per_snp = numpy.sum(non_missing_gts, axis=1)
+    a1_per_snp, a2_per_snp = _calc_a1(num_seqs_with_data_per_snp)
+
+    avg_a1 = numpy.mean(a1_per_snp)
+    avg_a2 = numpy.mean(a2_per_snp)
+    if debug:
+        print('num_seqs_with_data_per_snp')
+        print(num_seqs_with_data_per_snp)
+        print('a1_per_snp')
+        print(a1_per_snp)
+        print('a2_per_snp')
+        print(a2_per_snp)
+        print('avg_a1', avg_a1)
+        print('avg_a2', avg_a2)
+
+    snp_has_enough_data = num_seqs_with_data_per_snp > min_num_genotypes
+    num_snps_with_enough_data = numpy.sum(snp_has_enough_data)
+    avg_num_seqs_with_enough_data = numpy.mean(num_seqs_with_data_per_snp)
+
+    allele_counts, _ = counts_and_allels_by_row(seqs,
+                                                missing_value=MISSING_INT)
+
+    snp_is_segregating = numpy.sum(allele_counts > 0, axis=1) > 1
+
+    num_snp_segregating = numpy.sum(numpy.logical_and(snp_is_segregating,
+                                                      num_snps_with_enough_data))
+    if num_snp_segregating < min_num_segregating_variations:
+        raise ValueError('Not enough segregating variations with data')
+
+    if debug:
+        print('num snps with enough data', num_snps_with_enough_data)
+        print('avg_num_seqs_with_enough_data', avg_num_seqs_with_enough_data)
+        print('num_snp_segregating (S)', num_snp_segregating)
+
+    tot_theta = num_snp_segregating / avg_a1
+
+    exp_het_per_snp = calc_unbias_expected_het2(variations,
+                                                min_num_genotypes=min_num_genotypes)
+    tot_exp_het = numpy.sum(exp_het_per_snp)
+    num_sites = seqs.shape[0]
+
+    pi_per_site = tot_exp_het / num_sites
+
+    theta_per_site = tot_theta / num_sites
+
+    if debug:
+        print('tot_theta', tot_theta)
+        print('exp_het_per_snp', exp_het_per_snp)
+        print('tot_exp_het', tot_exp_het)
+        print('pi_per_site ', pi_per_site)
+        print('theta_per_site', theta_per_site)
+
+    n = avg_num_seqs_with_enough_data
+    a1 = avg_a1
+    a2 = avg_a2
+    S = num_snp_segregating
+
+    b1 = (n + 1) / (3 * (n - 1))
+    b2 = (2 * (n * n + n + 3)) / (9 * n * (n - 1))
+    e1 = (b1 - (1 / a1)) / a1
+    e2 = (b2 - (n + 2) / (a1 * n) + (a2 / (a1 * a1))) / ((a1 * a1) + a2)
+
+    numerator = tot_exp_het - tot_theta
+    denominator = numpy.sqrt((e1 * S) + (e2 * S * (S - 1)))
+
+    tajima_d = numerator / denominator
+
+    return {'tajima_d': tajima_d, 'pi': pi_per_site, 'theta': theta_per_site}

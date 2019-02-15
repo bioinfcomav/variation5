@@ -19,7 +19,7 @@ from variation.variations.stats import calc_obs_het as calc_obs_het_in_pop
 from variation.variations.stats import (calc_unbias_expected_het,
                                         _mask_stats_with_few_samples,
                                         calc_called_gt,
-                                        calc_allele_freq)
+                                        calc_tajima_d_and_pi)
 
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],
                                                      'stat_name': 'number_of_alleles'},
@@ -249,6 +249,27 @@ def calc_exp_het(variations, populations=None, pop_sample_filters=None,
         het[pop_id] = calc_unbias_expected_het(vars_for_pop,
                                                min_num_genotypes=min_num_genotypes)
     return het
+
+
+def calc_tajima_d_and_pi_for_pops(variations, populations=None, pop_sample_filters=None,
+                                  min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                                  min_num_segregating_variations=10):
+
+    pop_sample_filters = _prepare_pop_sample_filters(populations,
+                                                     pop_sample_filters)
+
+    tajima_d = {}
+    pi = {}
+    theta = {}
+    for pop_id, pop_sample_filter in pop_sample_filters.items():
+        vars_for_pop = pop_sample_filter(variations)[FLT_VARS]
+        res = calc_tajima_d_and_pi(vars_for_pop,
+                                   min_num_genotypes=min_num_genotypes,
+                                   min_num_segregating_variations=min_num_segregating_variations)
+        tajima_d[pop_id] = res['tajima_d']
+        pi[pop_id] = res['pi']
+        theta[pop_id] = res['theta']
+    return {'tajima_d': tajima_d, 'pi': pi, 'theta': theta}
 
 
 def _format_num(num):

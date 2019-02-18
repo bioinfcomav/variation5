@@ -20,7 +20,7 @@ def _set_gts_to_missing(chunk, gt_rate_to_missing):
     assert gts_to_keep.shape[0] == num_gts_to_keep
 
     gts_to_set_missing = [index[gts_to_keep] for index in index_for_non_missing_gts]
-    gts[gts_to_set_missing] = MISSING_INT
+    gts[tuple(gts_to_set_missing)] = MISSING_INT
     return chunk
 
 

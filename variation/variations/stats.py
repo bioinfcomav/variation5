@@ -1,4 +1,4 @@
-
+import re
 from functools import reduce
 from itertools import combinations_with_replacement, permutations
 import operator
@@ -21,9 +21,7 @@ from variation.matrix.methods import (is_missing, calc_min_max,
                                       is_dataset, iterate_matrix_chunks)
 from variation.plot import _estimate_percentiles_from_distrib
 
-
 DEF_NUM_BINS = 20
-
 
 REQUIRED_FIELDS_FOR_STAT = {'calc_maf': [GT_FIELD],
                             'calc_allele_freq': [GT_FIELD],
@@ -56,7 +54,8 @@ def _calc_histogram(vector, n_bins, range_, weights=None):
         result = numpy.histogram(vector, bins=n_bins, range=range_,
                                  weights=weights)
     except ValueError as error:
-        if 'parameter must be finite' in str(error):
+        if ('parameter must be finite' in str(error) or
+                re.search('autodetected range of .*finite', str(error))):
             isfinite = ~numpy.isinf(vector)
             vector = vector[isfinite]
             if weights is not None:
@@ -689,6 +688,7 @@ def _snps_close(chrom1, pos1, chrom2, pos2, dist):
 
 
 class _ArrayWrapper():
+
     def __init__(self, array, cache_len=400):
         self.array = array
         self._h5_cache = None
@@ -1337,6 +1337,7 @@ def calc_maf_depth_distribs_per_sample(variations, min_depth=DEF_MIN_DEPTH,
 
 
 class PositionalStatsCalculator:
+
     def __init__(self, chrom, pos, stat, window_size=None, step=1,
                  take_windows=True):
         self.chrom = chrom

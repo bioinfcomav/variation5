@@ -39,10 +39,9 @@ class VcfWrittenTest(unittest.TestCase):
                         for line in retmp_fhand:
                             assert line in header_lines
 
-
     def test_generated_vcf_feed_outputs_equal_vcfs(self):
         h5_vars = VariationsH5(join(TEST_DATA_DIR,
-                                      'tomato.apeki_gbs.calmd.1stchunk.h5'), "r")
+                                    'tomato.apeki_gbs.calmd.1stchunk.h5'), "r")
         with NamedTemporaryFile(mode='wb') as vcf_vars_from_h5:
             write_vcf(h5_vars, vcf_vars_from_h5)
             vcf_vars_from_h5.flush()
@@ -58,11 +57,10 @@ class VcfWrittenTest(unittest.TestCase):
                 for line_parsed_from_h5, line_parsed_from_vcf in zip(vcf_from_h5_fhand, vcf_from_vcf_fhand):
                     assert line_parsed_from_h5 == line_parsed_from_vcf, "when importing from a generated VCF and exporting to a new VCF both files must be the same"
 
-
     def test_parallel_vcf_write(self):
         tomato_h5 = VariationsH5(join(TEST_DATA_DIR,
                                       'tomato.apeki_gbs.calmd.1stchunk.h5'),
-                                      "r")
+                                 "r")
         with NamedTemporaryFile(mode='wb') as tmp_fhand:
             write_vcf_parallel(tomato_h5, tmp_fhand, n_threads=4,
                                tmp_dir='/tmp')
@@ -80,7 +78,6 @@ class VcfWrittenTest(unittest.TestCase):
             tmp_fhand.close()
             vcf_from_tmp_fhand.close()
 
-
     def xtest_real_file(self):
         fpath = '/home/peio/work_in/test_variation5/write_vcf/original.h5'
         vcf_fpath = '/home/peio/work_in/test_variation5/write_vcf/traditom_tier1.vcf'
@@ -95,6 +92,7 @@ class VcfWrittenTest(unittest.TestCase):
 
 
 class ExcelTest(unittest.TestCase):
+
     def test_excel(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [0, 1], [1, 1], [0, 0], [0, 0]],
@@ -124,6 +122,7 @@ class ExcelTest(unittest.TestCase):
 
 
 class FastaWriterTest(unittest.TestCase):
+
     def test_fasta_writer(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [0, 1], [1, 1], [0, 0], [0, 0]],
@@ -184,6 +183,7 @@ class FastaWriterTest(unittest.TestCase):
         result = fhand.getvalue().splitlines()
         assert b'>0' in result[0]
         assert result[1] == b'TNTC'
+
 
 if __name__ == "__main__":
     # import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf_from_h5']

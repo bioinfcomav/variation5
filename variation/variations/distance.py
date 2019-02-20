@@ -526,4 +526,4 @@ def locate_cols_and_rows_with_nan_values_in_dist_matrix(dists):
     rows_with_nans = numpy.sum(is_nan, axis=0) > 0
     cols_with_nans = numpy.sum(is_nan, axis=1) > 0
     cols_or_rows_with_nans = numpy.logical_or(rows_with_nans, cols_with_nans)
-    return numpy.where(cols_or_rows_with_nans)[0]
+    return cols_or_rows_with_nans

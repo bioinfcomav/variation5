@@ -354,11 +354,11 @@ class TestLocateNans(unittest.TestCase):
     def test_locate_cols_and_rows_with_nans(self):
         dists = numpy.array([1., 2., 3., 4., 5., math.nan])
         cols_with_nans = locate_cols_and_rows_with_nan_values_in_dist_matrix(dists)
-        assert list(cols_with_nans) == [2, 3]
+        assert list(cols_with_nans) == [False, False, True, True]
 
         dists = numpy.array([1., 2., 3., 4., 5., 6.])
         cols_with_nans = locate_cols_and_rows_with_nan_values_in_dist_matrix(dists)
-        assert not list(cols_with_nans)
+        assert list(cols_with_nans) == [False, False, False, False]
 
 
 if __name__ == "__main__":

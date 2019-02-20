@@ -511,3 +511,19 @@ def filter_dist_matrix(dists, idxs_to_keep, squareform_checks=True):
 
 def triangular_dists_to_square(dists, col_names):
     return DataFrame(squareform(dists), index=col_names, columns=col_names)
+
+
+def _get_square_dist(dists):
+    if len(dists.shape) == 1:
+        return squareform(dists)
+    else:
+        return dists
+
+
+def locate_cols_and_rows_with_nan_values_in_dist_matrix(dists):
+    dists = _get_square_dist(dists)
+    is_nan = numpy.isnan(dists)
+    rows_with_nans = numpy.sum(is_nan, axis=0) > 0
+    cols_with_nans = numpy.sum(is_nan, axis=1) > 0
+    cols_or_rows_with_nans = numpy.logical_or(rows_with_nans, cols_with_nans)
+    return numpy.where(cols_or_rows_with_nans)[0]

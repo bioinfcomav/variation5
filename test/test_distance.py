@@ -20,7 +20,8 @@ from variation.variations.distance import (_indi_pairwise_dist, _kosman,
                                            filter_dist_matrix,
                                            calc_gst_per_loci,
                                            _calc_pop_pairwise_unbiased_nei_dists,
-                                           triangular_dists_to_square)
+                                           triangular_dists_to_square,
+                                           locate_cols_and_rows_with_nan_values_in_dist_matrix)
 from variation.variations.vars_matrices import VariationsArrays, VariationsH5
 from variation.variations.stats import GT_FIELD
 from test.test_utils import TEST_DATA_DIR
@@ -346,6 +347,18 @@ class TriangularToSquareTest(unittest.TestCase):
         assert numpy.allclose(square_dists.values, [[0, 1, 2],
                                                     [1, 0, 3],
                                                     [2, 3, 0]])
+
+
+class TestLocateNans(unittest.TestCase):
+
+    def test_locate_cols_and_rows_with_nans(self):
+        dists = numpy.array([1., 2., 3., 4., 5., math.nan])
+        cols_with_nans = locate_cols_and_rows_with_nan_values_in_dist_matrix(dists)
+        assert list(cols_with_nans) == [2, 3]
+
+        dists = numpy.array([1., 2., 3., 4., 5., 6.])
+        cols_with_nans = locate_cols_and_rows_with_nan_values_in_dist_matrix(dists)
+        assert not list(cols_with_nans)
 
 
 if __name__ == "__main__":

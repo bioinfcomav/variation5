@@ -17,7 +17,6 @@ from pandas.core.frame import DataFrame
 
 from scipy.stats.morestats import probplot
 
-
 plt.style.use('ggplot')
 
 
@@ -272,6 +271,7 @@ def plot_barplot(matrix, columns, fpath=None, stacked=True, mpl_params=None,
 
 
 class _AxesMod():
+
     def __init__(self, axes):
         self.axes = axes
 
@@ -304,14 +304,14 @@ def _plot_bars(bar_values, bin_edges, axes, orientation, log_normed):
     width = bin_edges[1] - bin_edges[0]
     if orientation == 'vertical':
         axes.bar(bin_edges[:-1], bar_values, width=width)
-        axes.tick_params(axis='x', which='both', bottom='off',
-                         top='off', labelbottom='off')
+        axes.tick_params(axis='x', which='both', bottom=False,
+                         top=False, labelbottom=False)
         if log_normed:
             axes.set_yscale('log')
     else:
         axes.barh(bin_edges[:-1], bar_values[::-1], height=width)
         axes.tick_params(axis='y', which='both',
-                         left='off', right='off', labelleft='off')
+                         left=False, right=False, labelleft=False)
         for label in axes.get_xticklabels():
             label.set_rotation(-90)
 
@@ -343,8 +343,8 @@ def plot_hist2d(hist, xbins, ybins, fhand=None, no_interactive_win=False,
     result = axesmod.hist2d(numpy.flipud(hist), xbins, ybins,
                             log_normed=log_normed)
 
-    hist2d_axes.tick_params(axis='x', which='both', top='off')
-    hist2d_axes.tick_params(axis='y', which='both', right='off')
+    hist2d_axes.tick_params(axis='x', which='both', top=False)
+    hist2d_axes.tick_params(axis='y', which='both', right=False)
 
     if hist1d:
         ax_marg_x = fig.add_subplot(grids[0, :-1], sharex=hist2d_axes)
@@ -468,17 +468,17 @@ def _manhattan_plot_by_chrom(chrom, pos, values, mpl_params=None,
         axes.set_xlim(right=chrom_max_len)
         axes.tick_params(axis='x',
                          which='both',
-                         bottom='off',
-                         top='off',
-                         labelbottom='off')
+                         bottom=False,
+                         top=False,
+                         labelbottom=False)
         _set_mpl_params(axes, mpl_params)
 
     last_axes = axess[-1]
     last_axes.tick_params(axis='x',
                           which='both',
-                          bottom='on',
-                          top='off',
-                          labelbottom='on')
+                          bottom=True,
+                          top=False,
+                          labelbottom=True)
 
     _print_figure(canvas, fhand, no_interactive_win=no_interactive_win)
 
@@ -809,7 +809,7 @@ def _plot_barplot(heights, axes, bar_width):
 
 
 def _set_xaxis(axes, xmin, xmax):
-    axes.tick_params(axis='x', which='both', bottom='off', top='off')
+    axes.tick_params(axis='x', which='both', bottom=False, top=False)
     axes.get_xaxis().set_ticklabels([])
     axes.set_xlim(xmin, xmax)
 

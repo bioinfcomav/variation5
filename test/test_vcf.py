@@ -8,7 +8,6 @@
 import unittest
 from os.path import join
 
-
 from variation.variations.vars_matrices import VariationsArrays
 from variation.gt_parsers.vcf import VCFParser
 from test.test_utils import TEST_DATA_DIR
@@ -52,6 +51,7 @@ class VcfTest(unittest.TestCase):
             filters.append(var[6])
         assert filters == [None, None, None, None, None]
         vcf_fhand.close()
+
 
 if __name__ == "__main__":
     # import sys; sys.argv = ['', 'VcfTest.test_parser_vcf_filters']

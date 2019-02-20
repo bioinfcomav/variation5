@@ -69,14 +69,14 @@ class ArrayTest(unittest.TestCase):
             shutil.copy(in_fpath, fhand_out.name)
             hdf5 = VariationsH5(fhand_out.name, mode='r+')
             dset = hdf5['/calls/DP']
-            orig_array = dset.value
+            orig_array = dset[()]
             append_matrix(dset, array)
-            assert numpy.all(dset.value == expected)
+            assert numpy.all(dset[()] == expected)
 
             append_matrix(dset, dset)
 
             array2 = numpy.array([[1, 1, 1], [2, 2, 2]])
-            append_matrix(array2, dset.value)
+            append_matrix(array2, dset[()])
             assert numpy.all(expected2 == array2)
 
         append_matrix(orig_array, array)

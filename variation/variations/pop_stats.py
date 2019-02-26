@@ -281,7 +281,7 @@ def _format_num(num):
     elif isinstance(num, str):
         return num
     else:
-        return '{:.2f}'.format(num)
+        return '{:.3f}'.format(num)
 
 
 def _draw_pop_stat_violins(pop_stats, plot_fpath, ylimits):

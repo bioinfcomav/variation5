@@ -806,7 +806,8 @@ class _VariationMatrices():
         if hasattr(self, 'flush'):
             self._h5file.flush()
 
-    def get_chunk(self, index, kept_fields=None, ignored_fields=None):
+    def get_chunk(self, index, kept_fields=None, ignored_fields=None,
+                  return_copy=False):
 
         paths = self._filter_fields(kept_fields=kept_fields,
                                     ignored_fields=ignored_fields)
@@ -835,6 +836,8 @@ class _VariationMatrices():
                     matrix = numpy.array([])
                 else:
                     raise
+            if return_copy:
+                matrix = matrix.copy()
             var_array[path] = matrix
 
         if var_array is None:
@@ -842,6 +845,7 @@ class _VariationMatrices():
 
         var_array._set_metadata(self.metadata)
         var_array._set_samples(self.samples)
+
         return var_array
 
     def get_genome_chunk(self, chrom, start, end):
@@ -899,7 +903,8 @@ class _VariationMatrices():
             yield slice_
 
     def _iterate_chunks(self, kept_fields=None, ignored_fields=None,
-                       chunk_size=None, random_sample_rate=1, start=0):
+                       chunk_size=None, random_sample_rate=1, start=0,
+                       return_copy=False):
         if chunk_size is None:
             chunk_size = self._vars_in_chunk
 
@@ -908,15 +913,17 @@ class _VariationMatrices():
                                                    random_sample_rate=random_sample_rate)
         for slice_ in slices:
             yield slice_, self.get_chunk(slice_, kept_fields=kept_fields,
-                                         ignored_fields=ignored_fields)
+                                         ignored_fields=ignored_fields,
+                                         return_copy=return_copy)
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None,
-                       chunk_size=None, random_sample_rate=1, start=0):
+                       chunk_size=None, random_sample_rate=1, start=0,
+                       return_copy=False):
         return (chunk for _, chunk in self._iterate_chunks(kept_fields=kept_fields,
                                                            ignored_fields=ignored_fields,
                                                            chunk_size=chunk_size,
                                                            random_sample_rate=random_sample_rate,
-                                                           start=start))
+                                                           start=start, return_copy=return_copy))
 
     @property
     def pos_index(self):
@@ -925,7 +932,7 @@ class _VariationMatrices():
         return self._index
 
     def iterate_wins(self, win_size, win_step=None, kept_fields=None,
-                     ignored_fields=None, chroms=None):
+                     ignored_fields=None, chroms=None, return_copy=False):
         if win_step is None:
             win_step = win_size
         index = self.pos_index
@@ -952,11 +959,12 @@ class _VariationMatrices():
                     raise RuntimeError(msg)
                 yield self.get_chunk(slice(idx0, idx1),
                                      kept_fields=kept_fields,
-                                     ignored_fields=ignored_fields)
+                                     ignored_fields=ignored_fields,
+                                     return_copy=return_copy)
                 pos += win_step
 
     def iterate_chroms(self, kept_fields=None, ignored_fields=None,
-                       chroms=None):
+                       chroms=None, return_copy=False):
         index = self.pos_index
 
         if chroms is None:
@@ -970,21 +978,25 @@ class _VariationMatrices():
                 continue
             yield chrom, self.get_chunk(slice(chrom_start, chrom_end + 1),
                                         kept_fields=kept_fields,
-                                        ignored_fields=ignored_fields)
+                                        ignored_fields=ignored_fields,
+                                        return_copy=return_copy)
 
     def iterate_chunk_pairs(self, max_dist, kept_fields=None,
-                            ignored_fields=None, chunk_size=None):
+                            ignored_fields=None, chunk_size=None,
+                            return_copy=False):
 
         for chunk1_slice, chunk1 in self._iterate_chunks(kept_fields=kept_fields,
                                                          ignored_fields=ignored_fields,
-                                                         chunk_size=chunk_size):
+                                                         chunk_size=chunk_size,
+                                                         return_copy=return_copy):
             chunk1_end_pos = chunk1[POS_FIELD][-1]
             chunk1_end_chrom = chunk1[CHROM_FIELD][-1]
 
             for chunk2 in self.iterate_chunks(kept_fields=kept_fields,
                                               ignored_fields=ignored_fields,
                                               chunk_size=chunk_size,
-                                              start=chunk1_slice.start):
+                                              start=chunk1_slice.start,
+                                              return_copy=return_copy):
                 chunk2_start_chrom = chunk2[CHROM_FIELD][0]
                 if chunk1_end_chrom != chunk2_start_chrom:
                     break

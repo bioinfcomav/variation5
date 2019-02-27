@@ -503,9 +503,18 @@ def calc_pop_distance(variations, populations, method, chunk_size=None,
 
 
 def filter_dist_matrix(dists, idxs_to_keep, squareform_checks=True):
-    dists = squareform(dists, checks=squareform_checks)
+    if len(dists.shape) == 1:
+        try:
+            dists = squareform(dists, checks=squareform_checks)
+        except ValueError as error:
+            dists = squareform(dists, checks=False)
+            print('sum(absolute(X))', numpy.nansum(numpy.absolute(dists)))
+            print('sum(absolute(X - X.T))', numpy.nansum(numpy.absolute(dists - dists.T)))
+            print('sum(diagonal(X))', numpy.nansum(numpy.absolute(numpy.diagonal(dists))))
+            print('If the differences of the two triangular matrices are small you might consider calling with squareform_checks=False')
+            raise 
+
     dists = dists[:, idxs_to_keep][idxs_to_keep, :]
-    dists = squareform(dists, checks=squareform_checks)
     return dists
 
 

@@ -10,6 +10,7 @@ import allel
 
 from variation.variations.stats import GT_FIELD
 from variation.variations.filters import NonBiallelicFilter
+from variation.variations.distance import _get_square_dist
 
 
 def non_param_multi_dim_scaling(dists, n_dims=3, n_threads=None, metric=True):
@@ -54,7 +55,7 @@ def do_pcoa(dists):
     # Principles of Multivariate analysis: A User's Perspective.
     # W.J. Krzanowski Oxford University Press, 2000. p106.
 
-    dists = squareform(dists)
+    dists = _get_square_dist(dists)
 
     e_matrix = (dists * dists) / -2.0
     f_matrix = _make_f_matrix(e_matrix)

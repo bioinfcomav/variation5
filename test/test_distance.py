@@ -13,7 +13,8 @@ import math
 import numpy
 from scipy.spatial.distance import squareform
 
-from variation.variations.distance import (_indi_pairwise_dist, _kosman,
+from variation.variations.distance import (_kosman,
+                                           _IndiPairwiseCalculator,
                                            calc_pairwise_distance,
                                            sel_samples_from_dist_mat,
                                            _matching, calc_pop_distance,
@@ -91,12 +92,12 @@ class IndividualDistTest(unittest.TestCase):
         gts = numpy.transpose(gts, axes=(1, 0, 2)).astype(numpy.int16)
         varis = VariationsArrays()
         varis[GT_FIELD] = gts
-        abs_distance, n_snps = _indi_pairwise_dist(varis, {})
-        distance = abs_distance / n_snps
+        pairwise_dist_calculator = _IndiPairwiseCalculator()
+        abs_dist, n_snps = pairwise_dist_calculator.calc_dist(varis,
+                                                              method='kosman')
+        distance = abs_dist / n_snps
         expected = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]
         assert numpy.allclose(distance, expected)
-
-        abs_distance, n_snps = _indi_pairwise_dist(varis, {})
 
     def test_kosman_pairwise_by_chunk(self):
         a = numpy.array([[-1, -1], [0, 0], [0, 1],
@@ -362,5 +363,5 @@ class TestLocateNans(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise']
+    # import sys;sys.argv = ['', 'IndividualDistTest.test_kosman_pairwise_by_chunk']
     unittest.main()

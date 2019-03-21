@@ -73,7 +73,9 @@ def _calc_matching_pairwise_distance_by_chunk(variations, chunk_size):
     for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
                                            chunk_size=chunk_size):
         indi_cache = {}
-        res = _indi_pairwise_dist(chunk, indi_cache, method='matching')
+        pairwise_dist_calculator = _IndiPairwiseCalculator()
+        res = pairwise_dist_calculator.calc_dist(chunk, indi_cache,
+                                                 method='matching')
         if res is None:
             continue
         matching_snps, tot_snps = res
@@ -130,8 +132,9 @@ def _calc_matching_pairwise_distance(variations, chunk_size=None,
     abs_distances, n_snps_matrix = None, None
     for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
                                            chunk_size=chunk_size):
-        indi_cache = {}
-        res = _indi_pairwise_dist(chunk, indi_cache, method='matching')
+        pairwise_dist_calculator = _IndiPairwiseCalculator()
+        res = pairwise_dist_calculator.calc_dist(chunk,
+                                                 method='matching')
         chunk_abs_distances, n_snps_chunk = res
         if abs_distances is None and n_snps_matrix is None:
             abs_distances = chunk_abs_distances.copy()
@@ -144,7 +147,7 @@ def _calc_matching_pairwise_distance(variations, chunk_size=None,
         return abs_distances / n_snps_matrix
 
 
-def _indi_pairwise_dist(variations, indi_cache, method='kosman'):
+def _indi_pairwise_dist_old(variations, indi_cache, method='kosman'):
     gts = variations[GT_FIELD]
     n_samples = gts.shape[1]
     dists = numpy.zeros(int((n_samples ** 2 - n_samples) / 2))
@@ -159,14 +162,49 @@ def _indi_pairwise_dist(variations, indi_cache, method='kosman'):
     return dists, n_snps_matrix
 
 
+class _IndiPairwiseCalculator:
+    def __init__(self):
+        self._pairwise_dist_cache = {}
+        self._indi_cache = {}
+
+    def calc_dist(self, variations, method='kosman'):
+        gts = variations[GT_FIELD]
+        dist_cache = self._pairwise_dist_cache
+        indi_cache = self._indi_cache
+
+        identical_indis = numpy.unique(gts, axis=1, return_inverse=True)[1]
+
+        n_samples = gts.shape[1]
+        dists = numpy.zeros(int((n_samples ** 2 - n_samples) / 2))
+        n_snps_matrix = numpy.zeros(int((n_samples ** 2 - n_samples) / 2))
+        index = 0
+        dist_funct = _PAIRWISE_DISTANCES[method]
+        for sample_i, sample_j in itertools.combinations(range(n_samples), 2):
+            indentical_type_for_sample_i = identical_indis[sample_i]
+            indentical_type_for_sample_j = identical_indis[sample_j]
+            key = tuple(sorted((indentical_type_for_sample_i,
+                                indentical_type_for_sample_j)))
+            try:
+                dist, n_snps = dist_cache[key]
+            except KeyError:
+                dist, n_snps = dist_funct(gts, sample_i, sample_j, indi_cache)
+                dist_cache[key] = dist, n_snps
+
+            dists[index] = dist
+            n_snps_matrix[index] = n_snps
+            index += 1
+        return dists, n_snps_matrix
+
+
 def _calc_kosman_pairwise_distance_by_chunk(variations, chunk_size,
                                             min_num_snps=None):
 
     abs_distances, n_snps_matrix = None, None
     for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
                                            chunk_size=chunk_size):
-        indi_cache = {}
-        res = _indi_pairwise_dist(chunk, indi_cache, method='kosman')
+        pairwise_dist_calculator = _IndiPairwiseCalculator()
+        res = pairwise_dist_calculator.calc_dist(chunk,
+                                                 method='kosman')
         chunk_abs_distances, n_snps_chunk = res
         if abs_distances is None and n_snps_matrix is None:
             abs_distances = chunk_abs_distances.copy()
@@ -179,7 +217,8 @@ def _calc_kosman_pairwise_distance_by_chunk(variations, chunk_size,
         n_snps_matrix[n_snps_matrix < min_num_snps] = numpy.nan
 
     with numpy.errstate(invalid='ignore'):
-        return abs_distances / n_snps_matrix
+        dists = abs_distances / n_snps_matrix
+    return dists
 
 
 def _calc_kosman_pairwise_distance(variations, chunk_size=None,
@@ -194,8 +233,9 @@ def _calc_kosman_pairwise_distance(variations, chunk_size=None,
                                                            chunk_size,
                                                            min_num_snps=min_num_snps)
     else:
-        abs_dist, n_snps = _indi_pairwise_dist(variations, {},
-                                               method='kosman')
+        pairwise_dist_calculator = _IndiPairwiseCalculator()
+        abs_dist, n_snps = pairwise_dist_calculator.calc_dist(variations,
+                                                              method='kosman')
         if min_num_snps is not None:
             n_snps[n_snps < min_num_snps] = numpy.nan
         with numpy.errstate(invalid='ignore'):
@@ -503,18 +543,9 @@ def calc_pop_distance(variations, populations, method, chunk_size=None,
 
 
 def filter_dist_matrix(dists, idxs_to_keep, squareform_checks=True):
-    if len(dists.shape) == 1:
-        try:
-            dists = squareform(dists, checks=squareform_checks)
-        except ValueError as error:
-            dists = squareform(dists, checks=False)
-            print('sum(absolute(X))', numpy.nansum(numpy.absolute(dists)))
-            print('sum(absolute(X - X.T))', numpy.nansum(numpy.absolute(dists - dists.T)))
-            print('sum(diagonal(X))', numpy.nansum(numpy.absolute(numpy.diagonal(dists))))
-            print('If the differences of the two triangular matrices are small you might consider calling with squareform_checks=False')
-            raise 
-
+    dists = squareform(dists, checks=squareform_checks)
     dists = dists[:, idxs_to_keep][idxs_to_keep, :]
+    dists = squareform(dists, checks=squareform_checks)
     return dists
 
 

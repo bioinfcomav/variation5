@@ -443,7 +443,16 @@ def generate_blocks(variations, difference_rate_allowed=0.05,
             print('first_not_correlated_idx:', first_not_correlated_idx)
             print('stop_idx_due_to_lack_of_correlation:', stop_idx_due_to_lack_of_correlation)
 
-        enough_information_chunks = [numpy.logical_not(array_chunk['enough_information']) for array_chunk in highly_correlated2]
+        enough_information_chunks = []
+        num_items_required = first_not_correlated_idx
+        num_items_included = 0
+        for array_chunk in highly_correlated2:
+            enough_information_chunk = numpy.logical_not(array_chunk['enough_information'])
+            enough_information_chunks.append(enough_information_chunk)
+            num_items_included += enough_information_chunk.shape[0]
+            if num_items_included > num_items_required:
+                break
+
         if enough_information_chunks:
             not_enough_info = numpy.concatenate(enough_information_chunks)
         else:

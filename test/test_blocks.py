@@ -660,6 +660,6 @@ class BlockGenerationTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_group_vars_per_block_test']
+    # import sys;sys.argv = ['', 'GroupVarsPerBlockTest.test_group_vars_per_block_test']
     unittest.main()
 

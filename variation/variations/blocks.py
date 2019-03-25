@@ -450,7 +450,7 @@ def generate_blocks(variations, difference_rate_allowed=0.05,
             enough_information_chunk = numpy.logical_not(array_chunk['enough_information'])
             enough_information_chunks.append(enough_information_chunk)
             num_items_included += enough_information_chunk.shape[0]
-            if num_items_included > num_items_required:
+            if num_items_required is not None and num_items_included > num_items_required:
                 break
 
         if enough_information_chunks:

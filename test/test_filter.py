@@ -35,7 +35,8 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           NoMissingGTsFilter,
                                           NoMissingGTsOrHetFilter,
                                           SNPPositionFilter,
-                                          AlleleObservationBasedMafFilter)
+                                          AlleleObservationBasedMafFilter,
+                                          VarsSamplingFilter)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
@@ -562,6 +563,18 @@ class SNPPosFilterTest(unittest.TestCase):
         regions = [('2',)]
         filtered = SNPPositionFilter(regions)(variations)
         assert not filtered[FLT_VARS][POS_FIELD].size
+
+
+class SamplingFilterTest(unittest.TestCase):
+
+    def test_filter_by_pos(self):
+        variations = VariationsArrays()
+        pos = numpy.array([5, 10, 15, 20, 25])
+        chrom = numpy.array(['1'] * len(pos))
+        variations[POS_FIELD] = pos
+        variations[CHROM_FIELD] = chrom
+        filtered = VarsSamplingFilter(sample_rate=0.5)(variations)[FLT_VARS]
+        assert filtered.num_variations == 2
 
 
 class MissingGTSettersTest(unittest.TestCase):

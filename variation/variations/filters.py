@@ -1100,6 +1100,38 @@ class PseudoHetDuplicationFilter2(_BaseFilter):
         return freq_high_dp_and_het_calls
 
 
+class VarsSamplingFilter(_BaseFilter):
+
+    def __init__(self, sample_rate, **kwargs):
+        self.sample_rate = sample_rate
+
+        super().__init__(**kwargs)
+
+    def __call__(self, variations):
+
+        if variations.num_variations == 0:
+            raise ValueError('No SNPs to filter')
+
+        num_vars = variations.num_variations
+        num_vars_keep = round(num_vars * self.sample_rate)
+        selected_rows = numpy.sort(numpy.random.choice(num_vars, num_vars_keep,
+                                                       replace=False))
+        result = {}
+
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
+
+        if self.do_filtering:
+            flt_vars = variations.get_chunk(selected_rows)
+            result[FLT_VARS] = flt_vars
+
+            if self.return_discarded:
+                discarded_rows = numpy.logical_not(selected_rows)
+                discarded_vars = variations.get_chunk(discarded_rows)
+                result[DISCARDED_VARS] = discarded_vars
+        return result
+
+
 class OrFilter:
 
     def __init__(self, filters):

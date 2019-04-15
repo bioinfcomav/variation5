@@ -878,37 +878,46 @@ class _VariationMatrices():
             paths = set(paths).difference(ignored_fields)
         return paths
 
-    def _create_iterate_chunk_slices(self, chunk_size, start=0,
+    def _create_iterate_chunk_slices(self, chunk_size, start=0, stop=None,
                                      random_sample_rate=1):
-        nsnps = self.num_variations
-        for start in range(start, nsnps, chunk_size):
+        if stop is None:
+            num_vars_in_self = self.num_variations
+            stop = num_vars_in_self
 
-            stop = start + chunk_size
-            if stop > nsnps:
-                stop = nsnps
+        do_break = False
+        for chunk_start in range(start, stop, chunk_size):
+
+            chunk_stop = chunk_start + chunk_size
+            if chunk_stop > stop:
+                chunk_stop = stop
+                do_break = True
+
             if random_sample_rate == 1:
-                slice_ = slice(start, stop)
+                slice_ = slice(chunk_start, chunk_stop)
             else:
-                num_vars = stop - start
+                num_vars = chunk_stop - chunk_start
                 num_vars_keep = round(num_vars * random_sample_rate)
                 if not num_vars_keep:
                     continue
                 slice_ = numpy.random.choice(num_vars, num_vars_keep,
                                              replace=False)
                 slice_.sort()
-                slice_ += start
+                slice_ += chunk_start
 
                 if len(slice_) == 1:
                     slice_ = slice(slice_[0], slice_[0] + 1)
             yield slice_
+            if do_break:
+                break
 
     def _iterate_chunks(self, kept_fields=None, ignored_fields=None,
-                       chunk_size=None, random_sample_rate=1, start=0,
-                       return_copy=False):
+                        chunk_size=None, random_sample_rate=1, start=0,
+                        stop=None,
+                        return_copy=False):
         if chunk_size is None:
             chunk_size = self._vars_in_chunk
 
-        slices = self._create_iterate_chunk_slices(start=start,
+        slices = self._create_iterate_chunk_slices(start=start, stop=stop,
                                                    chunk_size=chunk_size,
                                                    random_sample_rate=random_sample_rate)
         for slice_ in slices:
@@ -918,12 +927,14 @@ class _VariationMatrices():
 
     def iterate_chunks(self, kept_fields=None, ignored_fields=None,
                        chunk_size=None, random_sample_rate=1, start=0,
-                       return_copy=False):
+                       stop=None, return_copy=False):
         return (chunk for _, chunk in self._iterate_chunks(kept_fields=kept_fields,
                                                            ignored_fields=ignored_fields,
                                                            chunk_size=chunk_size,
                                                            random_sample_rate=random_sample_rate,
-                                                           start=start, return_copy=return_copy))
+                                                           start=start,
+                                                           stop=stop,
+                                                           return_copy=return_copy))
 
     @property
     def pos_index(self):

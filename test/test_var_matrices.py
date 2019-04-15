@@ -245,6 +245,14 @@ class VarMatsTests(unittest.TestCase):
             for chunk1, chunk2 in zip(chunks1[1:], chunks2):
                 assert numpy.all(chunk1[GT_FIELD] == chunk2[GT_FIELD])
 
+        fpath = join(TEST_DATA_DIR, 'ril.vcf.gz')
+        kwargs = {'ignored_fields': {'/calls/GL'}}
+        for var_mats in _create_var_mat_objs_from_vcf(fpath, kwargs=kwargs):
+            chunks = list(var_mats.iterate_chunks(start=100, stop=200, chunk_size=200))
+            chunk1 = chunks[0]
+            chunk2 = var_mats.get_chunk(slice(100, 200))
+            assert numpy.all(chunk1[GT_FIELD] == chunk2[GT_FIELD])
+
     def test_copy(self):
         in_snps = VariationsH5(join(TEST_DATA_DIR, '1000snps.hdf5'), mode='r')
         for klass in VAR_MAT_CLASSES:
@@ -441,5 +449,5 @@ class ChunkPairsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VarMatsTests.test_vcf_to_hdf5']
+    # import sys; sys.argv = ['', 'VarMatsTests.test_iterate_chunks']
     unittest.main()

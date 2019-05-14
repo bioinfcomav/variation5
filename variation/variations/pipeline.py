@@ -1,4 +1,6 @@
 
+import itertools
+
 import numpy
 
 from variation import SNPS_PER_CHUNK
@@ -132,7 +134,7 @@ class Pipeline():
             callable_instance.range = mins[idx], maxs[idx]
 
     def run(self, vars_in, vars_out=None, chunk_size=SNPS_PER_CHUNK,
-            kept_fields=None, ignored_fields=None):
+            kept_fields=None, ignored_fields=None, max_chunks_to_process=None):
 
         self._check_and_fix_histogram_ranges(vars_in, chunk_size,
                                              kept_fields=kept_fields,
@@ -141,6 +143,8 @@ class Pipeline():
         chunks = vars_in.iterate_chunks(kept_fields=kept_fields,
                                         ignored_fields=ignored_fields,
                                         chunk_size=chunk_size)
+        if max_chunks_to_process:
+            chunks = itertools.islice(chunks, max_chunks_to_process)
 
         results_and_chunks = map(self._pipeline_funct, chunks)
 

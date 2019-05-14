@@ -655,9 +655,9 @@ def calc_pop_distance(variations, populations, method, chunk_size=None,
 
 
 def filter_dist_matrix(dists, idxs_to_keep, squareform_checks=True):
-    dists = squareform(dists, checks=squareform_checks)
+    dists = _get_square_dist(dists, squareform_checks=squareform_checks)
     dists = dists[:, idxs_to_keep][idxs_to_keep, :]
-    dists = squareform(dists, checks=squareform_checks)
+    dists = _get_trianguar_dist(dists, squareform_checks=squareform_checks)
     return dists
 
 
@@ -665,11 +665,17 @@ def triangular_dists_to_square(dists, col_names):
     return DataFrame(squareform(dists), index=col_names, columns=col_names)
 
 
-def _get_square_dist(dists):
+def _get_square_dist(dists, squareform_checks=True):
     if len(dists.shape) == 1:
-        return squareform(dists)
+        return squareform(dists, checks=squareform_checks)
     else:
         return dists
+
+def _get_trianguar_dist(dists, squareform_checks=True):
+    if len(dists.shape) == 1:
+        return dists
+    else:
+        return squareform(dists, checks=squareform_checks)
 
 
 def locate_cols_and_rows_with_nan_values_in_dist_matrix(dists):

@@ -299,6 +299,68 @@ class NeiUnbiasedDistTest(unittest.TestCase):
         assert math.isnan(dists[0])
 
 
+class DJostDistTest(unittest.TestCase):
+    def test_dest_jost_distance(self):
+        gts = [[[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 0]],
+               [[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 1]],
+               [[0, 0], [0, 0], [0, 0], [1, 1], [1, 1], [1, 1], [1, 1]]]
+        # indi1,AA,AT
+        # indi2,AT,AA
+        # indi3,AC,AA
+        # indi4,AG,AT
+        # indi5,TT,TT
+        # indi6,TC,TC
+        # indi7,TG,TG
+        # indi8,CC,CC
+        # indi9,CG,CG
+        # indi10,GG,GG
+
+        AA = 1, 1
+        AC = 1, 2
+        AT = 1, 3
+        AG = 1, 4
+        TT = 3, 3
+        TC = 3, 2
+        TG = 3, 4
+        CC = 2, 2
+        CG = 2, 4
+        GG = 4, 4
+        gts = [[AA, AT, AC, AG, TT, TC, TG, CC, CG, GG],
+               [AT, AA, AA, AT, TT, TC, TG, CC, CG, GG]]
+
+        # 1    Pop1    1 1    1 3
+        # 2    Pop1    1 3    1 1
+        # 3    Pop1    1 2    1 1
+        # 4    Pop1    1 4    1 3
+        # 5    Pop1    3 3    3 3
+        # 6    Pop2    3 2    3 2
+        # 7    Pop2    3 4    3 4
+        # 8    Pop2    2 2    2 2
+        # 9    Pop2    2 4    2 4
+        # 10   Pop2    4 4    4 4
+
+        gts = [[(1, 1), (1, 3), (1, 2), (1, 4), (3, 3), (3, 2), (3, 4), (2, 2), (2, 4), (4, 4), (-1, -1)],
+               [(1, 3), (1, 1), (1, 1), (1, 3), (3, 3), (3, 2), (3, 4), (2, 2), (2, 4), (4, 4), (-1, -1)]]
+        samples = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        pops = [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]]
+
+        snps = VariationsArrays()
+        snps['/calls/GT'] = numpy.array(gts)
+        snps.samples = samples
+
+        dists = calc_pop_distance(snps, populations=pops, method='dest',
+                                  min_num_genotypes=0)
+        assert numpy.allclose(dists, [0.65490196])
+
+        dists = calc_pop_distance(snps, populations=pops, method='dest',
+                                  min_num_genotypes=0, chunk_size=1)
+        assert numpy.allclose(dists, [0.65490196])
+
+        dists = calc_pop_distance(snps, populations=pops, method='dest',
+                                  min_num_genotypes=6, chunk_size=1)
+        assert numpy.all(numpy.isnan(dists))
+
+
 class FilterDistTest(unittest.TestCase):
     def test_filter_dists(self):
         dist = [[0, 1, 2],

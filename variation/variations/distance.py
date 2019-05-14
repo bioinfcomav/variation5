@@ -6,10 +6,12 @@ import numpy
 from pandas import DataFrame
 
 from scipy.spatial.distance import squareform
+import scipy
 
 from variation.matrix.methods import is_missing
 from variation.variations.stats import (calc_allele_freq,
-                                        calc_allele_freq_by_depth)
+                                        calc_allele_freq_by_depth,
+                                        _calc_obs_het_counts)
 from variation.variations.filters import SampleFilter, FLT_VARS
 from variation import GT_FIELD, MIN_NUM_GENOTYPES_FOR_POP_STAT, MISSING_INT
 
@@ -306,6 +308,115 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None,
     return dists
 
 
+def _calc_pairwise_dest(vars_for_pop1, vars_for_pop2, chunk,
+                        min_call_dp_for_het, min_num_genotypes):
+        debug = False
+
+        num_pops = 2
+        ploidy = chunk.ploidy
+        alleles = [allele for allele in sorted(numpy.unique(chunk[GT_FIELD])) if allele != MISSING_INT]
+        allele_freq1 = calc_allele_freq(vars_for_pop1, alleles=alleles,
+                                        min_num_genotypes=0)
+        allele_freq2 = calc_allele_freq(vars_for_pop2, alleles=alleles,
+                                        min_num_genotypes=0)
+        exp_het1 = 1 - numpy.sum(allele_freq1 ** ploidy, axis=1)
+        exp_het2 = 1 - numpy.sum(allele_freq2 ** ploidy, axis=1)
+        hs_per_var = (exp_het1 + exp_het2) / 2
+        if debug:
+            print('hs_per_var', hs_per_var)
+        global_allele_freq = (allele_freq1 + allele_freq2) / 2
+        global_exp_het = 1 - numpy.sum(global_allele_freq ** ploidy,
+                                       axis=1)
+        ht_per_var = global_exp_het
+        if debug:
+            print('ht_per_var', ht_per_var)
+        num_hets1, called_gts1 = _calc_obs_het_counts(vars_for_pop1, axis=1,
+                                                      min_call_dp=min_call_dp_for_het)
+        with numpy.errstate(invalid='ignore'):
+            obs_het1 = num_hets1 / called_gts1
+        num_hets2, called_gts2 = _calc_obs_het_counts(vars_for_pop2, axis=1,
+                                                      min_call_dp=min_call_dp_for_het)
+        with numpy.errstate(invalid='ignore'):
+            obs_het2 = num_hets2 / called_gts2
+
+        called_gts = numpy.array([called_gts1, called_gts2])
+        called_gts_hmean = scipy.stats.hmean(called_gts, axis=0)
+
+        mean_obs_het_per_var = numpy.nanmean(numpy.array([obs_het1, obs_het2]), axis=0)
+        corrected_hs = (called_gts_hmean / (called_gts_hmean - 1)) * (hs_per_var - (mean_obs_het_per_var / (2 * called_gts_hmean)))
+        if debug:
+            print('mean_obs_het_per_var', mean_obs_het_per_var)
+            print('corrected_hs', corrected_hs)
+        corrected_ht = ht_per_var + (corrected_hs / (called_gts_hmean * num_pops)) - (mean_obs_het_per_var / (2 * called_gts_hmean * num_pops))
+        if debug:
+            print('corrected_ht', corrected_ht)
+
+        not_enough_gts = numpy.logical_or(called_gts1 < min_num_genotypes,
+                                          called_gts2 < min_num_genotypes)
+        corrected_hs[not_enough_gts] = numpy.nan
+        corrected_ht[not_enough_gts] = numpy.nan
+        return {'corrected_hs': corrected_hs,
+                'corrected_ht': corrected_ht}
+
+
+def _calc_dest_pop_distance(variations, populations, chunk_size=None,
+                            min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                            min_call_dp_for_het=0):
+    pop_sample_filters = [SampleFilter(pop_samples) for pop_samples in populations]
+    pop_ids = list(range(len(populations)))
+
+    if chunk_size is None:
+        chunks = [variations]
+    else:
+        chunks = variations.iterate_chunks()
+
+    accumulated_dists = {}
+    accumulated_hs = {}
+    accumulated_ht = {}
+    num_vars = {}
+
+    for chunk in chunks:
+        for pop_id1, pop_id2 in itertools.combinations(pop_ids, 2):
+
+            vars_for_pop1 = pop_sample_filters[pop_id1](chunk)[FLT_VARS]
+            vars_for_pop2 = pop_sample_filters[pop_id2](chunk)[FLT_VARS]
+
+            res = _calc_pairwise_dest(vars_for_pop1, vars_for_pop2, chunk,
+                                      min_call_dp_for_het=min_call_dp_for_het,
+                                      min_num_genotypes=min_num_genotypes)
+            res['corrected_hs']
+            res['corrected_ht']
+            num_vars_in_chunk = numpy.count_nonzero(~numpy.isnan(res['corrected_hs']))
+            hs_in_chunk = numpy.nansum(res['corrected_hs'])
+            ht_in_chunk = numpy.nansum(res['corrected_ht'])
+
+            key = (pop_id1, pop_id2)
+            if key in accumulated_dists:
+                accumulated_hs[key] += hs_in_chunk
+                accumulated_ht[key] += ht_in_chunk
+                num_vars[key] += num_vars_in_chunk
+            else:
+                accumulated_hs[key] = hs_in_chunk
+                accumulated_ht[key] = ht_in_chunk
+                num_vars[key] = num_vars_in_chunk
+
+    tot_n_pops = len(populations)
+    dists = numpy.empty(int((tot_n_pops ** 2 - tot_n_pops) / 2))
+    dists[:] = numpy.nan
+    num_pops = 2
+    for idx, (pop_id1, pop_id2) in enumerate(itertools.combinations(pop_ids, 2)):
+        key = pop_id1, pop_id2
+        if key in accumulated_hs:
+            with numpy.errstate(invalid='ignore'):
+                corrected_hs = accumulated_hs[key] / num_vars[key]
+                corrected_ht = accumulated_ht[key] / num_vars[key]
+            dest = (num_pops / (num_pops - 1)) * ((corrected_ht - corrected_hs) / (1 - corrected_hs))
+        else:
+            dest = numpy.nan
+        dists[idx] = dest
+    return dists
+
+
 def calc_gst_per_loci(variations, populations, chunk_size=None,
                       min_num_genotypes=None):
     if chunk_size is None:
@@ -526,6 +637,7 @@ DISTANCES = {'kosman': _calc_kosman_pairwise_distance,
              'matching': _calc_matching_pairwise_distance,
              'nei': _calc_nei_pop_distance,
              'nei_unbiased': _calc_pop_pairwise_unbiased_nei_dists,
+             'dest': _calc_dest_pop_distance,
              'nei_depth': _calc_nei_pop_distance_by_depth,
              'gst_per_loci': calc_gst_per_loci}
 

@@ -362,6 +362,7 @@ def _calc_pairwise_dest(vars_for_pop1, vars_for_pop2, chunk,
 def _calc_dest_pop_distance(variations, populations, chunk_size=None,
                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
                             min_call_dp_for_het=0):
+    '''This is an implementation of the formulas proposed in GenAlex'''
     pop_sample_filters = [SampleFilter(pop_samples) for pop_samples in populations]
     pop_ids = list(range(len(populations)))
 

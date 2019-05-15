@@ -308,6 +308,25 @@ def _calc_nei_pop_distance(variations, populations, chunk_size=None,
     return dists
 
 
+def hmean(array, axis=0, dtype=None):
+    # Harmonic mean only defined if greater than zero
+    if isinstance(array, numpy.ma.MaskedArray):
+        size = array.count(axis)
+    else:
+        if axis is None:
+            array = array.ravel()
+            size = array.shape[0]
+        else:
+            size = array.shape[axis]
+    with numpy.errstate(divide='ignore'):
+        inverse_mean = numpy.sum(1.0 / array, axis=axis, dtype=dtype)
+    is_inf = numpy.logical_not(numpy.isfinite(inverse_mean))
+    hmean = size / inverse_mean
+    hmean[is_inf] = numpy.nan
+
+    return hmean
+
+
 def _calc_pairwise_dest(vars_for_pop1, vars_for_pop2, chunk,
                         min_call_dp_for_het, min_num_genotypes):
         debug = False
@@ -340,21 +359,29 @@ def _calc_pairwise_dest(vars_for_pop1, vars_for_pop2, chunk,
             obs_het2 = num_hets2 / called_gts2
 
         called_gts = numpy.array([called_gts1, called_gts2])
-        called_gts_hmean = scipy.stats.hmean(called_gts, axis=0)
+        try:
+            called_gts_hmean = hmean(called_gts, axis=0)
+        except ValueError:
+            called_gts_hmean = None
 
-        mean_obs_het_per_var = numpy.nanmean(numpy.array([obs_het1, obs_het2]), axis=0)
-        corrected_hs = (called_gts_hmean / (called_gts_hmean - 1)) * (hs_per_var - (mean_obs_het_per_var / (2 * called_gts_hmean)))
-        if debug:
-            print('mean_obs_het_per_var', mean_obs_het_per_var)
-            print('corrected_hs', corrected_hs)
-        corrected_ht = ht_per_var + (corrected_hs / (called_gts_hmean * num_pops)) - (mean_obs_het_per_var / (2 * called_gts_hmean * num_pops))
-        if debug:
-            print('corrected_ht', corrected_ht)
+        if called_gts_hmean is None:
+            num_vars = vars_for_pop1.num_variations
+            corrected_hs = numpy.full((num_vars,), numpy.nan)
+            corrected_ht = numpy.full((num_vars,), numpy.nan)
+        else:
+            mean_obs_het_per_var = numpy.nanmean(numpy.array([obs_het1, obs_het2]), axis=0)
+            corrected_hs = (called_gts_hmean / (called_gts_hmean - 1)) * (hs_per_var - (mean_obs_het_per_var / (2 * called_gts_hmean)))
+            if debug:
+                print('mean_obs_het_per_var', mean_obs_het_per_var)
+                print('corrected_hs', corrected_hs)
+            corrected_ht = ht_per_var + (corrected_hs / (called_gts_hmean * num_pops)) - (mean_obs_het_per_var / (2 * called_gts_hmean * num_pops))
+            if debug:
+                print('corrected_ht', corrected_ht)
 
-        not_enough_gts = numpy.logical_or(called_gts1 < min_num_genotypes,
-                                          called_gts2 < min_num_genotypes)
-        corrected_hs[not_enough_gts] = numpy.nan
-        corrected_ht[not_enough_gts] = numpy.nan
+            not_enough_gts = numpy.logical_or(called_gts1 < min_num_genotypes,
+                                              called_gts2 < min_num_genotypes)
+            corrected_hs[not_enough_gts] = numpy.nan
+            corrected_ht[not_enough_gts] = numpy.nan
         return {'corrected_hs': corrected_hs,
                 'corrected_ht': corrected_ht}
 

@@ -169,19 +169,35 @@ class _IndiPairwiseCalculator:
         self._pairwise_dist_cache = {}
         self._indi_cache = {}
 
-    def calc_dist(self, variations, method='kosman'):
+    def calc_dist(self, variations, method='kosman',
+                  pop1_samples=None, pop2_samples=None):
         gts = variations[GT_FIELD]
         dist_cache = self._pairwise_dist_cache
         indi_cache = self._indi_cache
 
         identical_indis = numpy.unique(gts, axis=1, return_inverse=True)[1]
 
-        n_samples = gts.shape[1]
-        dists = numpy.zeros(int((n_samples ** 2 - n_samples) / 2))
-        n_snps_matrix = numpy.zeros(int((n_samples ** 2 - n_samples) / 2))
+        if pop1_samples is None:
+            n_samples = gts.shape[1]
+            num_dists_to_calculate = int((n_samples ** 2 - n_samples) / 2)
+            dists = numpy.zeros(num_dists_to_calculate)
+            n_snps_matrix = numpy.zeros(num_dists_to_calculate)
+        else:
+            shape = (len(pop1_samples), len(pop2_samples))
+            dists = numpy.zeros(shape)
+            n_snps_matrix = numpy.zeros(shape)
+
         index = 0
         dist_funct = _PAIRWISE_DISTANCES[method]
-        for sample_i, sample_j in itertools.combinations(range(n_samples), 2):
+
+        if pop1_samples is None:
+            sample_combinations = itertools.combinations(range(n_samples), 2)
+        else:
+            pop1_sample_idxs = [idx for idx, sample in enumerate(variations.samples) if sample in pop1_samples]
+            pop2_sample_idxs = [idx for idx, sample in enumerate(variations.samples) if sample in pop2_samples]
+            sample_combinations = itertools.product(pop1_sample_idxs,
+                                                    pop2_sample_idxs)
+        for sample_i, sample_j in sample_combinations:
             indentical_type_for_sample_i = identical_indis[sample_i]
             indentical_type_for_sample_j = identical_indis[sample_j]
             key = tuple(sorted((indentical_type_for_sample_i,
@@ -192,21 +208,31 @@ class _IndiPairwiseCalculator:
                 dist, n_snps = dist_funct(gts, sample_i, sample_j, indi_cache)
                 dist_cache[key] = dist, n_snps
 
-            dists[index] = dist
-            n_snps_matrix[index] = n_snps
-            index += 1
+            if pop1_samples is None:
+                dists[index] = dist
+                n_snps_matrix[index] = n_snps
+                index += 1
+            else:
+                dists_samplei_idx = pop1_sample_idxs.index(sample_i)
+                dists_samplej_idx = pop2_sample_idxs.index(sample_j)
+                dists[dists_samplei_idx, dists_samplej_idx] = dist
+                n_snps_matrix[dists_samplei_idx, dists_samplej_idx] = n_snps
         return dists, n_snps_matrix
 
 
 def _calc_kosman_pairwise_distance_by_chunk(variations, chunk_size,
-                                            min_num_snps=None):
+                                            min_num_snps=None,
+                                            pop1_samples=None,
+                                            pop2_samples=None):
 
     abs_distances, n_snps_matrix = None, None
     for chunk in variations.iterate_chunks(kept_fields=[GT_FIELD],
                                            chunk_size=chunk_size):
         pairwise_dist_calculator = _IndiPairwiseCalculator()
         res = pairwise_dist_calculator.calc_dist(chunk,
-                                                 method='kosman')
+                                                 method='kosman',
+                                                 pop1_samples=pop1_samples,
+                                                 pop2_samples=pop1_samples)
         chunk_abs_distances, n_snps_chunk = res
         if abs_distances is None and n_snps_matrix is None:
             abs_distances = chunk_abs_distances.copy()
@@ -238,6 +264,29 @@ def _calc_kosman_pairwise_distance(variations, chunk_size=None,
         pairwise_dist_calculator = _IndiPairwiseCalculator()
         abs_dist, n_snps = pairwise_dist_calculator.calc_dist(variations,
                                                               method='kosman')
+        if min_num_snps is not None:
+            n_snps[n_snps < min_num_snps] = numpy.nan
+        with numpy.errstate(invalid='ignore'):
+            distance = abs_dist / n_snps
+    return distance
+
+
+def _calc_kosman_pairwise_distance_between_pops(variations,
+                                                pop1_samples, pop2_samples,
+                                                chunk_size=None,
+                                                min_num_snps=None):
+    if chunk_size:
+        distance = _calc_kosman_pairwise_distance_by_chunk(variations,
+                                                           chunk_size,
+                                                           min_num_snps=min_num_snps,
+                                                           pop1_samples=pop1_samples,
+                                                           pop2_samples=pop2_samples)
+    else:
+        pairwise_dist_calculator = _IndiPairwiseCalculator()
+        abs_dist, n_snps = pairwise_dist_calculator.calc_dist(variations,
+                                                              method='kosman',
+                                                              pop1_samples=pop1_samples,
+                                                              pop2_samples=pop2_samples)
         if min_num_snps is not None:
             n_snps[n_snps < min_num_snps] = numpy.nan
         with numpy.errstate(invalid='ignore'):
@@ -670,6 +719,18 @@ DISTANCES = {'kosman': _calc_kosman_pairwise_distance,
              'gst_per_loci': calc_gst_per_loci}
 
 
+def calc_pairwise_distances_between_pops(variations, pop1_samples, pop2_samples,
+                                         chunk_size=None, method='kosman',
+                                         min_num_snps=None):
+    if method != 'kosman':
+        msg = 'only kosman distances for pairwise between pops'
+        raise NotImplementedError(msg)
+    return _calc_kosman_pairwise_distance_between_pops(variations,
+                                                       pop1_samples, pop2_samples,
+                                                       chunk_size=chunk_size,
+                                                       min_num_snps=min_num_snps)
+
+
 def calc_pairwise_distance(variations, chunk_size=None, method='kosman',
                            min_num_snps=None):
     return DISTANCES[method](variations, chunk_size=chunk_size,
@@ -698,6 +759,7 @@ def _get_square_dist(dists, squareform_checks=True):
         return squareform(dists, checks=squareform_checks)
     else:
         return dists
+
 
 def _get_trianguar_dist(dists, squareform_checks=True):
     if len(dists.shape) == 1:

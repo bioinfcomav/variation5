@@ -22,7 +22,8 @@ from variation.variations.distance import (_kosman,
                                            calc_gst_per_loci,
                                            _calc_pop_pairwise_unbiased_nei_dists,
                                            triangular_dists_to_square,
-                                           locate_cols_and_rows_with_nan_values_in_dist_matrix)
+                                           locate_cols_and_rows_with_nan_values_in_dist_matrix,
+                                           calc_pairwise_distances_between_pops)
 from variation.variations.vars_matrices import VariationsArrays, VariationsH5
 from variation.variations.stats import GT_FIELD
 from test.test_utils import TEST_DATA_DIR
@@ -139,6 +140,47 @@ class IndividualDistTest(unittest.TestCase):
         variations['/calls/GT'][:5, 1, :] = 0
         assert calc_pairwise_distance(variations)[0] == 1
         assert calc_pairwise_distance(variations, chunk_size=3)[0] == 1
+
+    def test_kosman_pairwise_between_pops_by_chunk(self):
+        a = numpy.array([[-1, -1], [0, 0], [0, 1],
+                         [0, 0], [0, 0], [0, 1], [0, 1],
+                         [0, 1], [0, 0], [0, 0], [0, 1]])
+        b = numpy.array([[1, 1], [-1, -1], [0, 0],
+                         [0, 0], [1, 1], [0, 1], [1, 0],
+                         [1, 0], [1, 0], [0, 1], [1, 1]])
+        c = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
+        d = numpy.full(shape=(11, 2), fill_value=1, dtype=numpy.int16)
+        gts = numpy.stack((a, b, c, d), axis=0)
+        gts = numpy.transpose(gts, axes=(1, 0, 2)).astype(numpy.int16)
+        variations = VariationsArrays()
+        variations.samples = [1, 2, 3, 4]
+        variations['/calls/GT'] = gts
+        expected = [[0., 0.33333333, 0.75, 0.75],
+                    [0.33333333, 0., 0.45, 0.45],
+                    [0.75, 0.45, 0., 0.],
+                    [0.75, 0.45, 0., 0.]]
+        distance = calc_pairwise_distances_between_pops(variations,
+                                                        chunk_size=None,
+                                                        min_num_snps=1,
+                                                        pop1_samples=[1, 2, 3, 4],
+                                                        pop2_samples=[1, 2, 3, 4])
+        assert numpy.allclose(distance, expected)
+
+        expected = [[0., 0.33333333, 0.75, 0.75]]
+        distance = calc_pairwise_distances_between_pops(variations,
+                                                        chunk_size=None,
+                                                        min_num_snps=1,
+                                                        pop1_samples=[1],
+                                                        pop2_samples=[1, 2, 3, 4])
+        assert numpy.allclose(distance, expected)
+
+        expected = [[0.75, 0.75],
+                    [0.45, 0.45]]
+        distance = calc_pairwise_distances_between_pops(variations,
+                                                        chunk_size=None,
+                                                        min_num_snps=1,
+                                                        pop1_samples=[1, 2],
+                                                        pop2_samples=[3, 4])
 
     def test_select_samples_from_distance_matrix(self):
         distances = [0.33333333, 0.75, 0.75, 0.5, 0.5, 0.]

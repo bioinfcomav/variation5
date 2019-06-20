@@ -36,7 +36,8 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           NoMissingGTsOrHetFilter,
                                           SNPPositionFilter,
                                           AlleleObservationBasedMafFilter,
-                                          VarsSamplingFilter)
+                                          VarsSamplingFilter,
+                                          VariableAndNotAllMissing)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
@@ -200,6 +201,22 @@ class MinCalledGTTest(unittest.TestCase):
         counts = Counter(filtered[FLT_VARS][GT_FIELD].flat)
         assert counts == {0: 89936, 1: 50473, -1: 40972, 2: 378, 3: 5}
         assert filtered[SELECTED_VARS].shape
+
+    def test_filter_non_variable_and_all_missing(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [-1, -1]],
+                           [[0, 1], [0, 0], [0, 0], [-1, -1], [-1, -1]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1], [-1, -1]]])
+        variations[GT_FIELD] = gts
+
+        expected = numpy.array([[[0, 1], [0, 0], [0, 0], [-1, -1], [-1, -1]]])
+        filter_gts = VariableAndNotAllMissing()
+        filtered = filter_gts(variations)
+        assert numpy.all(filtered[FLT_VARS][GT_FIELD] == expected)
+        assert filtered[FLT_STATS][N_KEPT] == 1
+        assert filtered[FLT_STATS][TOT] == 4
+        assert filtered[FLT_STATS][N_FILTERED_OUT] == 3
 
 
 class NoMissingTest(unittest.TestCase):

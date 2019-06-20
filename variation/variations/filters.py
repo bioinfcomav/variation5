@@ -18,7 +18,8 @@ from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT, ALT_FIELD,
                        CHROM_FIELD, POS_FIELD)
 from variation.matrix.methods import is_dataset
 from variation.iterutils import first, group_in_packets
-from variation.matrix.stats import row_value_counter_fact
+from variation.matrix.stats import (row_value_counter_fact,
+                                    counts_and_allels_by_row)
 
 COUNTS = 'counts'
 EDGES = 'edges'
@@ -251,6 +252,51 @@ class NoMissingGTsFilter(_BaseFilter):
             flt_vars = variations.get_chunk(selected_rows)
             result[FLT_VARS] = flt_vars
             result[FLT_STATS] = flt_stats
+
+            if self.return_discarded:
+                discarded_rows = numpy.logical_not(selected_rows)
+                discarded_vars = variations.get_chunk(discarded_rows)
+                result[DISCARDED_VARS] = discarded_vars
+
+        return result
+
+
+class VariableAndNotAllMissing(_BaseFilter):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, variations):
+
+        if variations.num_variations == 0:
+            raise ValueError('No SNPs to filter')
+
+        genotypes = variations[GT_FIELD]
+        # Some genotype non missing
+        some_not_missing_gts = numpy.any(genotypes != MISSING_INT,
+                                         axis=2)
+        selected_rows1 = numpy.any(some_not_missing_gts, axis=1)
+        # some variable
+        allele_counts, _ = counts_and_allels_by_row(genotypes,
+                                                    missing_value=MISSING_INT)
+        num_alleles_per_snp = numpy.sum(allele_counts > 0, axis=1)
+        selected_rows2 = num_alleles_per_snp > 1
+
+        selected_rows = numpy.logical_and(selected_rows1, selected_rows2)
+
+        n_kept = numpy.count_nonzero(selected_rows)
+        tot = selected_rows.shape[0]
+        n_filtered_out = tot - n_kept
+        stats = {N_KEPT: n_kept, N_FILTERED_OUT: n_filtered_out, TOT: tot}
+
+        result = {}
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
+
+        if self.do_filtering:
+            flt_vars = variations.get_chunk(selected_rows)
+            result[FLT_VARS] = flt_vars
+            result[FLT_STATS] = stats
 
             if self.return_discarded:
                 discarded_rows = numpy.logical_not(selected_rows)

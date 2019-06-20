@@ -23,6 +23,8 @@ from variation.variations.stats import (calc_unbias_expected_het,
 
 STAT_FUNCTION_METADATA = {'calc_number_of_alleles': {'required_fields': [GT_FIELD],
                                                      'stat_name': 'number_of_alleles'},
+                          'calc_number_of_alleles_and_number_called_gts': {'required_fields': [GT_FIELD],
+                                                                           'stat_name': 'number_of_alleles_and_called_gts'},
                           'calc_number_of_private_alleles': {'required_fields': [GT_FIELD],
                                                              'stat_name': 'number_of_private_alleles'},
                           'calc_major_allele_freq': {'required_fields': [GT_FIELD],

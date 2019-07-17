@@ -15,7 +15,7 @@ from collections import Counter
 import numpy
 
 from test.test_utils import TEST_DATA_DIR
-from variation import AD_FIELD
+from variation import AD_FIELD, POS_FIELD
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
@@ -37,6 +37,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           SNPPositionFilter,
                                           AlleleObservationBasedMafFilter,
                                           VarsSamplingFilter,
+                                          VarsSamplingFilter2,
                                           VariableAndNotAllMissing)
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
@@ -592,6 +593,17 @@ class SamplingFilterTest(unittest.TestCase):
         variations[CHROM_FIELD] = chrom
         filtered = VarsSamplingFilter(sample_rate=0.5)(variations)[FLT_VARS]
         assert filtered.num_variations == 2
+
+    def test_filter_by_pos2(self):
+        variations = VariationsArrays()
+        pos = numpy.array([5, 10, 15, 20, 25])
+        chrom = numpy.array(['1'] * len(pos))
+        variations[POS_FIELD] = pos
+        variations[CHROM_FIELD] = chrom
+        filtered = VarsSamplingFilter2(num_vars=2)(variations)[FLT_VARS]
+        assert filtered.num_variations == 2
+        filtered = VarsSamplingFilter2(num_vars=5)(variations)[FLT_VARS]
+        assert numpy.all(filtered[POS_FIELD] == pos)
 
 
 class MissingGTSettersTest(unittest.TestCase):

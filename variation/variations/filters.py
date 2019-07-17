@@ -1178,6 +1178,39 @@ class VarsSamplingFilter(_BaseFilter):
         return result
 
 
+class VarsSamplingFilter2(_BaseFilter):
+
+    def __init__(self, num_vars, **kwargs):
+        self.num_vars = num_vars
+
+        super().__init__(**kwargs)
+
+    def __call__(self, variations):
+
+        if variations.num_variations == 0:
+            raise ValueError('No SNPs to filter')
+
+        num_vars = variations.num_variations
+        num_vars_keep = self.num_vars
+        selected_rows = numpy.sort(numpy.random.choice(numpy.arange(num_vars),
+                                                       num_vars_keep,
+                                                       replace=False))
+        result = {}
+
+        if self.report_selection:
+            result[SELECTED_VARS] = selected_rows
+
+        if self.do_filtering:
+            flt_vars = variations.get_chunk(selected_rows)
+            result[FLT_VARS] = flt_vars
+
+            if self.return_discarded:
+                discarded_rows = numpy.logical_not(selected_rows)
+                discarded_vars = variations.get_chunk(discarded_rows)
+                result[DISCARDED_VARS] = discarded_vars
+        return result
+
+
 class OrFilter:
 
     def __init__(self, filters):

@@ -719,7 +719,8 @@ DISTANCES = {'kosman': _calc_kosman_pairwise_distance,
              'gst_per_loci': calc_gst_per_loci}
 
 
-def calc_pairwise_distances_between_pops(variations, pop1_samples, pop2_samples,
+def calc_pairwise_distances_between_pops(variations, pop1_samples,
+                                         pop2_samples,
                                          chunk_size=None, method='kosman',
                                          min_num_snps=None):
     if method != 'kosman':

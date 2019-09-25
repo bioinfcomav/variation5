@@ -22,6 +22,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           ObsHetFilter, SNPQualFilter, TOT,
                                           LowDPGTsToMissingSetter, FLT_STATS,
                                           LowQualGTsToMissingSetter, N_KEPT,
+                                          DuplicatedAlleleFixer,
                                           NonBiallelicFilter,
                                           Chi2GtFreqs2SampleSetsFilter,
                                           SampleFilter, FieldFilter,
@@ -42,7 +43,7 @@ from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
 from variation.variations.stats import calc_depth_mean_by_sample
 from variation.iterutils import first
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, GQ_FIELD,
-                       SNPS_PER_CHUNK, ALT_FIELD)
+                       SNPS_PER_CHUNK, ALT_FIELD, REF_FIELD)
 from variation.variations.annotation import IsVariableAnnotator, ANNOTATED_VARS
 
 
@@ -659,6 +660,47 @@ class MissingGTSettersTest(unittest.TestCase):
         set_low_qual_gts_to_missing = LowQualGTsToMissingSetter(min_qual=0)
         h5_2 = set_low_qual_gts_to_missing(h5_1)
         assert numpy.all(h5_1[GT_FIELD][:] == h5_2[FLT_VARS][GT_FIELD])
+
+
+class FixDuplicatedAllelesTest(unittest.TestCase):
+
+    def test_fix_duplicated_alleles(self):
+        gt = numpy.array([[[ 0,  0], [ 0,  4], [-1, -1], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 2,  2], [ 3,  3]],
+                          [[ 0,  0], [ 0,  0], [ 0,  2], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
+                          [[ 0,  0], [ 0,  0], [ 0,  0], [ 0,  1], [ 0,  0], [ 1,  2], [ 0,  2], [ 0,  1], [ 1,  1], [ 0,  0], [ 0,  0], [ 0,  3]],
+                          [[ 0,  0], [ 0,  0], [ 0,  1], [-1, -1], [ 0,  0], [ 0,  1], [ 0,  0], [-1, -1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
+                          [[-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [ 0,  2], [-1, -1], [-1, -1], [-1, -1]]])
+
+        alt = numpy.array([[b'T', b'C', b'A', b'C', b''],
+                           [b'GTC', b'ATC', b'', b'', b''],
+                           [b'C', b'C', b'T', b'C', b''],
+                           [b'T', b'A', b'', b'', b''],
+                           [b'A', b'A', b'T', b'', b'']])
+    
+        ref = numpy.array([b'G', b'G', b'C', b'T', b'C'])
+
+        variations = VariationsArrays()
+        variations[GT_FIELD] = gt
+        variations[ALT_FIELD] = alt
+        variations[REF_FIELD] = ref
+
+        gt_expected = numpy.array([[[ 0,  0], [ 0,  2], [-1, -1], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 2,  2], [ 3,  3]],
+                                   [[ 0,  0], [ 0,  0], [ 0,  2], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
+                                   [[ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  3]],
+                                   [[ 0,  0], [ 0,  0], [ 0,  0], [-1, -1], [ 0,  0], [ 0,  0], [ 0,  0], [-1, -1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
+                                   [[-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [ 0,  1], [-1, -1], [-1, -1], [-1, -1]]])
+
+        alt_expected = numpy.array([[b'T', b'C', b'A', b'', b''],
+                                    [b'GTC', b'ATC', b'', b'', b''],
+                                    [b'T', b'', b'', b'', b''],
+                                    [b'A', b'', b'', b'', b''],
+                                    [b'A', b'T', b'', b'', b'']])
+
+        fix_duplicated_alleles = DuplicatedAlleleFixer()
+        fix_duplicated_alleles(variations)
+
+        assert numpy.all(variations[GT_FIELD] == gt_expected)
+        assert numpy.all(variations[ALT_FIELD] == alt_expected)
 
 
 class MonoBiallelicFilterTest(unittest.TestCase):

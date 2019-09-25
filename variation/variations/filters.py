@@ -1,6 +1,6 @@
 
 import array
-from collections import Counter
+from collections import Counter, OrderedDict, defaultdict
 import itertools
 
 import numpy
@@ -15,7 +15,7 @@ from variation.variations.stats import (calc_maf, calc_obs_het, GT_FIELD,
                                         calc_allele_observation_based_maf)
 from variation.variations.vars_matrices import VariationsArrays
 from variation import (MISSING_INT, SNPS_PER_CHUNK, MISSING_FLOAT, ALT_FIELD,
-                       CHROM_FIELD, POS_FIELD)
+                       CHROM_FIELD, POS_FIELD, MISSING_STR, REF_FIELD)
 from variation.matrix.methods import is_dataset
 from variation.iterutils import first, group_in_packets
 from variation.matrix.stats import (row_value_counter_fact,
@@ -529,6 +529,54 @@ class LowQualGTsToMissingSetter(_GTsToMissingSetter):
         kwargs['min_'] = min_qual
         kwargs['field_path'] = GQ_FIELD
         super().__init__(**kwargs)
+
+
+class DuplicatedAlleleFixer:
+
+    def __init__(self, do_histogram=False, do_filtering=True):
+        self.do_histogram = do_histogram
+        self.do_filtering = do_filtering
+        if self.do_histogram:
+            raise ValueError("histogram not implemented")
+
+    def __call__(self, variations):
+
+        result = {}
+        if self.do_filtering:
+            copied_vars = variations.get_chunk(slice(None, None),
+                                               ignored_fields=None)
+            alleles = numpy.hstack((numpy.array([copied_vars[REF_FIELD]]).T, copied_vars[ALT_FIELD]))
+            allele_counts, _ = counts_and_allels_by_row(alleles, missing_value=MISSING_STR)
+            rows_idxs_with_repeated_values = numpy.where(numpy.any(allele_counts>=2,axis=1))[0]        
+
+            for snp_idx in rows_idxs_with_repeated_values:
+                row_alleles = alleles[snp_idx]
+                unique_alleles = OrderedDict()
+                old_allele_indexes = defaultdict(list)
+                for idx, allele in enumerate(row_alleles):
+                    if allele == MISSING_STR:
+                        continue
+                    if allele not in unique_alleles:
+                        unique_alleles[allele] = len(unique_alleles)
+                    old_allele_indexes[allele].append(idx)
+            
+                new_alt = list(unique_alleles.keys())[1:] + [MISSING_STR] * (copied_vars[ALT_FIELD].shape[1] - len(unique_alleles) + 1)
+                copied_vars[ALT_FIELD][snp_idx] = new_alt
+
+                snp_geno = copied_vars[GT_FIELD][snp_idx]
+                snp_geno_shape = snp_geno.shape
+                snp_geno = snp_geno.reshape((snp_geno_shape[0] * snp_geno_shape[1]))
+                for allele, allele_idxs in old_allele_indexes.items():
+                    if len(allele_idxs) < 2:
+                        continue
+                    for allele_idx in allele_idxs:
+                        snp_geno[snp_geno == allele_idx] = unique_alleles[allele]
+                snp_geno = snp_geno.reshape(snp_geno_shape)
+                copied_vars[GT_FIELD][snp_idx] = snp_geno
+
+            result[FLT_VARS] = copied_vars
+
+        return result
 
 
 class NonBiallelicFilter(_BaseFilter):

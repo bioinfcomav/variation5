@@ -543,11 +543,17 @@ class DuplicatedAlleleFixer:
 
         result = {}
         if self.do_filtering:
+
+            alleles = numpy.hstack((numpy.array([variations[REF_FIELD]]).T,
+                                                 variations[ALT_FIELD]))
+            allele_counts, _ = counts_and_allels_by_row(alleles, missing_value=MISSING_STR)
+            rows_idxs_with_repeated_values = numpy.where(numpy.any(allele_counts >= 2, axis=1))[0]
+
+            if not rows_idxs_with_repeated_values.size:
+                return variations
+
             copied_vars = variations.get_chunk(slice(None, None),
                                                ignored_fields=None)
-            alleles = numpy.hstack((numpy.array([copied_vars[REF_FIELD]]).T, copied_vars[ALT_FIELD]))
-            allele_counts, _ = counts_and_allels_by_row(alleles, missing_value=MISSING_STR)
-            rows_idxs_with_repeated_values = numpy.where(numpy.any(allele_counts>=2,axis=1))[0]        
 
             for snp_idx in rows_idxs_with_repeated_values:
                 row_alleles = alleles[snp_idx]

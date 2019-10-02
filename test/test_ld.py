@@ -13,7 +13,9 @@ import numpy
 from test.test_utils import TEST_DATA_DIR
 from variation.variations.vars_matrices import VariationsH5
 from variation.variations.ld import (calc_ld_along_genome, _bivmom, _get_r,
-                                     _calc_rogers_huff_r, calc_rogers_huff_r)
+                                     _calc_rogers_huff_r, calc_rogers_huff_r,
+                                     calc_ld_random_pairs_from_different_chroms)
+from variation.variations.stats import calc_maf
 
 
 class TestLD(unittest.TestCase):
@@ -78,6 +80,17 @@ class TestLD(unittest.TestCase):
         r = calc_rogers_huff_r(gts1, gts2, debug=False, min_num_gts=51)
         expected = [[numpy.nan, numpy.nan], [zz_r, numpy.nan], [zz_r, numpy.nan]]
         assert numpy.allclose(r, expected, atol=1e-3, equal_nan=True)
+
+    def test_ld_random_pairs_from_different_chroms(self):
+        hdf5 = VariationsH5(join(TEST_DATA_DIR, 'tomato.apeki_gbs.calmd.h5'),
+                            mode='r')
+        variations = hdf5.get_chunk(slice(5000, 15000))
+        mafs = calc_maf(variations, min_num_genotypes=10, chunk_size=None)
+        mafs[numpy.isnan(mafs)] = 1
+        variations = variations.get_chunk(mafs < 0.95)
+        lds = calc_ld_random_pairs_from_different_chroms(variations, 100)
+        lds = list(lds)
+        assert len(lds) == 100
 
 
 if __name__ == "__main__":

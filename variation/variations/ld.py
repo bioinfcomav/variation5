@@ -2,8 +2,10 @@
 import numpy
 import math
 import itertools
+import random
 
-from variation import MISSING_INT, SNPS_PER_CHUNK, POS_FIELD, CHROM_FIELD
+from variation import (MISSING_INT, SNPS_PER_CHUNK, POS_FIELD, CHROM_FIELD,
+                       GT_FIELD)
 from variation.variations.stats import calc_maf
 
 
@@ -56,8 +58,7 @@ def _get_r(Y, Z):
 DDOF = 1
 
 
-def _calc_rogers_huff_r_for_snp_pair(gts_snp1, gts_snp2, min_num_gts=10,
-                                     debug=False):
+def _calc_rogers_huff_r_for_snp_pair(gts_snp1, gts_snp2, min_num_gts=10):
 
     gts = numpy.array([gts_snp1, gts_snp2])
 
@@ -69,7 +70,11 @@ def _calc_rogers_huff_r_for_snp_pair(gts_snp1, gts_snp2, min_num_gts=10,
         covar = numpy.cov(gts, ddof=DDOF)
         variances = numpy.diag(covar)
         covar = covar[0, 1]
-        result = covar / numpy.sqrt(variances[0] * variances[1])
+        denom = numpy.sqrt(variances[0] * variances[1])
+        if math.isclose(denom, 0):
+            result = numpy.nan
+        else:
+            result = covar / denom
     return result
 
 
@@ -132,8 +137,7 @@ def calc_rogers_huff_r(gts1, gts2, min_num_gts=10, debug=False):
             for idx2, gts2_snp_gts in enumerate(gts2):
                 result = _calc_rogers_huff_r_for_snp_pair(gts1_snp_gts,
                                                           gts2_snp_gts,
-                                                          min_num_gts=min_num_gts,
-                                                          debug=debug)
+                                                          min_num_gts=min_num_gts)
                 rogers_huff_r[idx1, idx2] = result
     rogers_huff_r = numpy.abs(rogers_huff_r)
     return rogers_huff_r
@@ -183,3 +187,40 @@ def calc_ld_along_genome(variations, max_dist, min_num_gts=10,
             if positions[1] == positions[3] and positions[0] == positions[2]:
                 continue
             yield ld, physical_dist, positions
+
+
+def calc_ld_random_pairs_from_different_chroms(variations, num_pairs,
+                                               max_maf=0.95, min_num_gts=10):
+    different_chroms = numpy.unique(variations[CHROM_FIELD])
+    if different_chroms.size < 2:
+        raise ValueError('Only one chrom in variations')
+
+    mafs = calc_maf(variations, min_num_genotypes=min_num_gts, chunk_size=None)
+    if numpy.any(numpy.isnan(mafs)) or numpy.any(mafs > max_maf):
+        msg = 'Not enough genotypes or MAF below allowed maximum, Rogers Huff calculations known to go wrong for very high maf'
+        raise RuntimeError(msg)
+
+    chroms = variations[CHROM_FIELD]
+    gts = variations[GT_FIELD]
+
+    num_variations = variations.num_variations
+
+    pairs_computed = 0
+    while True:
+        snp_idx1 = random.randrange(num_variations)
+        snp_idx2 = random.randrange(num_variations)
+        chrom1 = chroms[snp_idx1]
+        chrom2 = chroms[snp_idx2]
+        if chrom1 == chrom2:
+            continue
+
+        gts_snp1 = gts[snp_idx1]
+        gts_snp2 = gts[snp_idx2]
+        r2_ld = _calc_rogers_huff_r_for_snp_pair(gts_snp1, gts_snp2,
+                                                 min_num_gts=min_num_gts)
+        if not math.isnan(r2_ld):
+            yield chrom1, snp_idx1, chrom2, snp_idx2, r2_ld
+
+        pairs_computed += 1
+        if pairs_computed > num_pairs:
+            break

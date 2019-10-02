@@ -546,6 +546,7 @@ class DuplicatedAlleleFixer:
 
             alleles = numpy.hstack((numpy.array([variations[REF_FIELD]]).T,
                                                  variations[ALT_FIELD]))
+
             allele_counts, _ = counts_and_allels_by_row(alleles, missing_value=MISSING_BYTE)
             rows_idxs_with_repeated_values = numpy.where(numpy.any(allele_counts>=2, axis=1))[0]
 

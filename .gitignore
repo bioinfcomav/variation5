@@ -10,3 +10,4 @@ build
 *__pycache__*
 variation/gt_parsers/vcf_field_parsers.c
 variation/gt_parsers/vcf_field_parsers.cpython*
+.vscode/*

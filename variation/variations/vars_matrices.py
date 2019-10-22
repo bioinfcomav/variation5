@@ -3,6 +3,7 @@ import json
 import copy
 from collections import Counter, defaultdict
 import warnings
+import random
 
 import numpy
 import h5py
@@ -1075,6 +1076,16 @@ class _VariationMatrices():
         gts012 = numpy.sum(gts != major_alleles[:, None, None], axis=2)
         gts012[numpy.any(gts == MISSING_INT, axis=2)] = MISSING_INT
         return gts012
+
+    def get_random_haploid_gts(self):
+        gts = self[GT_FIELD]
+        num_vars, num_indis, ploidy = gts.shape
+
+        haplo_choice = [random.randrange(ploidy) for _ in range(num_indis)]
+        gts = gts[numpy.arange(num_vars)[:, numpy.newaxis],
+                  numpy.arange(num_indis),
+                  haplo_choice]
+        return gts
 
     def copy(self, variations=None, kept_fields=None):
         if variations is None:

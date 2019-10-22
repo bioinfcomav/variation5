@@ -10,6 +10,7 @@ import unittest
 import gzip
 from tempfile import NamedTemporaryFile
 from os.path import join
+import random
 
 import h5py
 import numpy
@@ -448,6 +449,23 @@ class ChunkPairsTest(unittest.TestCase):
         assert pos_pairs == expected
 
 
+class GetHaploidTest(unittest.TestCase):
+
+    def test_get_haploid(self):
+        gts = numpy.array([[[100, 101], [110, 111], [120, 121], [130, 131]],
+                           [[200, 201], [210, 211], [220, 221], [230, 231]],
+                           [[300, 301], [310, 311], [320, 321], [330, 331]],
+                           ])
+        varis = VariationsArrays()
+        varis[GT_FIELD] = gts
+        random.seed(0)
+        haploid_gts = varis.get_random_haploid_gts()
+        expected = [[101, 111, 120, 131],
+                    [201, 211, 220, 231],
+                    [301, 311, 320, 331]]
+        assert numpy.all(haploid_gts == expected)
+
+
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VarMatsTests.test_iterate_chunks']
+    # import sys; sys.argv = ['', 'GetHaploidTest']
     unittest.main()

@@ -279,10 +279,13 @@ class VariableAndNotAllMissing(_BaseFilter):
         # some variable
         allele_counts, _ = counts_and_allels_by_row(genotypes,
                                                     missing_value=MISSING_INT)
-        num_alleles_per_snp = numpy.sum(allele_counts > 0, axis=1)
-        selected_rows2 = num_alleles_per_snp > 1
-
-        selected_rows = numpy.logical_and(selected_rows1, selected_rows2)
+        if allele_counts is None:
+            selected_rows = numpy.full(shape=genotypes.shape[0],
+                                       fill_value=False)
+        else:
+            num_alleles_per_snp = numpy.sum(allele_counts > 0, axis=1)
+            selected_rows2 = num_alleles_per_snp > 1
+            selected_rows = numpy.logical_and(selected_rows1, selected_rows2)
 
         n_kept = numpy.count_nonzero(selected_rows)
         tot = selected_rows.shape[0]
@@ -566,7 +569,7 @@ class DuplicatedAlleleFixer:
                     if allele not in unique_alleles:
                         unique_alleles[allele] = len(unique_alleles)
                     old_allele_indexes[allele].append(idx)
-            
+
                 new_alt = list(unique_alleles.keys())[1:] + [MISSING_BYTE] * (copied_vars[ALT_FIELD].shape[1] - len(unique_alleles) + 1)
                 copied_vars[ALT_FIELD][snp_idx] = new_alt
 

@@ -7,7 +7,7 @@ from Bio import pairwise2
 
 from variation import (GT_FIELD, CHROM_FIELD, POS_FIELD, REF_FIELD, ALT_FIELD,
                        MISSING_INT, MISSING_STR)
-from variation.variations.filters import IndelFilter, FLT_VARS
+from variation.variations.filters import IndelFilter, FLT_VARS, SELECTED_VARS
 from variation.matrix.stats import counts_and_allels_by_row
 from variation.gt_writers.vcf import _join_str_array_along_axis0
 
@@ -60,6 +60,11 @@ def _fix_allele_lengths(alleles, try_to_align_easy_indels,
         alleles = _do_easy_multiple_alignment(alleles, lengths)
     else:
         raise RuntimeError('We should not be here')
+
+    one_length = len(alleles[0])
+    if not all([len(allele) == one_length for allele in alleles]):
+        raise AlignmentTooDifficultError('Alignment too difficult')
+
     return alleles
 
 
@@ -71,16 +76,17 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
     if not set_hets_to_missing:
         raise NotImplementedError('Fixme')
 
-    if try_to_align_easy_indels and not put_hyphens_in_indels:
-        msg = 'try_to_align and not hyphens_in_indels are incompatible options'
-        raise ValueError(msg)
-    if try_to_align_easy_indels and put_hyphens_in_indels:
-        pass
-    if not try_to_align_easy_indels and not put_hyphens_in_indels:
-        pass
-    if not try_to_align_easy_indels and put_hyphens_in_indels:
-        msg = 'not try_to_align and put hyphens_in_indels are incompatible options'
-        raise ValueError(msg)
+    if not remove_indels:
+        if try_to_align_easy_indels and not put_hyphens_in_indels:
+            msg = 'try_to_align and not hyphens_in_indels are incompatible options'
+            raise ValueError(msg)
+        if try_to_align_easy_indels and put_hyphens_in_indels:
+            pass
+        if not try_to_align_easy_indels and not put_hyphens_in_indels:
+            pass
+        if not try_to_align_easy_indels and put_hyphens_in_indels:
+            msg = 'not try_to_align and put hyphens_in_indels are incompatible options'
+            raise ValueError(msg)
 
     stats = {}
     stats['snps_tried'] = 0
@@ -95,6 +101,7 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
     if remove_indels:
         filter_indels = IndelFilter(report_selection=True)
         result = filter_indels(variations)
+        stats['indels_removed'] = numpy.sum(numpy.logical_not(result[SELECTED_VARS]))
         variations = result[FLT_VARS]
         if chroms is not None:
             chroms = chroms[result['selected_vars']]
@@ -186,16 +193,18 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
     letter_haps = _join_str_array_along_axis0(letter_haps.T,
                                               the_str_array_has_newlines=False)
 
-    if stats is not None:
-        stats['snps_written'] = letter_haps.shape[0]
-
+    lengths = []
     for smpl_idx, sample in enumerate(samples):
         this_desc = b'>%s' % sample.encode() + desc
         out_fhand.write(this_desc)
         out_fhand.write(b'\n')
         sample_hap = letter_haps[smpl_idx]
+        lengths.append(len(sample_hap))
         out_fhand.write(sample_hap)
         out_fhand.write(b'\n')
+
+    if put_hyphens_in_indels:
+        assert all(length == lengths[0] for length in lengths)
 
     return {'stats': stats}
 

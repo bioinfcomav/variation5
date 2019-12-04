@@ -83,6 +83,7 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
         raise ValueError(msg)
 
     stats = {}
+    stats['snps_tried'] = 0
     stats['complex_skipped'] = 0
     stats['snps_written'] = 0
 
@@ -153,6 +154,7 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
     letter_haps = numpy.full_like(haps, dtype=str_dtype, fill_value=b'')
 
     for snp_idx in range(haps.shape[0]):
+        stats['snps_tried'] += 1
         alleles = [refs[snp_idx]] + list(alts[snp_idx, :])
 
         lengths = [len(allele) for allele in alleles]

@@ -184,7 +184,86 @@ class FastaWriterTest(unittest.TestCase):
         assert b'>0' in result[0]
         assert result[1] == b'TNTC'
 
+    def test_fasta_writer_with_indels(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [2, 2], [1, 1], [0, 0], [0, 0]],
+                           [[2, 2], [1, 1], [-1, 2], [0, 0], [-1, -1]],
+                           [[0, 1], [0, 0], [0, 0], [1, 1], [0, 0]],
+                           [[0, 0], [1, -1], [1, 1], [1, -1], [1, 1]],
+                           [[0, 1], [0, 1], [-1, -1], [-1, 1], [1, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1], [-1, -1]],
+                           ])
+        ref = numpy.array([b'C',
+                           b'G',
+                           b'A',
+                           b'T',
+                           b'T',
+                           b'C',
+                           b'G'])
+        alt = numpy.array([[b'CT', b'CTT'],
+                           [b'GA', b'GAT'],
+                           [b'C', b''],
+                           [b'G', b''],
+                           [b'A', b'T'],
+                           [b'G', b''],
+                           [b'C', b'']])
+        variations[GT_FIELD] = gts
+        variations[ALT_FIELD] = alt
+        variations[REF_FIELD] = ref
+        variations[CHROM_FIELD] = numpy.array(['ch1', 'ch2', 'ch2', 'ch2',
+                                               'ch2', 'ch3', 'ch3'])
+        variations[POS_FIELD] = numpy.array([10, 20, 30, 40, 50, 10, 15])
+        variations.samples = list(map(str, range(gts.shape[1])))
+
+        fhand = io.BytesIO()
+        write_fasta(variations, fhand, remove_sites_all_N=True,
+                    remove_invariant_snps=True, remove_indels=False,
+                    try_to_align_easy_indels=True)
+        # SNPS
+        # C-- C-T CTT
+        # G-- GA- GAT
+        # A C
+        # T G
+        # haps
+        # 0 2 1 0 0
+        # 2 1 H 0 N
+        # H 0 0 1 0
+        # 0 H 1 H 1
+        # indi1> C--GATNT
+        # indi2> CTTGA-AN
+        # indi3> C-TNNNAG
+        # indi4> C--G--CN
+        # indi5> C--NNNAG
+        result = fhand.getvalue().splitlines()
+        assert b'>0' in result[0]
+        assert result[1] == b'C--GATNT'
+        assert b'>1' in result[2]
+        assert result[3] == b'CTTGA-AN'
+        assert b'>2' in result[4]
+        assert result[5] == b'C-TNNNAG'
+        assert b'>3' in result[6]
+        assert result[7] == b'C--G--CN'
+        assert b'>4' in result[8]
+        assert result[9] == b'C--NNNAG'
+
+        fhand = io.BytesIO()
+        write_fasta(variations, fhand, remove_sites_all_N=True,
+                    remove_invariant_snps=True, remove_indels=False,
+                    put_hyphens_in_indels=False)
+        result = fhand.getvalue().splitlines()
+        assert b'>0' in result[0]
+        assert result[1] == b'CGATNT'
+        assert b'>1' in result[2]
+        assert result[3] == b'CTTGAAN'
+        assert b'>2' in result[4]
+        assert result[5] == b'CTNNNAG'
+        assert b'>3' in result[6]
+        assert result[7] == b'CGCN'
+        assert b'>4' in result[8]
+        assert result[9] == b'CNNNAG'
+
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf_from_h5']
+    import sys; sys.argv = ['', 'FastaWriterTest.test_fasta_writer_with_indels']
     unittest.main()

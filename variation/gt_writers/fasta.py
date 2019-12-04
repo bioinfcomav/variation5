@@ -68,13 +68,10 @@ def _fix_allele_lengths(alleles, try_to_align_easy_indels,
     return alleles
 
 
-def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
-                set_hets_to_missing=True,
-                remove_invariant_snps=False, remove_sites_all_N=False,
+def write_fasta(variations, out_fhand, remove_indels=True,
+                write_one_seq_per_sample_setting_hets_to_missing=False,
+                remove_invariant_snps=False, remove_sites_all_N=True,
                 try_to_align_easy_indels=False, put_hyphens_in_indels=True):
-
-    if not set_hets_to_missing:
-        raise NotImplementedError('Fixme')
 
     if not remove_indels:
         if try_to_align_easy_indels and not put_hyphens_in_indels:
@@ -131,43 +128,63 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
     alts = variations[ALT_FIELD]
     gts = variations[GT_FIELD][...]
 
+    if write_one_seq_per_sample_setting_hets_to_missing:
+        if gts.shape[2] != 2:
+            raise NotImplementedError('Not implemented yet for non diploids')
+
+        # remove hets
+        haps1 = gts[:, :, 0]
+        haps2 = gts[:, :, 1]
+        haps1[haps1 != haps2] = MISSING_INT
+        shape = haps1.shape
+        haplotypes = haps1.reshape((shape[0], shape[1], 1))
+        # haps = haps1
+    else:
+        haplotypes = gts
+
+    if remove_invariant_snps or remove_sites_all_N:
+        all_counts, alleles = counts_and_allels_by_row(haplotypes)
+        try:
+            missing_allele_idx = alleles.index(MISSING_INT)
+        except ValueError:
+            missing_allele_idx = None
+        if missing_allele_idx is None:
+            counts = all_counts
+            snps_not_all_missing = None
+        elif missing_allele_idx == 0:
+            counts = all_counts[:, 1:]
+            snps_not_all_missing = all_counts[:, missing_allele_idx] < haplotypes.shape[1]
+        else:
+            raise NotImplementedError('Should be an easy fix')
+
+    haps_to_keep = numpy.ones((haplotypes.shape[0],))
+    if remove_invariant_snps:
+        this_haps_to_keep = numpy.sum(counts, axis=1) - numpy.max(counts, axis=1) > 0
+        haps_to_keep = numpy.logical_and(haps_to_keep, this_haps_to_keep)
+    if remove_sites_all_N:
+        this_haps_to_keep = snps_not_all_missing
+        haps_to_keep = numpy.logical_and(haps_to_keep, this_haps_to_keep)
+
+    if haps_to_keep is not None:
+        haplotypes = haplotypes[haps_to_keep, ...]
+        alts = alts[haps_to_keep]
+        refs = refs[haps_to_keep]
+
     if alts.dtype.itemsize > refs.dtype.itemsize:
         str_dtype = alts.dtype
     else:
         str_dtype = refs.dtype
 
-    if gts.shape[2] != 2:
-        raise NotImplementedError('Not implemented yet for non diploids')
+    letter_haps = numpy.full_like(haplotypes, dtype=str_dtype, fill_value=b'')
 
-    # remove hets
-    haps1 = gts[:, :, 0]
-    haps2 = gts[:, :, 1]
-    haps1[haps1 != haps2] = MISSING_INT
-    haps = haps1
-
-    haps_to_keep = None
-    if remove_invariant_snps:
-        counts = counts_and_allels_by_row(haps, missing_value=MISSING_INT)[0]
-        haps_to_keep = numpy.sum(counts, axis=1) - numpy.max(counts, axis=1) > 0
-    elif remove_sites_all_N:
-        all_missing = numpy.all(haps == MISSING_INT, axis=1)
-        haps_to_keep = numpy.logical_not(all_missing)
-
-    if haps_to_keep is not None:
-        haps = haps[haps_to_keep]
-        alts = alts[haps_to_keep]
-        refs = refs[haps_to_keep]
-
-    letter_haps = numpy.full_like(haps, dtype=str_dtype, fill_value=b'')
-
-    for snp_idx in range(haps.shape[0]):
+    for snp_idx in range(haplotypes.shape[0]):
         stats['snps_tried'] += 1
         alleles = [refs[snp_idx]] + list(alts[snp_idx, :])
 
         lengths = [len(allele) for allele in alleles]
         len_longest_allele = max(lengths)
         empty_allele = N * len_longest_allele
-        letter_haps[snp_idx, :] = empty_allele
+        letter_haps[snp_idx, :, :] = empty_allele
 
         try:
             alleles = _fix_allele_lengths(alleles,
@@ -183,25 +200,31 @@ def write_fasta(variations, out_fhand, sample_class=None, remove_indels=True,
         ref_allele = alleles[0]
         alt_alleles = alleles[1:]
 
-        letter_haps[snp_idx, :][haps[snp_idx, :] == 0] = ref_allele
+        letter_haps[snp_idx, :, :][haplotypes[snp_idx, :, :] == 0] = ref_allele
         for alt_allele_idx in range(len(alt_alleles)):
             alt_allele = alt_alleles[alt_allele_idx]
             if alt_allele == MISSING_STR:
                 break
-            letter_haps[snp_idx, :][haps[snp_idx, :] == alt_allele_idx + 1] = alt_allele
+            letter_haps[snp_idx, :, :][haplotypes[snp_idx, :, :] == alt_allele_idx + 1] = alt_allele
 
-    letter_haps = _join_str_array_along_axis0(letter_haps.T,
-                                              the_str_array_has_newlines=False)
+    joined_letter_haps = []
+    for idx in range(letter_haps.shape[2]):
+        joined_letter_haps.append(_join_str_array_along_axis0(letter_haps[:, :, idx].T,
+                                                              the_str_array_has_newlines=False))
 
     lengths = []
     for smpl_idx, sample in enumerate(samples):
-        this_desc = b'>%s' % sample.encode() + desc
-        out_fhand.write(this_desc)
-        out_fhand.write(b'\n')
-        sample_hap = letter_haps[smpl_idx]
-        lengths.append(len(sample_hap))
-        out_fhand.write(sample_hap)
-        out_fhand.write(b'\n')
+        for haploid_idx, haploid_joined_letter_haps in enumerate(joined_letter_haps):
+            if write_one_seq_per_sample_setting_hets_to_missing:
+                this_desc = b'>%s' % sample.encode() + desc
+            else:
+                this_desc = b'>%s_hap%d' % (sample.encode(), haploid_idx + 1) + desc
+            out_fhand.write(this_desc)
+            out_fhand.write(b'\n')
+            sample_hap = haploid_joined_letter_haps[smpl_idx]
+            lengths.append(len(sample_hap))
+            out_fhand.write(sample_hap)
+            out_fhand.write(b'\n')
 
     if put_hyphens_in_indels:
         assert all(length == lengths[0] for length in lengths)

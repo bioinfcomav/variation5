@@ -157,11 +157,12 @@ def write_fasta(variations, out_fhand, remove_indels=True,
         else:
             raise NotImplementedError('Should be an easy fix')
 
-    haps_to_keep = numpy.ones((haplotypes.shape[0],))
+    haps_to_keep = numpy.ones((haplotypes.shape[0],)) == 1
     if remove_invariant_snps:
         this_haps_to_keep = numpy.sum(counts, axis=1) - numpy.max(counts, axis=1) > 0
         haps_to_keep = numpy.logical_and(haps_to_keep, this_haps_to_keep)
-    if remove_sites_all_N:
+
+    if remove_sites_all_N and snps_not_all_missing is not None:
         this_haps_to_keep = snps_not_all_missing
         haps_to_keep = numpy.logical_and(haps_to_keep, this_haps_to_keep)
 

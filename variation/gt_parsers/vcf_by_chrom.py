@@ -17,18 +17,24 @@ def get_chroms_in_vcf(vcf_fpath):
 
 
 def get_vcf_lines_for_chrom(chrom, vcf_fpath, header=True):
+    cmd = ['tabix']
     if header:
-        fhand = gzip.open(vcf_fpath, 'rb')
-        for line in fhand:
-            if line.startswith(b'#'):
-                yield line
-            else:
-                break
+        cmd.append('-h')
+    cmd.extend([vcf_fpath, chrom])
 
-    cmd = ['tabix', vcf_fpath, chrom]
-    tabix = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    for line in tabix.stdout:
-        yield line
+    # tabix = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    # for line in tabix.stdout:
+    #     yield line
+    tabix_process = subprocess.run(cmd, stdout=subprocess.PIPE)
+    for line in tabix_process.stdout.split(b'\n'):
+        if line:
+            yield line
+
+    # with NamedTemporaryFile() as out_fhand:
+    #     tabix_process = subprocess.run(cmd, stdout=out_fhand)
+    #     out_fhand.seek(0)
+    #     for line in out_fhand:
+    #         yield line
 
 
 def _parse_vcf(chrom, vcf_fpath, tmp_dir, kept_fields, ignored_fields):
@@ -88,4 +94,4 @@ def vcf_to_h5(vcf_fpath, out_h5_fpath, n_threads, tmp_dir, kept_fields=None,
     except Exception:
         raise
     finally:
-        _remove_temp_chrom_h5s(h5_chroms_fpaths)
+       _remove_temp_chrom_h5s(h5_chroms_fpaths)

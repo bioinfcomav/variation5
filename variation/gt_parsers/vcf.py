@@ -126,13 +126,13 @@ class VCFParser():
                 meta = {}
                 if line.startswith(b'FORMAT='):
                     meta_kind = 'CALLS'
-                    line = line[8:-2]
+                    line = line[8:-1]
                 elif line.startswith(b'FILTER='):
                     meta_kind = 'FILTER'
-                    line = line[8:-2]
+                    line = line[8:-1]
                 elif line.startswith(b'INFO='):
                     meta_kind = 'INFO'
-                    line = line[6:-2]
+                    line = line[6:-1]
                 else:
                     msg = 'Unsuported VCF: ' + line.decode("utf-8")
                     raise RuntimeError(msg)

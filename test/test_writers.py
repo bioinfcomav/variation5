@@ -145,8 +145,9 @@ class FastaWriterTest(unittest.TestCase):
         variations.samples = list(map(str, range(gts.shape[1])))
 
         fhand = io.BytesIO()
-        write_fasta(variations, fhand, remove_sites_all_N=True,
-                    remove_invariant_snps=True)
+        write_fasta(variations, fhand,
+                    remove_invariant_snps=True,
+                    write_one_seq_per_sample_setting_hets_to_missing=True)
         # SNPS
         # C A TT
         # G A T
@@ -173,18 +174,184 @@ class FastaWriterTest(unittest.TestCase):
         assert result[9] == b'NAG'
 
         fhand = io.BytesIO()
-        write_fasta(variations, fhand, remove_invariant_snps=True)
+        write_fasta(variations, fhand, remove_invariant_snps=True,
+                    write_one_seq_per_sample_setting_hets_to_missing=True)
         result = fhand.getvalue().splitlines()
         assert b'>0' in result[0]
         assert result[1] == b'TNT'
 
         fhand = io.BytesIO()
-        write_fasta(variations, fhand, remove_sites_all_N=True)
+        write_fasta(variations, fhand, remove_sites_all_N=True,
+                    write_one_seq_per_sample_setting_hets_to_missing=True)
+        result = fhand.getvalue().decode().splitlines()
+        assert '>0' in result[0]
+        assert result[1] == 'TNTC'
+
+    def test_fasta_writer_with_indels(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [2, 2], [1, 1], [0, 0], [0, 0]],
+                           [[2, 2], [1, 1], [-1, 2], [0, 0], [-1, -1]],
+                           [[0, 1], [0, 0], [0, 0], [1, 1], [0, 0]],
+                           [[0, 0], [1, -1], [1, 1], [1, -1], [1, 1]],
+                           [[0, 1], [0, 1], [-1, -1], [-1, 1], [1, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1], [-1, -1]],
+                           ])
+        ref = numpy.array([b'C',
+                           b'G',
+                           b'A',
+                           b'T',
+                           b'T',
+                           b'C',
+                           b'G'])
+        alt = numpy.array([[b'CT', b'CTT'],
+                           [b'GA', b'GAT'],
+                           [b'C', b''],
+                           [b'G', b''],
+                           [b'A', b'T'],
+                           [b'G', b''],
+                           [b'C', b'']])
+        variations[GT_FIELD] = gts
+        variations[ALT_FIELD] = alt
+        variations[REF_FIELD] = ref
+        variations[CHROM_FIELD] = numpy.array(['ch1', 'ch2', 'ch2', 'ch2',
+                                               'ch2', 'ch3', 'ch3'])
+        variations[POS_FIELD] = numpy.array([10, 20, 30, 40, 50, 10, 15])
+        variations.samples = list(map(str, range(gts.shape[1])))
+
+        fhand = io.BytesIO()
+        write_fasta(variations, fhand, remove_invariant_snps=True,
+                    remove_indels=False,
+                    try_to_align_easy_indels=True,
+                    write_one_seq_per_sample_setting_hets_to_missing=True)
+        # SNPS
+        # C-- C-T CTT
+        # G-- GA- GAT
+        # A C
+        # T G
+        # haps
+        # 0 2 1 0 0
+        # 2 1 H 0 N
+        # H 0 0 1 0
+        # 0 H 1 H 1
+        # indi1> C--GATNT
+        # indi2> CTTGA-AN
+        # indi3> C-TNNNAG
+        # indi4> C--G--CN
+        # indi5> C--NNNAG
         result = fhand.getvalue().splitlines()
         assert b'>0' in result[0]
-        assert result[1] == b'TNTC'
+        assert result[1] == b'C--GATNT'
+        assert b'>1' in result[2]
+        assert result[3] == b'CTTGA-AN'
+        assert b'>2' in result[4]
+        assert result[5] == b'C-TNNNAG'
+        assert b'>3' in result[6]
+        assert result[7] == b'C--G--CN'
+        assert b'>4' in result[8]
+        assert result[9] == b'C--NNNAG'
+
+        fhand = io.BytesIO()
+        write_fasta(variations, fhand,
+                    remove_invariant_snps=True, remove_indels=False,
+                    put_hyphens_in_indels=False,
+                    write_one_seq_per_sample_setting_hets_to_missing=True)
+        result = fhand.getvalue().splitlines()
+        assert b'>0' in result[0]
+        assert result[1] == b'CGATNT'
+        assert b'>1' in result[2]
+        assert result[3] == b'CTTGAAN'
+        assert b'>2' in result[4]
+        assert result[5] == b'CTNNNAG'
+        assert b'>3' in result[6]
+        assert result[7] == b'CGCN'
+        assert b'>4' in result[8]
+        assert result[9] == b'CNNNAG'
+
+    def test_diploid_writing(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [2, 2], [1, 1], [0, 0], [0, 0]],
+                           [[2, 2], [1, 1], [-1, 2], [0, 0], [-1, -1]],
+                           [[0, 1], [0, 0], [0, 0], [1, 1], [0, 0]],
+                           [[0, 0], [1, -1], [1, 1], [1, -1], [1, 1]],
+                           [[0, 1], [0, 1], [-1, -1], [-1, 1], [1, 0]],
+                           [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+                           [[-1, -1], [-1, -1], [-1, -1], [-1, -1], [-1, -1]],
+                           ])
+        ref = numpy.array([b'C',
+                           b'G',
+                           b'A',
+                           b'T',
+                           b'T',
+                           b'C',
+                           b'G'])
+        alt = numpy.array([[b'CT', b'CTT'],
+                           [b'GA', b'GAT'],
+                           [b'C', b''],
+                           [b'G', b''],
+                           [b'A', b''],
+                           [b'G', b''],
+                           [b'C', b'']])
+        variations[GT_FIELD] = gts
+        variations[ALT_FIELD] = alt
+        variations[REF_FIELD] = ref
+        variations[CHROM_FIELD] = numpy.array(['ch1', 'ch2', 'ch2', 'ch2',
+                                               'ch2', 'ch3', 'ch3'])
+        variations[POS_FIELD] = numpy.array([10, 20, 30, 40, 50, 10, 15])
+        variations.samples = list(map(str, range(gts.shape[1])))
+
+        fhand = io.BytesIO()
+        write_fasta(variations, fhand, remove_invariant_snps=True,
+                    remove_indels=False,
+                    try_to_align_easy_indels=True,
+                    write_one_seq_per_sample_setting_hets_to_missing=False)
+
+        # SNPS
+        # C-- C-T CTT
+        # G-- GA- GAT
+        # A C
+        # T G
+        # T A
+        # haps
+        # 00 22 11 00 00
+        # 22 11 N2 00 NN
+        # 01 00 00 11 00
+        # 00 1N 11 1N 11
+        # 01 01 NN N1 10
+        #
+        # indi0_h1> C--GATATT
+        # indi0_h2> C--GATCTA
+        # indi1_h1> CTTGA-ATT
+        # indi1_h2> CTTGA-ANA
+        # indi2_h1> C-TNNNAGN
+        # indi2_h2> C-TGATAGN
+        # indi3_h1> C--G--CGN
+        # indi3_h2> C--G--CNA
+        # indi4_h1> C--NNNAGA
+        # indi4_h2> C--NNNAGT
+        result = fhand.getvalue().splitlines()
+        assert b'>0_hap1' in result[0]
+        assert result[1] == b'C--GATATT'
+        assert b'>0_hap2' in result[2]
+        assert result[3] == b'C--GATCTA'
+        assert b'>1_hap1' in result[4]
+        assert result[5] == b'CTTGA-AGT'
+        assert b'>1_hap2' in result[6]
+        assert result[7] == b'CTTGA-ANA'
+        assert b'>2_hap1' in result[8]
+        assert result[9] == b'C-TNNNAGN'
+        assert b'>2_hap2' in result[10]
+        assert result[11] == b'C-TGATAGN'
+        assert b'>3_hap1' in result[12]
+        assert result[13] == b'C--G--CGN'
+        assert b'>3_hap2' in result[14]
+        assert result[15] == b'C--G--CNA'
+        assert b'>4_hap1' in result[16]
+        assert result[17] == b'C--NNNAGA'
+        assert b'>4_hap2' in result[18]
+        assert result[19] == b'C--NNNAGT'
 
 
 if __name__ == "__main__":
-    # import sys; sys.argv = ['', 'VcfWrittenTest.test_write_vcf_from_h5']
+    # import sys; sys.argv = ['', 'FastaWriterTest']
     unittest.main()

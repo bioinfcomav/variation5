@@ -774,7 +774,8 @@ def calc_allele_freq_by_depth(chunk):
 
 
 def calc_expected_het(variations,
-                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+                      min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                      ploidy=None):
     try:
         allele_freq = calc_allele_freq(variations,
                                        min_num_genotypes=min_num_genotypes)
@@ -785,15 +786,20 @@ def calc_expected_het(variations,
     if allele_freq.shape[0] == 0:
         return numpy.array([])
     gts = variations[GT_FIELD]
-    ploidy = gts.shape[2]
+
+    if ploidy is None:
+        ploidy = gts.shape[2]
+
     exp_het = 1 - numpy.sum(allele_freq ** ploidy, axis=1)
     return exp_het
 
 
 def calc_unbias_expected_het(variations,
-                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
+                             min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                             ploidy=None):
     exp_het = calc_expected_het(variations,
-                                min_num_genotypes=min_num_genotypes)
+                                min_num_genotypes=min_num_genotypes,
+                                ploidy=ploidy)
 
     num_called_gts = calc_called_gt(variations, rates=False)
     num_samples = num_called_gts.astype(float)
@@ -804,8 +810,10 @@ def calc_unbias_expected_het(variations,
 
 
 def calc_unbias_expected_het2(variations,
+                              ploidy=None,
                               min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT):
     exp_het = calc_expected_het(variations,
+                                ploidy=ploidy,
                                 min_num_genotypes=min_num_genotypes)
 
     num_called_gts = calc_called_gt(variations, rates=False)
@@ -1644,20 +1652,26 @@ def _calc_a1(num_seqs_with_data):
 
 def calc_tajima_d_and_pi(variations,
                          min_num_genotypes=MIN_NUM_GENOTYPES_FOR_POP_STAT,
+                         ploidy=None,
                          debug=False,
                          min_num_segregating_variations=10):
     # Implemented following: Genome-wide DNA polymorphism analyses using VariScan
     # https://doi.org/10.1186/1471-2105-7-409
 
     gts = variations[GT_FIELD]
+    if ploidy is None:
+        ploidy = variations.ploidy
 
-    random_index_for_ploidy = numpy.random.randint(gts.shape[2],
-                                                   size=gts.shape[1])
+    if gts.shape[2] > 1:
+        random_index_for_ploidy = numpy.random.randint(gts.shape[2],
+                                                       size=gts.shape[1])
 
-    # choose one haplotype at random for every sample
-    seqs_choice = [gts[:, :, idx] for idx in range(gts.shape[2])]
-    seqs = numpy.choose(random_index_for_ploidy, seqs_choice)
-
+        # choose one haplotype at random for every sample
+        seqs_choice = [gts[:, :, idx] for idx in range(gts.shape[2])]
+        seqs = numpy.choose(random_index_for_ploidy, seqs_choice)
+    else:
+        gt_shape = gts.shape
+        seqs = gts.reshape((gt_shape[0], gt_shape[1]))
     # print(seqs)
     # print(seqs.shape)
 
@@ -1699,6 +1713,7 @@ def calc_tajima_d_and_pi(variations,
     tot_theta = num_snp_segregating / avg_a1
 
     exp_het_per_snp = calc_unbias_expected_het2(variations,
+                                                ploidy=ploidy,
                                                 min_num_genotypes=min_num_genotypes)
     tot_exp_het = numpy.sum(exp_het_per_snp)
     num_sites = seqs.shape[0]

@@ -928,7 +928,7 @@ class TajimaDTest(unittest.TestCase):
         gts = [snp_gt] * 100
         varis = {GT_FIELD: numpy.array(gts)}
 
-        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2)
+        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2, ploidy=2)
         assert math.isclose(res['tajima_d'], -1.266621394662836)
         assert math.isclose(res['pi'], 0.4)
         assert math.isclose(res['theta'], 0.48)
@@ -937,7 +937,7 @@ class TajimaDTest(unittest.TestCase):
         gts = [snp_gt] * 100
         varis = {GT_FIELD: numpy.array(gts)}
 
-        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2)
+        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2, ploidy=2)
         assert math.isclose(res['tajima_d'], -0.871839964837347)
         assert math.isclose(res['pi'], 0.5)
         assert math.isclose(res['theta'], 0.5454545454545454)
@@ -945,7 +945,7 @@ class TajimaDTest(unittest.TestCase):
         snp_gt = [[0, 0], [1, 1], [0, 0], [-1, -1], [1, 1]]
         gts = [snp_gt] * 100
         varis = {GT_FIELD: numpy.array(gts)}
-        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2)
+        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2, ploidy=2)
         # print(res)
         # self.print_phy(gts)
         assert math.isclose(res['tajima_d'], 2.3249065728995997)
@@ -956,13 +956,21 @@ class TajimaDTest(unittest.TestCase):
         gts = [snp_gt] * 100
         varis = {GT_FIELD: numpy.array(gts)}
         try:
-            res = calc_tajima_d_and_pi(varis, min_num_genotypes=10)
+            res = calc_tajima_d_and_pi(varis, min_num_genotypes=10, ploidy=2)
             self.fail('ValueError expected')
         except ValueError:
             pass
 
+        snp_gt = [[0], [0], [0], [-1], [1]]
+        gts = [snp_gt] * 100
+        varis = {GT_FIELD: numpy.array(gts)}
+
+        res = calc_tajima_d_and_pi(varis, min_num_genotypes=2, ploidy=2)
+        assert math.isclose(res['tajima_d'], -0.871839964837347)
+        assert math.isclose(res['pi'], 0.5)
+        assert math.isclose(res['theta'], 0.5454545454545454)
+
 
 if __name__ == "__main__":
-    #import sys; sys.argv = ['', 'StatsTest']
-    # import sys;sys.argv = ['', 'TajimaDTest']
+    import sys; sys.argv = ['', 'TajimaDTest']
     unittest.main()

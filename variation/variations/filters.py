@@ -481,12 +481,14 @@ class SNPPositionFilter(_BaseFilter):
 
 class _GTsToMissingSetter:
 
-    def __init__(self, min_, field_path, do_histogram=True, range_=None,
-                 do_filtering=True, n_bins=DEF_NUM_BINS):
+    def __init__(self, min_, field_path, query_field_to_missing=True,
+                 do_histogram=True, range_=None, do_filtering=True,
+                 n_bins=DEF_NUM_BINS):
         self.min = min_
         self.field_path = field_path
         self.do_histogram = do_histogram
         self.do_filtering = do_filtering
+        self.query_field_to_missing = query_field_to_missing
         self.range = range_
         self.n_bins = n_bins
 
@@ -497,15 +499,22 @@ class _GTsToMissingSetter:
 
         if is_dataset(variations[GT_FIELD]):
             mat_to_check = mat_to_check[:]
-            gts[mat_to_check < self.min] = MISSING_INT
-        else:
-            gts[mat_to_check < self.min] = MISSING_INT
+
+        gts[mat_to_check < self.min] = MISSING_INT
+
+        ignore_fields_to_copy = [GT_FIELD]
+        if self.query_field_to_missing:
+            mat_to_check[mat_to_check < self.min] = MISSING_INT
+            ignore_fields_to_copy.append(self.field_path)
 
         result = {}
         if self.do_filtering:
             copied_vars = variations.get_chunk(slice(None, None),
-                                               ignored_fields=[GT_FIELD])
+                                               ignored_fields=ignore_fields_to_copy)
             copied_vars[GT_FIELD] = gts
+            if self.query_field_to_missing:
+#                 print(self.field_path, mat_to_check)
+                copied_vars[self.field_path] = mat_to_check
 
             result[FLT_VARS] = copied_vars
 
@@ -520,16 +529,18 @@ class _GTsToMissingSetter:
 
 class LowDPGTsToMissingSetter(_GTsToMissingSetter):
 
-    def __init__(self, min_dp, **kwargs):
+    def __init__(self, min_dp, query_field_to_missing=True, **kwargs):
         kwargs['min_'] = min_dp
+        kwargs['query_field_to_missing'] = query_field_to_missing
         kwargs['field_path'] = DP_FIELD
         super().__init__(**kwargs)
 
 
 class LowQualGTsToMissingSetter(_GTsToMissingSetter):
 
-    def __init__(self, min_qual, **kwargs):
+    def __init__(self, min_qual, query_field_to_missing=True, **kwargs):
         kwargs['min_'] = min_qual
+        kwargs['query_field_to_missing'] = query_field_to_missing
         kwargs['field_path'] = GQ_FIELD
         super().__init__(**kwargs)
 
@@ -551,7 +562,7 @@ class DuplicatedAlleleFixer:
                                                  variations[ALT_FIELD]))
 
             allele_counts, _ = counts_and_allels_by_row(alleles, missing_value=MISSING_BYTE)
-            rows_idxs_with_repeated_values = numpy.where(numpy.any(allele_counts>=2, axis=1))[0]
+            rows_idxs_with_repeated_values = numpy.where(numpy.any(allele_counts >= 2, axis=1))[0]
 
             if not rows_idxs_with_repeated_values.size:
                 return variations

@@ -31,13 +31,13 @@ def _make_f_matrix(matrix):
     """
     num_rows, num_cols = matrix.shape
     # make a vector of the means for each row and column
-    # column_means = (add.reduce(E_matrix) / num_rows)
-    column_means = (add.reduce(matrix) / num_rows)[:, newaxis]
-    trans_matrix = transpose(matrix)
-    row_sums = add.reduce(trans_matrix)
+    # column_means = (numpy.add.reduce(E_matrix) / num_rows)
+    column_means = (numpy.add.reduce(matrix) / num_rows)[:, numpy.newaxis]
+    trans_matrix = numpy.transpose(matrix)
+    row_sums = numpy.add.reduce(trans_matrix)
     row_means = row_sums / num_cols
     # calculate the mean of the whole matrix
-    matrix_mean = nsum(row_sums) / (num_rows * num_cols)
+    matrix_mean = numpy.sum(row_sums) / (num_rows * num_cols)
     # adjust each element in the E matrix to make the F matrix
 
     matrix -= row_means
@@ -61,7 +61,7 @@ def do_pcoa(dists):
     e_matrix = (dists * dists) / -2.0
     f_matrix = _make_f_matrix(e_matrix)
 
-    eigvals, eigvecs = eigh(f_matrix)
+    eigvals, eigvecs = numpy.linalg.eigh(f_matrix)
     eigvecs = eigvecs.transpose()
     # drop imaginary component, if we got one
     eigvals, eigvecs = eigvals.real, eigvecs.real
@@ -72,18 +72,18 @@ def do_pcoa(dists):
     # get the coordinates of the n points on the jth axis of the Euclidean
     # representation as the elements of (sqrt(eigvalj))eigvecj
     # must take the absolute value of the eigvals since they can be negative
-    pca_matrix = eigvecs * sqrt(abs(eigvals))[:, newaxis]
+    pca_matrix = eigvecs * numpy.sqrt(abs(eigvals))[:, numpy.newaxis]
 
     # output
     # get order to output eigenvectors values. reports the eigvecs according
     # to their cooresponding eigvals from greatest to least
-    vector_order = list(argsort(eigvals))
+    vector_order = list(numpy.argsort(eigvals))
     vector_order.reverse()
 
     eigvals = eigvals[vector_order]
 
     # eigenvalues
-    pcnts = (eigvals / nsum(eigvals)) * 100.0
+    pcnts = (eigvals / numpy.sum(eigvals)) * 100.0
 
     # the outputs
     # eigenvectors in the original pycogent implementation, here we name them
@@ -95,7 +95,7 @@ def do_pcoa(dists):
     for name_i in range(dists.shape[0]):
         eigvect = [pca_matrix[vec_i, name_i] for vec_i in vector_order]
         projections.append(eigvect)
-    projections = array(projections)
+    projections = numpy.array(projections)
 
     return {'projections': projections,
             'var_percentages': pcnts}
@@ -160,10 +160,10 @@ def do_pca(variations):
     # cen_scaled_matrix = cen_matrix / math.sqrt(n_rows - 1)
     cen_scaled_matrix = cen_matrix
 
-    singular_vals, princomps = svd(cen_scaled_matrix, full_matrices=False)[1:]
+    singular_vals, princomps = numpy.linalg.svd(cen_scaled_matrix, full_matrices=False)[1:]
     eig_vals = singular_vals ** 2
     pcnts = eig_vals / eig_vals.sum() * 100.0
-    projections = dot(princomps, cen_matrix.T).T
+    projections = numpy.dot(princomps, cen_matrix.T).T
 
     return {'projections': projections,
             'var_percentages': pcnts,

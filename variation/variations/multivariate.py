@@ -1,7 +1,5 @@
 
-from numpy.linalg import eigh, svd
-from numpy import newaxis, add, transpose, sqrt, argsort, array, dot
-from numpy import sum as nsum
+import numpy
 
 from sklearn.manifold import MDS, Isomap
 from scipy.spatial.distance import squareform
@@ -50,6 +48,9 @@ def _make_f_matrix(matrix):
 
 
 def do_pcoa(dists):
+    if numpy.any(numpy.isnan(dists)):
+        raise ValueError("dists array has nan values")
+
     'It does a Principal Coordinate Analysis on a distance matrix'
     # the code for this function is taken from pycogent metric_scaling.py
     # Principles of Multivariate analysis: A User's Perspective.

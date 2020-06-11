@@ -15,7 +15,7 @@ from collections import Counter
 import numpy
 
 from test.test_utils import TEST_DATA_DIR
-from variation import AD_FIELD, POS_FIELD
+from variation import AD_FIELD, DP_FIELD
 from variation.variations import VariationsArrays, VariationsH5
 from variation.variations.filters import (MinCalledGTsFilter, FLT_VARS, COUNTS,
                                           EDGES, MafFilter, MacFilter,
@@ -409,12 +409,12 @@ class MafFilterTest(unittest.TestCase):
         assert counts == {-1: 64530, 0: 36977, 1: 18716, 2: 35}
 
     def test_filter_allele_depth_based_maf(self):
-        allele_depths_snp1 = [[10, 0, 1], # Allele Obervation in sample1
-                              [4, 6, 1]] # Allele Obervation in sample2
-        allele_depths_snp2 = [[10, 0, 0], # Allele Obervation in sample1
-                              [0, 5, 7]] # Allele Obervation in sample2
-        allele_depths_snp3 = [[-1, -1, -1], # Allele Obervation in sample1
-                              [-1, -1, -1]] # Allele Obervation in sample2
+        allele_depths_snp1 = [[10, 0, 1],  # Allele Obervation in sample1
+                              [4, 6, 1]]  # Allele Obervation in sample2
+        allele_depths_snp2 = [[10, 0, 0],  # Allele Obervation in sample1
+                              [0, 5, 7]]  # Allele Obervation in sample2
+        allele_depths_snp3 = [[-1, -1, -1],  # Allele Obervation in sample1
+                              [-1, -1, -1]]  # Allele Obervation in sample2
 
         allele_depths = numpy.array([allele_depths_snp1,
                                      allele_depths_snp2,
@@ -622,6 +622,32 @@ class MissingGTSettersTest(unittest.TestCase):
         set_low_dp_gts_to_missing(chunk)
         assert numpy.all(chunk[GT_FIELD].shape[0] == SNPS_PER_CHUNK)
 
+    def test_set_gt_to_missing_by_dp2(self):
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
+                           [[0, 0], [0, 0], [0, 1], [0, 0], [1, 1]]])
+        dps = numpy.array([[10, 20, 5, 20, 25],
+                           [10, 2, 5, 15, 5]])
+        variations[GT_FIELD] = gts
+        variations[DP_FIELD] = dps
+
+        set_low_dp_gts_to_missing = LowDPGTsToMissingSetter(min_dp=10)
+        res = set_low_dp_gts_to_missing(variations)[FLT_VARS]
+
+        assert numpy.all(res[DP_FIELD] == numpy.array([[10, 20, -1, 20, 25],
+                                                       [10, -1, -1, 15, -1]]))
+        assert numpy.all(res[GT_FIELD] == numpy.array([[[0, 0], [1, 1], [-1, -1], [1, 1], [0, 0]],
+                                                       [[0, 0], [-1, -1], [-1, -1], [0, 0], [-1, -1]]]))
+
+        variations = VariationsArrays()
+        variations[GT_FIELD] = gts
+        variations[DP_FIELD] = dps
+
+        set_low_dp_gts_to_missing = LowDPGTsToMissingSetter(min_dp=10,
+                                                            query_field_to_missing=False)
+        res = set_low_dp_gts_to_missing(variations)[FLT_VARS]
+        assert numpy.all(res[DP_FIELD] == variations[DP_FIELD])
+
     def test_set_gt_to_missing_by_qual(self):
         variations = VariationsArrays()
         gts = numpy.array([[[0, 0], [1, 1], [0, 1], [1, 1], [0, 0]],
@@ -665,18 +691,18 @@ class MissingGTSettersTest(unittest.TestCase):
 class FixDuplicatedAllelesTest(unittest.TestCase):
 
     def test_fix_duplicated_alleles(self):
-        gt = numpy.array([[[ 0,  0], [ 0,  4], [-1, -1], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 2,  2], [ 3,  3]],
-                          [[ 0,  0], [ 0,  0], [ 0,  2], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
-                          [[ 0,  0], [ 0,  0], [ 0,  0], [ 0,  1], [ 0,  0], [ 1,  2], [ 0,  2], [ 0,  1], [ 1,  1], [ 0,  0], [ 0,  0], [ 0,  3]],
-                          [[ 2,  2], [ 0,  0], [ 0,  1], [-1, -1], [ 0,  0], [ 0,  1], [ 0,  0], [-1, -1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
-                          [[-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [ 0,  2], [-1, -1], [-1, -1], [-1, -1]]])
+        gt = numpy.array([[[ 0, 0], [ 0, 4], [-1, -1], [ 0, 1], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 1], [ 0, 0], [ 0, 0], [ 2, 2], [ 3, 3]],
+                          [[ 0, 0], [ 0, 0], [ 0, 2], [ 0, 1], [ 0, 0], [ 0, 1], [ 0, 0], [ 0, 1], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0]],
+                          [[ 0, 0], [ 0, 0], [ 0, 0], [ 0, 1], [ 0, 0], [ 1, 2], [ 0, 2], [ 0, 1], [ 1, 1], [ 0, 0], [ 0, 0], [ 0, 3]],
+                          [[ 2, 2], [ 0, 0], [ 0, 1], [-1, -1], [ 0, 0], [ 0, 1], [ 0, 0], [-1, -1], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0]],
+                          [[-1, -1], [-1, -1], [ 0, 1], [ 1, 1], [-1, -1], [-1, -1], [ 0, 1], [ 1, 1], [ 0, 2], [-1, -1], [-1, -1], [-1, -1]]])
 
         alt = numpy.array([[b'T', b'C', b'A', b'C', b''],
                            [b'GTC', b'ATC', b'', b'', b''],
                            [b'C', b'C', b'T', b'C', b''],
                            [b'T', b'A', b'', b'', b''],
                            [b'A', b'A', b'T', b'', b'']])
-    
+
         ref = numpy.array([b'G', b'G', b'C', b'T', b'C'])
 
         variations = VariationsArrays()
@@ -684,11 +710,11 @@ class FixDuplicatedAllelesTest(unittest.TestCase):
         variations[ALT_FIELD] = alt
         variations[REF_FIELD] = ref
 
-        gt_expected = numpy.array([[[ 0,  0], [ 0,  2], [-1, -1], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 2,  2], [ 3,  3]],
-                                   [[ 0,  0], [ 0,  0], [ 0,  2], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
-                                   [[ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  1]],
-                                   [[ 1,  1], [ 0,  0], [ 0,  0], [-1, -1], [ 0,  0], [ 0,  0], [ 0,  0], [-1, -1], [ 0,  0], [ 0,  0], [ 0,  0], [ 0,  0]],
-                                   [[-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [-1, -1], [-1, -1], [ 0,  1], [ 1,  1], [ 0,  1], [-1, -1], [-1, -1], [-1, -1]]])
+        gt_expected = numpy.array([[[ 0, 0], [ 0, 2], [-1, -1], [ 0, 1], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 1], [ 0, 0], [ 0, 0], [ 2, 2], [ 3, 3]],
+                                   [[ 0, 0], [ 0, 0], [ 0, 2], [ 0, 1], [ 0, 0], [ 0, 1], [ 0, 0], [ 0, 1], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0]],
+                                   [[ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 1]],
+                                   [[ 1, 1], [ 0, 0], [ 0, 0], [-1, -1], [ 0, 0], [ 0, 0], [ 0, 0], [-1, -1], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0]],
+                                   [[-1, -1], [-1, -1], [ 0, 1], [ 1, 1], [-1, -1], [-1, -1], [ 0, 1], [ 1, 1], [ 0, 1], [-1, -1], [-1, -1], [-1, -1]]])
 
         alt_expected = numpy.array([[b'T', b'C', b'A', b'', b''],
                                     [b'GTC', b'ATC', b'', b'', b''],
@@ -943,5 +969,5 @@ class FieldValueFilterTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    #  import sys;sys.argv = ['', 'MonoBiallelicFilterTest']
+#     import sys;sys.argv = ['', 'MissingGTSettersTest.test_set_gt_to_missing_by_dp2']
     unittest.main()

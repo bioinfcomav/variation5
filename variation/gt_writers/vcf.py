@@ -9,7 +9,7 @@ import re
 from collections import OrderedDict
 
 from variation import (VCF_FORMAT, MISSING_FLOAT, MISSING_STR, MISSING_INT,
-                       MISSING_VALUES)
+                       MISSING_VALUES, CHROM_FIELD, POS_FIELD, ALT_FIELD)
 from variation.utils.file_utils import remove_temp_file_in_dir
 from variation.utils.misc import remove_nans
 

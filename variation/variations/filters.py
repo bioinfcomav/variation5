@@ -271,7 +271,9 @@ class VariableAndNotAllMissing(_BaseFilter):
         if variations.num_variations == 0:
             raise ValueError('No SNPs to filter')
 
-        genotypes = variations[GT_FIELD][:]
+        vars_for_stat = self._filter_samples_for_stats(variations)
+
+        genotypes = vars_for_stat[GT_FIELD][:]
         # Some genotype non missing
         some_not_missing_gts = numpy.any(genotypes != MISSING_INT,
                                          axis=2)

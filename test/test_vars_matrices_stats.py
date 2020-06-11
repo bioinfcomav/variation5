@@ -972,5 +972,5 @@ class TajimaDTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import sys; sys.argv = ['', 'TajimaDTest']
+    # import sys; sys.argv = ['', 'TajimaDTest']
     unittest.main()

@@ -753,6 +753,16 @@ class MonoBiallelicFilterTest(unittest.TestCase):
         assert flt_chunk[FLT_STATS][N_FILTERED_OUT] == SNPS_PER_CHUNK - kept
         assert flt_chunk[SELECTED_VARS].shape
 
+        variations = VariationsArrays()
+        gts = numpy.array([[[0, 0], [1, 1], [0, 1]],
+                           [[0, 0], [0, 0], [0, 0]],
+                           [[0, 0], [1, 1], [2, 2]],
+                           ])
+        variations[GT_FIELD] = gts
+        flt_vars = NonBiallelicFilter()(variations)[FLT_VARS]
+        expected = numpy.array([[[0, 0], [1, 1], [0, 1]]])
+        assert numpy.all(flt_vars[GT_FIELD] == expected)
+
 
 class Chi2GtFilterTest(unittest.TestCase):
 

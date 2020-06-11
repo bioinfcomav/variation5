@@ -608,6 +608,7 @@ class NonBiallelicFilter(_BaseFilter):
         self._samples = samples
         self.report_selection = report_selection
         self.reverse = reverse
+        self._filter_samples = None
 
     @property
     def do_filtering(self):

@@ -44,7 +44,7 @@ TYPES = {
     "int16": numpy.int16,
     "int32": numpy.int32,
     "float16": numpy.float16,
-    "bool": numpy.bool,
+    "bool": numpy.bool_,
 }
 
 
@@ -507,7 +507,6 @@ class _ChunkGenerator:
         missing_values,
         exemplar_matrices_for_metadata,
     ):
-
         warnings.simplefilter("error")
         debug_field = GT_FIELD
         debug_field = None
@@ -559,7 +558,6 @@ class _ChunkGenerator:
                 len(mat_shape) == len(snp_mat_shape) + 1
                 and mat_shape[-1] < snp_mat_shape[-1]
             ):
-
                 if debug_field and debug_field == field_path:
                     print("resizing_mat")
                     print("mat", mat.dtype)
@@ -714,7 +712,6 @@ class _VariationMatrices:
             return self[GT_FIELD].shape[2]
 
     def _create_matrix_from_matrix(self, path, matrix):
-
         result = _dset_metadata_from_matrix(matrix)
         shape, dtype, chunks, maxshape, fillvalue = result
         try:
@@ -795,7 +792,6 @@ class _VariationMatrices:
         return missing_value
 
     def _get_mats_for_chunk(self, variations):
-
         field_paths = variations.keys()
         diff_fields = set(self.keys()).difference(set(field_paths))
 
@@ -888,7 +884,6 @@ class _VariationMatrices:
     def get_chunk(
         self, index, kept_fields=None, ignored_fields=None, return_copy=False
     ):
-
         paths = self._filter_fields(
             kept_fields=kept_fields, ignored_fields=ignored_fields
         )
@@ -966,7 +961,6 @@ class _VariationMatrices:
 
         do_break = False
         for chunk_start in range(start, stop, chunk_size):
-
             chunk_stop = chunk_start + chunk_size
             if chunk_stop > stop:
                 chunk_stop = stop
@@ -1115,7 +1109,6 @@ class _VariationMatrices:
         chunk_size=None,
         return_copy=False,
     ):
-
         for chunk1_slice, chunk1 in self._iterate_chunks(
             kept_fields=kept_fields,
             ignored_fields=ignored_fields,

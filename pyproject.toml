@@ -1,2 +1,7 @@
+[project]
+name = "variation"
+version = '0.1'
+
 [build-system]
 requires = ["setuptools", "wheel", "Cython", "numpy"]
+build-backend = "setuptools.build_meta"

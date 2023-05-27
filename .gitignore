@@ -11,3 +11,6 @@ build
 variation/gt_parsers/vcf_field_parsers.c
 variation/gt_parsers/vcf_field_parsers.cpython*
 .vscode/*
+dist/
+venv/
+variation.egg-info/

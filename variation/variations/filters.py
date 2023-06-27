@@ -801,7 +801,7 @@ def _filter_samples_by_index(variations, sample_cols, filtered_vars=None,
         sample_cols = [idx in sample_cols for idx in range(len(samples))]
 
     if 'shape' not in dir(sample_cols):
-        sample_cols = numpy.array(sample_cols, dtype=numpy.bool)
+        sample_cols = numpy.array(sample_cols, dtype=numpy.bool_)
 
     if reverse:
         sample_cols = numpy.logical_not(sample_cols)
